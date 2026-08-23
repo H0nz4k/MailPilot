@@ -140,6 +140,7 @@ class SmartTimeEdit(QLineEdit):
         self._time = QTime(0, 0)
         self.setPlaceholderText("hh:mm")
         self.editingFinished.connect(self._normalize_short_time)
+        self.textEdited.connect(lambda _text: self._set_invalid_state(False))
 
     def focusInEvent(self, event) -> None:  # noqa: N802, ANN001 - Qt API
         super().focusInEvent(event)
@@ -148,6 +149,16 @@ class SmartTimeEdit(QLineEdit):
     def _set_empty(self) -> None:
         self._time = QTime(0, 0)
         self.clear()
+        self._set_invalid_state(False)
+
+    def _set_invalid_state(self, value: bool) -> None:
+        self.setProperty("invalid", "true" if value else "false")
+        if value:
+            self.setToolTip("Neplatný čas. Zadejte např. 8:00, 800 nebo 08:00.")
+        else:
+            self.setToolTip("")
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def _normalize_short_time(self) -> None:
         text = self.text().strip().replace(" ", "")
@@ -173,6 +184,9 @@ class SmartTimeEdit(QLineEdit):
         if parsed.isValid():
             self._time = parsed
             self.setText(parsed.toString("H:mm"))
+            self._set_invalid_state(False)
+            return
+        self._set_invalid_state(True)
 
     def time(self) -> QTime:
         return QTime(self._time.hour(), self._time.minute())

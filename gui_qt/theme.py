@@ -524,6 +524,14 @@ QDateEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{
     border: {metrics.px(2)}px solid {palette.accent};
     padding: {max(0, pad_v - 1)}px {max(1, pad_h - 1)}px;
 }}
+QLineEdit[invalid="true"] {{
+    border-color: {palette.error};
+    background: {_mix(palette.error, palette.base, 0.1)};
+}}
+QLineEdit[invalid="true"]:focus {{
+    border: {metrics.px(2)}px solid {palette.error};
+    padding: {max(0, pad_v - 1)}px {max(1, pad_h - 1)}px;
+}}
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
 QComboBox:disabled, QDateEdit:disabled {{
     background: {palette.alt_base};
