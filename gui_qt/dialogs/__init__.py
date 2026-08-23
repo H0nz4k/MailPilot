@@ -1,0 +1,1 @@
+"""Dialogy desktopového rozhraní."""

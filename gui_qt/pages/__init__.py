@@ -1,0 +1,1 @@
+"""Obrazovky hlavního okna."""

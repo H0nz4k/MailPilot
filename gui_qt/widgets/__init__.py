@@ -1,0 +1,1 @@
+"""Znovupoužitelné widgety desktopového rozhraní."""

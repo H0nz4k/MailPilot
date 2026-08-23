@@ -1,0 +1,13 @@
+.env
+config.json
+.venv/
+.build-venv/
+__pycache__/
+*.pyc
+logy/
+vystup/
+cache/
+planovac.json
+dist/
+build/
+screenshots/
