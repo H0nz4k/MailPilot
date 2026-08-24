@@ -58,7 +58,7 @@
   "datum": "05.08.2026",
   "jazyk_jidelnicku": "česky",
   "cislo_jidelnicku": 1,
-  "pdf_vystup": "vystup/AutoReport_{datum}.pdf",
+  "pdf_vystup": "vystup/MailPilot_{datum}.pdf",
   "pdf_orientace": "na_vysku",
   "pdf_velikost_dat": 8.5,
   "pdf_velikost_popisku": 9.0,

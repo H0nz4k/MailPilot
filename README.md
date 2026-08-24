@@ -1,31 +1,32 @@
-# MailPilot v12.7
+# MailPilot v12.8
 
-Desktop aplikace pro skolni jidelny: denni PDF, e-mailing, mesicni uzaverka, podklad Z 17-01, hromadne zpravy a automaticke ulohy.
+Production-readiness release zamereny na spolehlivost scheduleru, retry chovani,
+warning integraci do JidelnaSQL a kompatibilitu cenove logiky (`PouzivatCenik=0/1`).
 
-## Co aplikace umi
+## Hlavni oblasti
 
-- **Denni stav**: souhrn porci, PDF a odeslani e-mailem
-- **Uzaverka**: FKSP, arch, rekapitulace, ZIP a e-mail
+- **Denni stav**: PDF + odesilani e-mailem
+- **Uzaverka**: mesicni financni vystupy (FKSP, arch, rekapitulace, ZIP)
 - **Special (Z 17-01)**: rocni podklad podle kategorii
-- **Hromadna zprava**: rozeslani podle trid/kategorii
-- **Prehled**: stav automatickych odeslani, chyby, rucni retry
-- **Administrace**: DB, e-maily, PDF, vzhled, bez GUI, pokrocile
+- **Hromadna zprava**: rozesilani prijemcum podle filtru
+- **Prehled**: posledni odeslani, chyby, runtime scheduleru, rucni retry
+- **Administrace**: DB, e-maily, planovac, PDF, vzhled, bez GUI, pokrocile
 
-## Pristup a role
+## Co je nove ve v12.8
+
+- scheduler status je navazany na realny runtime stav (ne jen na JSON plan)
+- kontrola credential dostupnosti pro ucet runtime (NSSM / lokalni beh)
+- retry automatickeho exportu pri sitovych/transient chybach vcetne HTTP 429
+- warning tlacitka v Pokrocile reagují na skutecny stav `dashboard.template.html`
+- warning zapis je atomicky + escaped HTML + kompatibilni legacy/new markery
+- diagnostika cenoveho rezimu (`Sazby` / `Cenik`) bez nahrazovani DB business logiky
+- cache uzaverky invaliduje i pri zmene cenovych tabulek a zmenach cenoveho rezimu
+
+## Role a pristup
 
 - **Bezny uzivatel**: Denni stav, Uzaverka, Special, Hromadna zprava, Prehled
 - **Administrator**: vsechny administracni sekce (pod heslem)
-- Administrace se automaticky uzamyka po **60 s** necinnosti
-
-## Planovac ve v12.7
-
-Planovac je zjednoduseny na 3 jasne akce nad vybranou ulohou:
-
-- `Spustit`
-- `Povolit / Zakazat`
-- `Odstranit` (s potvrzenim)
-
-Zmeny uloh se zapisi po kliknuti na `Ulozit planovac`.
+- auto-lock administrace po **60 s** necinnosti
 
 ## Spusteni ve vyvoji
 
@@ -35,10 +36,10 @@ py -m venv .venv
 .\spustit_qt.bat
 ```
 
-nebo:
+Alternativne:
 
 ```powershell
-python AutoReport_qt.py --config config.json
+python -m gui_qt.app --config config.json
 ```
 
 ## CLI rezimy (bez GUI)
@@ -62,32 +63,29 @@ build_windows.bat
 Vysledkem je:
 
 ```text
-dist\MailPilot-v12_7-portable.zip
+dist\MailPilot-v12.8-portable.zip
 dist\MailPilot\MailPilot.exe
 ```
 
-## Uzivatelsky navod (PDF)
+## Requirements split
 
-V repozitari i ve vystupni slozce je vzdy prilozen:
+- `requirements.txt` - produkcni runtime MailPilotu (Qt + backend)
+- `requirements-legacy.txt` - legacy NiceGUI/pywebview reference stack
+- `requirements-dev.txt` - komplet pro testy a legacy reference moduly
+- `requirements-build.txt` - build nastroje (PyInstaller + PyMuPDF)
+
+## Uzivatelsky navod
 
 - `UZIVATELSKY_NAVOD_MailPilot.pdf` (stabilni nazev)
-- `UZIVATELSKY_NAVOD_MailPilot_v12_7.pdf` (verzovana kopie)
+- `UZIVATELSKY_NAVOD_MailPilot_v12_8.pdf` (verzovana kopie)
 
-Generovani navodu:
+Generovani:
 
 ```powershell
 .\.venv\Scripts\python.exe tools\generate_user_manual_pdf.py
 ```
 
-## Struktura projektu
+## Poznamky k bezpecnosti
 
-- `gui_qt/` - Qt UI (okna, stranky, widgety, tema, modely)
-- `services/` - UI-agnosticka logika
-- `tools/` - build a utility skripty
-- `assets/` - ikony, vizualni podklady
-- `dist/` - hotove buildy
-
-## Poznamka k bezpecnosti
-
-- DB heslo je v Credential Manageru (neni v `config.json`)
-- Resend API klic je v `.env`
+- DB hesla nejsou v `config.json` (Credential Manager + machine-scope fallback)
+- API klice nejsou logovany ani ukladany v plaintextu do configu

@@ -207,7 +207,7 @@ class AppConfig:
     category_separation: bool = False
     show_by_categories: bool = True
     show_by_norms: bool = True
-    pdf_output: Path = Path("vystup/AutoReport.pdf")
+    pdf_output: Path = Path("vystup/MailPilot.pdf")
     pdf_orientation: str = "na_sirku"
     pdf_data_font_size: float = 7.4
     pdf_label_font_size: float = 7.4
@@ -500,7 +500,7 @@ def load_config(
     )
 
     configured_pdf = raw.get(
-        "pdf_vystup", "vystup/AutoReport_{datum}.pdf"
+        "pdf_vystup", "vystup/MailPilot_{datum}.pdf"
     )
     if not isinstance(configured_pdf, str) or not configured_pdf.strip():
         raise ConfigError("'pdf_vystup' musí být neprázdná cesta k PDF souboru.")

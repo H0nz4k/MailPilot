@@ -17,7 +17,7 @@ from uzaverka_nastaveni import czech_month_name
 
 
 CZECH_DATE_FORMAT = "%d.%m.%Y"
-DEFAULT_PDF_OUTPUT = "vystup/AutoReport_{datum}.pdf"
+DEFAULT_PDF_OUTPUT = "vystup/MailPilot_{datum}.pdf"
 
 
 def load_raw_config(path: Path) -> dict[str, Any]:

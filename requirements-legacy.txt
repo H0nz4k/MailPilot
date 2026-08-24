@@ -1,0 +1,3 @@
+# Legacy GUI/reference dependencies (NiceGUI, pywebview).
+nicegui==3.15.0
+pywebview>=5.0,<6

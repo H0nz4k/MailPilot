@@ -1,4 +1,4 @@
-"""Bezobslužné režimy AutoReportu nezávislé na grafickém rozhraní.
+"""Bezobslužné režimy MailPilotu nezávislé na grafickém rozhraní.
 
 Stejné přepínače jako v předchozí verzi, aby beze změny fungovaly dávkové
 soubory, plánovač úloh Windows i volání z Jídelny. Rozhraní (Qt) sem jen

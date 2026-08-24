@@ -87,7 +87,7 @@ class PortableBuildTests(unittest.TestCase):
         self.assertIn("--exclude-module nicegui", script)
         self.assertIn("import mailsender_bridge as _mailsender_bridge", mail_service)
         self.assertNotIn('import_module("mailsender_bridge")', mail_service)
-        self.assertIn("MailPilot-v12_7-portable.zip", script)
+        self.assertIn("MailPilot-v12.8-portable.zip", script)
         self.assertIn("spustit_automaticky_export.bat", script)
         self.assertIn("spustit_poctyemailem.bat", script)
         self.assertIn("spustit_uzaverku.bat", script)
@@ -99,7 +99,7 @@ class PortableBuildTests(unittest.TestCase):
         self.assertIn("AutoReport_qt.py", launcher)
 
     def test_version_is_12(self):
-        self.assertEqual(APP_VERSION, "v12.7")
+        self.assertEqual(APP_VERSION, "v12.8")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Nastavení e-mailů pro jednotlivé funkce AutoReportu.
+"""Nastavení e-mailů pro jednotlivé funkce MailPilotu.
 
 Vrstva bez GUI: čte a zapisuje stejné klíče config.json jako NiceGUI verze
 a Resend API klíč drží v souboru ``.env`` vedle aplikace.

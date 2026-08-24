@@ -70,7 +70,7 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config.pdf_bold)
         self.assertEqual(
             config.pdf_output,
-            path.parent / "vystup" / "AutoReport_2026-08-05.pdf",
+            path.parent / "vystup" / "MailPilot_2026-08-05.pdf",
         )
 
     def test_poctyemailem_categories_override_root_list(self):

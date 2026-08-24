@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vstupní bod MailPilotu v12.7: okno v PySide6 i běh bez GUI.
+"""Vstupní bod MailPilotu v12.8: okno v PySide6 i běh bez GUI.
 
 Bez přepínačů se otevře desktopové rozhraní. S přepínači ``--poctyemailem``,
 ``--zaverka_MMRRRR``, ``--zaverka_am`` nebo ``--z17_RRRR`` proběhne stejná

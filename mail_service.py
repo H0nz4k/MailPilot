@@ -157,7 +157,7 @@ def _load_bridge() -> Callable[..., Any]:
     if _mailsender_bridge is None:
         raise MailSenderUnavailable(
             "Chybí napojení na MailSender (soubor mailsender_bridge.py). "
-            "Nainstalujte znovu úplný balíček AutoReportu."
+            "Nainstalujte znovu úplný balíček MailPilotu."
         )
 
     sender = getattr(_mailsender_bridge, "send_pdf", None)
@@ -172,7 +172,7 @@ def _load_files_bridge() -> Callable[..., Any]:
     if _mailsender_bridge is None:
         raise MailSenderUnavailable(
             "Chybí napojení na MailSender (soubor mailsender_bridge.py). "
-            "Nainstalujte znovu úplný balíček AutoReportu."
+            "Nainstalujte znovu úplný balíček MailPilotu."
         )
     sender = getattr(_mailsender_bridge, "send_files", None)
     if not callable(sender):
@@ -271,7 +271,7 @@ def _load_text_bridge() -> Callable[..., Any]:
     if _mailsender_bridge is None:
         raise MailSenderUnavailable(
             "Chybí napojení na MailSender (soubor mailsender_bridge.py). "
-            "Nainstalujte znovu úplný balíček AutoReportu."
+            "Nainstalujte znovu úplný balíček MailPilotu."
         )
     sender = getattr(_mailsender_bridge, "send_text", None)
     if not callable(sender):

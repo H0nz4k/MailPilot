@@ -1,4 +1,4 @@
-"""Start desktopového rozhraní AutoReportu (PySide6)."""
+"""Start desktopového rozhraní MailPilotu (PySide6)."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from stravovaci_sestava import ConfigError
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="AutoReport",
-        description="Desktopové rozhraní AutoReportu (PySide6 / Qt Widgets).",
+        prog="MailPilot",
+        description="Desktopové rozhraní MailPilotu (PySide6 / Qt Widgets).",
     )
     parser.add_argument(
         "--config",
@@ -69,7 +69,7 @@ def create_application(argv: Sequence[str] | None = None) -> QApplication:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     os.chdir(application_directory())
-    application = create_application([sys.argv[0] if sys.argv else "AutoReport"])
+    application = create_application([sys.argv[0] if sys.argv else "MailPilot"])
     config_path = Path(args.config)
     try:
         raw = load_raw_config(config_path)

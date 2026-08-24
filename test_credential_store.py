@@ -40,7 +40,7 @@ class CredentialStoreTests(unittest.TestCase):
         self.assertEqual(raw["resend_api_key"], "re_secret")
 
     def test_admin_password_uses_separate_keyring_account(self):
-        self.assertEqual(SERVICE_NAME, "Altisima.AutoReport")
+        self.assertEqual(SERVICE_NAME, "Altisima.MailPilot")
         self.assertEqual(ADMIN_ACCOUNT, "Admin.Heslo")
 
     def test_write_config_never_writes_password(self):

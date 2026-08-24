@@ -1,4 +1,4 @@
-"""Znovupoužitelné UI komponenty AutoReportu.
+"""Znovupoužitelné UI komponenty MailPilotu.
 
 Modul obsahuje jen prezentační stavební prvky: hlavičky sekcí, formulářové
 mřížky, stavové odznaky, dialogy a lišty akcí. Nezná databázi ani PDF, vše

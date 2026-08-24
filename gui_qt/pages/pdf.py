@@ -208,7 +208,7 @@ class PdfPage(QWidget):
             self.settings_changed.emit()
 
     def _pick_directory(self) -> None:
-        current = Path(self._output.text().strip() or "vystup/AutoReport.pdf")
+        current = Path(self._output.text().strip() or "vystup/MailPilot.pdf")
         start = current.parent if current.parent.as_posix() else Path(".")
         chosen = QFileDialog.getExistingDirectory(
             self, "Vyberte složku pro PDF", str(start)

@@ -149,8 +149,9 @@ class AdvancedPage(QWidget):
         layout.addLayout(warning_actions)
         layout.addWidget(
             hint(
-                "Vkládá / odstraňuje blok mezi značkami AUTOREPORT_AUTOMAIL_BEGIN "
-                "a AUTOREPORT_AUTOMAIL_END v dashboard.template.html. "
+                "Vkládá / odstraňuje blok mezi značkami MAILPILOT_WARNING_BEGIN "
+                "a MAILPILOT_WARNING_END v dashboard.template.html "
+                "(detekuje i legacy AUTOREPORT_AUTOMAIL_BEGIN/END). "
                 "Výchozí umístění je C:\\Gastro\\Programy\\Templates."
                 "\n\nAutomatické pravidlo:\n"
                 "1) Warning se zobrazí při chybě automatického exportu.\n"
@@ -342,10 +343,12 @@ class AdvancedPage(QWidget):
             show.setStyleSheet(danger_style)
             show_custom.setStyleSheet(danger_style)
             clear.setStyleSheet(clear_style)
+            clear.setEnabled(True)
         else:
             show.setStyleSheet("")
             show_custom.setStyleSheet("")
             clear.setStyleSheet("")
+            clear.setEnabled(False)
 
     @staticmethod
     def _clear(layout) -> None:  # noqa: ANN001 - Qt API

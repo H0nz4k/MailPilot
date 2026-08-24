@@ -1,16 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent
 
 a = Analysis(
-    ['C:/Work/projects/SestavaStrav/vyvoj/AutoReport_v12/AutoReport_qt.py'],
-    pathex=[],
+    [str(ROOT / "AutoReport_qt.py")],
+    pathex=[str(ROOT)],
     binaries=[],
-    datas=[('C:/Work/projects/SestavaStrav/vyvoj/AutoReport_v12/assets', 'assets'), ('C:/Work/projects/SestavaStrav/vyvoj/AutoReport_v12/config.example.json', '.'), ('C:/Work/projects/SestavaStrav/vyvoj/AutoReport_v12/.env.example', '.')],
+    datas=[
+        (str(ROOT / "assets"), "assets"),
+        (str(ROOT / "config.example.json"), "."),
+        (str(ROOT / ".env.example"), "."),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['nicegui', 'webview', 'tkinter'],
+    excludes=["nicegui", "webview", "tkinter"],
     noarchive=False,
     optimize=0,
 )
@@ -21,7 +29,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='MailPilot',
+    name="MailPilot",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -32,7 +40,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:/Work/projects/SestavaStrav/vyvoj/AutoReport_v12/assets/app_icon.ico'],
+    icon=[str(ROOT / "assets" / "app_icon.ico")],
 )
 coll = COLLECT(
     exe,
@@ -41,5 +49,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='MailPilot',
+    name="MailPilot",
 )

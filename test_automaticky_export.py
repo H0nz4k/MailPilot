@@ -104,7 +104,7 @@ class ScheduledExportTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     scheduled,
-                    "run_scheduled_export",
+                    "run_scheduled_export_with_retry",
                     side_effect=scheduled.ConfigError("boom"),
                 ),
                 mock.patch.object(
@@ -132,7 +132,11 @@ class ScheduledExportTests(unittest.TestCase):
                 "categories": ("1",),
             }
             with (
-                mock.patch.object(scheduled, "run_scheduled_export", return_value=sent),
+                mock.patch.object(
+                    scheduled,
+                    "run_scheduled_export_with_retry",
+                    return_value=sent,
+                ),
                 mock.patch.object(
                     scheduled, "clear_jidelnasql_mail_warning", return_value=None
                 ) as clear,
@@ -142,6 +146,77 @@ class ScheduledExportTests(unittest.TestCase):
                 )
         self.assertEqual(code, 0)
         clear.assert_called_once()
+
+    def test_retry_continues_when_internet_check_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            log_path = Path(directory) / "auto.log"
+            config_path.write_text("{}", encoding="utf-8")
+            with (
+                mock.patch.object(
+                    scheduled,
+                    "_has_internet",
+                    side_effect=[False, True],
+                ),
+                mock.patch.object(
+                    scheduled,
+                    "run_scheduled_export",
+                    side_effect=[
+                        RuntimeError("network timeout"),
+                        {"status": "sent"},
+                    ],
+                ) as run,
+                mock.patch.object(scheduled.time, "sleep") as sleep_mock,
+            ):
+                result = scheduled.run_scheduled_export_with_retry(
+                    config_path, date(2026, 8, 6), log_path
+                )
+        self.assertEqual(result["status"], "sent")
+        self.assertEqual(run.call_count, 2)
+        sleep_mock.assert_called_once_with(scheduled.RETRY_DELAYS_SECONDS[0])
+
+    def test_retry_stops_for_permanent_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            log_path = Path(directory) / "auto.log"
+            config_path.write_text("{}", encoding="utf-8")
+            with (
+                mock.patch.object(scheduled, "_has_internet", return_value=True),
+                mock.patch.object(
+                    scheduled,
+                    "run_scheduled_export",
+                    side_effect=scheduled.ConfigError("invalid api key"),
+                ) as run,
+                mock.patch.object(scheduled.time, "sleep") as sleep_mock,
+            ):
+                with self.assertRaises(scheduled.ConfigError):
+                    scheduled.run_scheduled_export_with_retry(
+                        config_path, date(2026, 8, 6), log_path
+                    )
+        self.assertEqual(run.call_count, 1)
+        sleep_mock.assert_not_called()
+
+    def test_retry_uses_retry_after_for_http_429(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            log_path = Path(directory) / "auto.log"
+            config_path.write_text("{}", encoding="utf-8")
+            with (
+                mock.patch.object(scheduled, "_has_internet", return_value=True),
+                mock.patch.object(
+                    scheduled,
+                    "run_scheduled_export",
+                    side_effect=[
+                        RuntimeError("HTTP 429 Too Many Requests Retry-After: 120"),
+                        {"status": "sent"},
+                    ],
+                ),
+                mock.patch.object(scheduled.time, "sleep") as sleep_mock,
+            ):
+                scheduled.run_scheduled_export_with_retry(
+                    config_path, date(2026, 8, 6), log_path
+                )
+        sleep_mock.assert_called_once_with(120)
 
 
 if __name__ == "__main__":

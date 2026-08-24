@@ -139,6 +139,17 @@ class SchedulerPage(QWidget):
             lambda *_: self._update_selection_actions()
         )
 
+        status_rows = QVBoxLayout()
+        status_rows.setContentsMargins(0, 0, 0, 0)
+        status_rows.setSpacing(metrics.px(2))
+        self._runtime_status = QLabel("Runtime: —")
+        self._runtime_status.setProperty("role", "hint")
+        self._service_status = QLabel("Service: —")
+        self._service_status.setProperty("role", "hint")
+        status_rows.addWidget(self._runtime_status)
+        status_rows.addWidget(self._service_status)
+        layout.addLayout(status_rows)
+
         layout.addWidget(section_label("Nová úloha"))
         layout.addLayout(self._build_editor())
 
@@ -251,10 +262,24 @@ class SchedulerPage(QWidget):
         self._save.setEnabled(False)
 
     def set_runtime_status(self, text: str, *, running: bool) -> None:
-        del text, running
+        self._runtime_status.setText(f"Runtime: {text or '—'}")
+        self._runtime_status.setProperty("role", "statusOk" if running else "hint")
+        self._runtime_status.style().unpolish(self._runtime_status)
+        self._runtime_status.style().polish(self._runtime_status)
 
     def set_service_status(self, text: str, *, running: bool, installed: bool = True) -> None:
-        del text, running, installed
+        if not text:
+            text = "Služba: není nainstalovaná"
+        self._service_status.setText(text)
+        if running:
+            role = "statusOk"
+        elif installed:
+            role = "hint"
+        else:
+            role = "hint"
+        self._service_status.setProperty("role", role)
+        self._service_status.style().unpolish(self._service_status)
+        self._service_status.style().polish(self._service_status)
 
     def set_service_config(self, *, service_name: str, nssm_path: str) -> None:
         self._service_name_value = service_name.strip() or "MailPilot_denniprehled"

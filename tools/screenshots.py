@@ -101,13 +101,19 @@ def capture(output: Path, config: Path, only: str = "") -> int:
                 window.resize(width, height)
                 window.show()
                 QApplication.processEvents()
+                window._admin_unlocked = True
+                window._refresh_admin_lock_state()
                 if info is not None:
                     window._connection_ok(info, silent=True)
                 QApplication.processEvents()
                 for key, name, section in PAGES:
                     if only and only not in name:
                         continue
-                    window.sidebar.select(key)
+                    if key == PAGE_ADMIN:
+                        window._activate_page(PAGE_ADMIN)
+                        window.sidebar.clearSelection()
+                    else:
+                        window.sidebar.select(key)
                     if section is not None:
                         window.admin_page.show_section(section)
                     QApplication.processEvents()
@@ -118,6 +124,23 @@ def capture(output: Path, config: Path, only: str = "") -> int:
                     )
                     window.grab().save(str(target))
                     written += 1
+                    if section == SECTION_ADVANCED:
+                        window.admin_page.advanced_page.set_warning_active(False)
+                        QApplication.processEvents()
+                        off_target = (
+                            output
+                            / f"{name}_warning-off_{theme}_{scale_tag}_{width}x{height}.png"
+                        )
+                        window.grab().save(str(off_target))
+                        written += 1
+                        window.admin_page.advanced_page.set_warning_active(True)
+                        QApplication.processEvents()
+                        on_target = (
+                            output
+                            / f"{name}_warning-on_{theme}_{scale_tag}_{width}x{height}.png"
+                        )
+                        window.grab().save(str(on_target))
+                        written += 1
                 window.close()
                 window.deleteLater()
                 QApplication.processEvents()

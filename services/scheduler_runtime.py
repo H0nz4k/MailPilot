@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import shutil
@@ -13,8 +14,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from credential_store import (
+    CredentialStoreError,
+    credential_account,
+    get_password,
+    machine_password_available,
+)
+from gui_qt import APP_TITLE, APP_VERSION
 from planovac import PlannedJob, launcher_command
 from runtime_paths import application_directory
+from services.config_io import database_parameters, load_raw_config
 from services.scheduler import read_jobs, scheduler_path
 
 STATE_FILE = "planovac_runtime.json"
@@ -51,6 +60,24 @@ class SchedulerServiceStatus:
 class SchedulerServiceConfig:
     service_name: str
     nssm_path: str
+
+
+@dataclass(frozen=True)
+class RuntimeSnapshot:
+    running: bool
+    runtime_type: str
+    service_name: str
+    service_installed: bool
+    service_running: bool
+    service_account: str
+    runtime_identity: str
+    credential_ok: bool
+    credential_detail: str
+    last_heartbeat: str
+    last_run: str
+    last_result: str
+    next_run: str
+    last_error: str
 
 
 def _runtime_paths(config_path: Path) -> tuple[Path, Path, Path]:
@@ -131,6 +158,14 @@ def _pid_running(pid: int) -> bool:
         return False
 
 
+def _runtime_identity() -> str:
+    user = getpass.getuser().strip()
+    domain = str(os.environ.get("USERDOMAIN") or "").strip()
+    if domain and "\\" not in user:
+        return f"{domain}\\{user}"
+    return user or "unknown"
+
+
 def _service_exists(service_name: str) -> bool:
     try:
         done = subprocess.run(  # noqa: S603
@@ -163,6 +198,48 @@ def _service_running(service_name: str) -> bool:
     return "RUNNING" in text and done.returncode == 0
 
 
+def _service_account(service_name: str) -> str:
+    try:
+        done = subprocess.run(  # noqa: S603
+            ["sc", "qc", service_name],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1.2,
+        )
+    except subprocess.TimeoutExpired:
+        return ""
+    if done.returncode != 0:
+        return ""
+    for line in done.stdout.splitlines():
+        if "SERVICE_START_NAME" in line.upper():
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def _is_system_account(account: str) -> bool:
+    text = str(account or "").strip().casefold()
+    if not text:
+        return False
+    tokens = (
+        "localsystem",
+        "localservice",
+        "networkservice",
+        "nt authority\\system",
+        "nt authority\\localservice",
+        "nt authority\\networkservice",
+    )
+    return any(token in text for token in tokens)
+
+
+def _same_user_account(service_account: str, runtime_identity: str) -> bool:
+    service = str(service_account or "").strip().replace(".\\", "")
+    runtime = str(runtime_identity or "").strip()
+    if not service or not runtime:
+        return False
+    return service.split("\\")[-1].casefold() == runtime.split("\\")[-1].casefold()
+
+
 def resolve_nssm_path(nssm_path: str) -> Path:
     raw = nssm_path.strip()
     if raw:
@@ -191,12 +268,15 @@ def read_service_status(service_name: str) -> SchedulerServiceStatus:
     service_name = normalize_service_name(service_name)
     exists = _service_exists(service_name)
     running = _service_running(service_name) if exists else False
+    account = _service_account(service_name) if exists else ""
     if not exists:
         detail = f"Služba '{service_name}' není nainstalovaná"
     elif running:
         detail = f"Služba '{service_name}' běží"
     else:
         detail = f"Služba '{service_name}' je nainstalovaná, ale není spuštěná"
+    if account:
+        detail = f"{detail} · účet: {account}"
     return SchedulerServiceStatus(
         installed=exists,
         running=running,
@@ -366,6 +446,194 @@ def read_runtime_status(config_path: Path) -> RuntimeStatus:
     )
 
 
+def _format_iso(text: str) -> str:
+    value = str(text or "").strip()
+    if not value:
+        return "—"
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return moment.strftime("%d.%m.%Y %H:%M")
+
+
+def _extract_last_result(
+    state: dict[str, Any], jobs: list[PlannedJob]
+) -> tuple[str, str, str]:
+    job_state = state.get("jobs")
+    if not isinstance(job_state, dict):
+        return "—", "—", "—"
+    tracked_names = {job.name for job in jobs}
+    rows: list[tuple[datetime, str, int, str]] = []
+    next_runs: list[datetime] = []
+    for name, info in job_state.items():
+        if not isinstance(info, dict):
+            continue
+        if tracked_names and name not in tracked_names:
+            continue
+        last_run_raw = str(info.get("last_run") or "").strip()
+        if last_run_raw:
+            try:
+                last_run = datetime.fromisoformat(last_run_raw)
+            except ValueError:
+                pass
+            else:
+                code = int(info.get("last_exit_code") or 0)
+                note = str(info.get("last_note") or "").strip()
+                rows.append((last_run, str(name), code, note))
+        next_raw = str(info.get("next_run") or "").strip()
+        if next_raw:
+            try:
+                next_runs.append(datetime.fromisoformat(next_raw))
+            except ValueError:
+                pass
+    if not next_runs:
+        now = datetime.now()
+        for job in jobs:
+            estimate = _next_run(job, now)
+            if estimate is not None:
+                next_runs.append(estimate)
+    next_text = (
+        min(next_runs).strftime("%d.%m.%Y %H:%M") if next_runs else "—"
+    )
+    if not rows:
+        return "—", "—", next_text
+    last_run, job_name, code, note = max(rows, key=lambda item: item[0])
+    result = f"OK · {job_name}" if code == 0 else f"CHYBA {code} · {job_name}"
+    if note:
+        result = f"{result} · {note}"
+    return last_run.strftime("%d.%m.%Y %H:%M"), result, next_text
+
+
+def scheduler_credential_status(
+    database: dict[str, Any],
+    *,
+    runtime_running: bool,
+    service_running: bool,
+    service_account: str,
+    runtime_identity: str,
+) -> tuple[bool, str]:
+    if not runtime_running:
+        return True, "Runtime neběží; credentials se ověří při aktivním běhu."
+    try:
+        account = credential_account(database)
+    except CredentialStoreError as exc:
+        return False, str(exc)
+    machine_scope = machine_password_available(database)
+    try:
+        available = bool(get_password(database))
+    except CredentialStoreError as exc:
+        if machine_scope:
+            available = True
+        else:
+            return False, str(exc)
+    if not available:
+        return (
+            False,
+            f"DB heslo pro {account} není dostupné v zabezpečeném úložišti.",
+        )
+    if not service_running:
+        return True, f"Heslo dostupné pro aktuální účet ({runtime_identity})."
+    if _is_system_account(service_account):
+        if machine_scope:
+            return (
+                True,
+                f"Služba běží pod {service_account}; dostupný machine-scope secret.",
+            )
+        return (
+            False,
+            "Služba běží pod systémovým účtem a nevidí uživatelský keyring. "
+            "Uložte DB heslo znovu v MailPilotu v12.8, aby se vytvořil i "
+            "machine-scope secret.",
+        )
+    if _same_user_account(service_account, runtime_identity):
+        return True, f"Služba běží pod stejným uživatelem ({service_account})."
+    if machine_scope:
+        return (
+            True,
+            f"Služba běží pod {service_account}; používá machine-scope secret.",
+        )
+    return (
+        False,
+        "Služba běží pod jiným uživatelem než GUI a bez machine-scope secret "
+        "nemusí vidět uložené DB heslo.",
+    )
+
+
+def read_runtime_snapshot(
+    config_path: Path,
+    service_name: str,
+    *,
+    probe_service: bool = True,
+) -> RuntimeSnapshot:
+    runtime = read_runtime_status(config_path)
+    if probe_service:
+        service = read_service_status(service_name)
+        service_account = (
+            _service_account(service.service_name) if service.installed else ""
+        )
+    else:
+        service = SchedulerServiceStatus(
+            installed=False,
+            running=False,
+            service_name=normalize_service_name(service_name),
+            detail="",
+        )
+        service_account = ""
+    runtime_identity = _runtime_identity()
+    running = bool(runtime.running or service.running)
+    if service.running:
+        runtime_type = "NSSM service"
+    elif runtime.running:
+        runtime_type = "internal runtime"
+    elif service.installed:
+        runtime_type = "NSSM installed (stopped)"
+    else:
+        runtime_type = "not running"
+
+    state = _load_json(runtime.state_path)
+    jobs = []
+    try:
+        jobs = read_jobs(scheduler_path(config_path))
+    except Exception:
+        jobs = []
+    last_run, last_result, next_run = _extract_last_result(state, jobs)
+    if not running and probe_service:
+        next_run = "—"
+    last_heartbeat = str(state.get("last_heartbeat") or "").strip() or "—"
+    last_error = str(state.get("last_error") or "").strip() or "—"
+    try:
+        raw = load_raw_config(config_path)
+        database = database_parameters(raw)
+    except Exception as exc:
+        credential_ok = False
+        credential_detail = f"Nepodařilo se načíst DB parametry: {exc}"
+    else:
+        credential_ok, credential_detail = scheduler_credential_status(
+            database,
+            runtime_running=running,
+            service_running=service.running,
+            service_account=service_account,
+            runtime_identity=runtime_identity,
+        )
+    return RuntimeSnapshot(
+        running=running,
+        runtime_type=runtime_type,
+        service_name=service.service_name,
+        service_installed=service.installed,
+        service_running=service.running,
+        service_account=service_account or "—",
+        runtime_identity=runtime_identity,
+        credential_ok=credential_ok,
+        credential_detail=credential_detail,
+        last_heartbeat=last_heartbeat,
+        last_run=last_run,
+        last_result=last_result,
+        next_run=next_run,
+        last_error=last_error,
+    )
+
+
 def start_runtime(config_path: Path) -> str:
     status = read_runtime_status(config_path)
     if status.running:
@@ -479,6 +747,11 @@ def _run_due_jobs(
         if next_run is None or next_run > now:
             continue
         command = launcher_command(job, reference=now)
+        _append_log(
+            log_path,
+            "INFO",
+            f"Job '{job.name}' attempt 1/1 ({job.schedule_type}).",
+        )
         _append_log(log_path, "INFO", f"Spouštím úlohu '{job.name}': {' '.join(command)}")
         done = subprocess.run(  # noqa: S603
             command,
@@ -491,6 +764,11 @@ def _run_due_jobs(
         info["last_exit_code"] = done.returncode
         snippet = (done.stdout or done.stderr or "").strip().replace("\n", " ")
         info["last_note"] = snippet[:240]
+        state["last_run"] = info["last_run"]
+        state["last_job"] = job.name
+        state["last_exit_code"] = done.returncode
+        state["last_note"] = info["last_note"]
+        state["last_error"] = "" if done.returncode == 0 else info["last_note"]
         level = "INFO" if done.returncode == 0 else "ERROR"
         _append_log(
             log_path,
@@ -511,8 +789,16 @@ def run_scheduler_loop(
 ) -> int:
     state_path, pid_path, log_path = _runtime_paths(config_path)
     pid_path.write_text(str(os.getpid()), encoding="utf-8")
-    _append_log(log_path, "INFO", "Scheduler runtime start")
+    _append_log(
+        log_path,
+        "INFO",
+        f"{APP_TITLE} {APP_VERSION} scheduler start · mode=scheduler "
+        f"· identity={_runtime_identity()}",
+    )
     state = _load_json(state_path)
+    state["runtime_identity"] = _runtime_identity()
+    state["runtime_started_at"] = datetime.now().isoformat()
+    state["last_error"] = ""
     try:
         while True:
             state["last_heartbeat"] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
@@ -522,6 +808,8 @@ def run_scheduler_loop(
                 break
             time.sleep(max(5, int(poll_seconds)))
     except Exception as exc:  # pragma: no cover - runtime guard
+        state["last_error"] = str(exc)
+        _save_json(state_path, state)
         _append_log(log_path, "ERROR", f"Scheduler runtime crash: {exc}")
         return 1
     finally:

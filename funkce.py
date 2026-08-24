@@ -1,4 +1,4 @@
-"""Samostatné funkce AutoReportu: denní stav, uzávěrka a special."""
+"""Samostatné funkce MailPilotu: denní stav, uzávěrka a special."""
 
 from __future__ import annotations
 

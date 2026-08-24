@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from decimal import Decimal
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,9 +13,11 @@ from stravovaci_arch import arch_report_from_podklady
 from uzaverka_pdf import SubjectHeader
 from uzaverka_podklady import (
     FINGERPRINT_QUERY,
+    PRICING_TABLES,
     ClosingCounts,
     ClosingPodklady,
     PrihlasPodklad,
+    fetch_fingerprint,
     fingerprint_digest,
     load_cache,
     save_cache,
@@ -87,6 +90,70 @@ class FingerprintTests(unittest.TestCase):
         second = fingerprint_digest((11, "aaa", 1.5))
         self.assertNotEqual(first, second)
         self.assertEqual(len(first), 64)
+
+    def test_digest_accepts_decimal_nested_values(self):
+        digest = fingerprint_digest(
+            (
+                ("sum", Decimal("10.50")),
+                {"nested": [Decimal("2.75"), Decimal("3.25")]},
+            )
+        )
+        self.assertEqual(len(digest), 64)
+
+    def test_fetch_fingerprint_changes_when_pricing_mode_changes(self):
+        cursor = mock.Mock()
+        cursor.fetchone.return_value = (10, "abc")
+        table_values = [(name, 5, "hash") for name in PRICING_TABLES]
+        with (
+            mock.patch(
+                "uzaverka_podklady.detect_pricing_mode_info",
+                return_value=SimpleNamespace(mode=0, source="fn"),
+            ),
+            mock.patch(
+                "uzaverka_podklady._table_fingerprint",
+                side_effect=table_values,
+            ),
+        ):
+            digest_sazby = fetch_fingerprint(cursor, 2026, 7)
+        with (
+            mock.patch(
+                "uzaverka_podklady.detect_pricing_mode_info",
+                return_value=SimpleNamespace(mode=1, source="fn"),
+            ),
+            mock.patch(
+                "uzaverka_podklady._table_fingerprint",
+                side_effect=table_values,
+            ),
+        ):
+            digest_cenik = fetch_fingerprint(cursor, 2026, 7)
+        self.assertNotEqual(digest_sazby, digest_cenik)
+
+    def test_fetch_fingerprint_changes_when_price_table_changes(self):
+        cursor = mock.Mock()
+        cursor.fetchone.return_value = (10, "abc")
+        with (
+            mock.patch(
+                "uzaverka_podklady.detect_pricing_mode_info",
+                return_value=SimpleNamespace(mode=1, source="fn"),
+            ),
+            mock.patch(
+                "uzaverka_podklady._table_fingerprint",
+                side_effect=[("public.cenik", 5, "hash-a"), ("public.cenik_sluzeb", 5, "x"), ("public.sazby", 1, "y")],
+            ),
+        ):
+            digest_a = fetch_fingerprint(cursor, 2026, 7)
+        with (
+            mock.patch(
+                "uzaverka_podklady.detect_pricing_mode_info",
+                return_value=SimpleNamespace(mode=1, source="fn"),
+            ),
+            mock.patch(
+                "uzaverka_podklady._table_fingerprint",
+                side_effect=[("public.cenik", 5, "hash-b"), ("public.cenik_sluzeb", 5, "x"), ("public.sazby", 1, "y")],
+            ),
+        ):
+            digest_b = fetch_fingerprint(cursor, 2026, 7)
+        self.assertNotEqual(digest_a, digest_b)
 
 
 class CacheTests(unittest.TestCase):

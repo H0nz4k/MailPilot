@@ -1,4 +1,4 @@
-"""Servisní vrstva AutoReportu bez jakékoli závislosti na GUI.
+"""Servisní vrstva MailPilotu bez jakékoli závislosti na GUI.
 
 Moduly v tomto balíčku stojí mezi prezentační vrstvou (NiceGUI nebo Qt)
 a business logikou v korenových modulech (``stravovaci_sestava``,

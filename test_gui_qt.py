@@ -29,6 +29,7 @@ if PYSIDE_AVAILABLE:
         PAGE_CLOSING,
         PAGE_DAILY,
         PAGE_SPECIAL,
+        PAGE_USER,
         MainWindow,
     )
     from gui_qt.models import OverviewModel, RecipientModel
@@ -575,8 +576,9 @@ class HeaderTests(unittest.TestCase):
         self.assertEqual(self.header._subject.full_text(), "ZŠ Kozinova")
         self.assertEqual(self.header._meta.toolTip(), "127.0.0.1:5433")
 
-    def test_title_contains_version(self):
-        self.assertIn(APP_VERSION, self.header._title.text())
+    def test_header_uses_overview_and_admin_buttons(self):
+        self.assertEqual(self.header._home_button.text(), "Přehled")
+        self.assertIn("Administrace", self.header._admin_button.text())
 
     def test_height_follows_scale(self):
         large = HeaderBar(metrics_for(1.6))
@@ -642,13 +644,14 @@ class MainWindowTests(unittest.TestCase):
             database={"host": "127.0.0.1", "port": 5433},
         )
 
-    def test_starts_on_daily_page_without_connection(self):
-        self.assertEqual(self.window.sidebar.current_key(), PAGE_DAILY)
+    def test_starts_on_overview_without_connection(self):
+        self.assertEqual(self.window._current_page_key(), PAGE_USER)
+        self.assertEqual(self.window.sidebar.current_key(), "")
         self.assertFalse(self.window.daily_page._create.isEnabled())
         self.assertFalse(self.window.daily_page._send.isEnabled())
 
     def test_all_pages_are_reachable(self):
-        for key in (PAGE_CLOSING, PAGE_SPECIAL, PAGE_BULK, PAGE_ADMIN, PAGE_DAILY):
+        for key in (PAGE_CLOSING, PAGE_SPECIAL, PAGE_BULK, PAGE_DAILY):
             with self.subTest(page=key):
                 self.window.sidebar.select(key)
                 self.assertIs(
@@ -656,7 +659,7 @@ class MainWindowTests(unittest.TestCase):
                 )
 
     def test_admin_uses_single_local_navigation(self):
-        self.window.sidebar.select(PAGE_ADMIN)
+        self.window._activate_page(PAGE_ADMIN)
         admin = self.window.admin_page
         self.assertIsInstance(admin.nav, SegmentedNav)
         self.assertEqual(admin.current_section(), SECTION_DATABASE)
@@ -712,18 +715,19 @@ class MainWindowTests(unittest.TestCase):
         self.assertFalse(self.window.daily_page._create.isEnabled())
 
     def test_theme_change_is_saved_to_config(self):
-        self.window._change_theme("dark")
+        self.window._ui = self.window._ui.with_theme("dark")
+        self.window._persist_ui_only()
         saved = json.loads(self.config.read_text(encoding="utf-8"))
         self.assertEqual(saved["ui"]["theme"], "dark")
         self.assertEqual(self.window._ui.theme, "dark")
 
     def test_scale_change_rebuilds_ui_and_keeps_page(self):
         self.window._connection_ok(self._connection(), silent=True)
-        self.window.sidebar.select(PAGE_ADMIN)
+        self.window._activate_page(PAGE_ADMIN)
         self.window._change_scale(1.25)
         saved = json.loads(self.config.read_text(encoding="utf-8"))
         self.assertEqual(saved["ui"]["ui_scale"], 1.25)
-        self.assertEqual(self.window.sidebar.current_key(), PAGE_ADMIN)
+        self.assertEqual(self.window._current_page_key(), PAGE_ADMIN)
         self.assertEqual(self.window.header._state_label.text(), "Připojeno")
         self.assertEqual(self.window._metrics.scale, 1.25)
 

@@ -171,7 +171,7 @@ class DailySettingsTests(unittest.TestCase):
             categories=("1", "2"),
             language="česky",
             menu_list_number=1,
-            pdf_output="vystup/AutoReport_{datum}.pdf",
+            pdf_output="vystup/MailPilot_{datum}.pdf",
             pdf_orientation="na_vysku",
             pdf_data_font_size=8.5,
             pdf_label_font_size=9.0,
@@ -492,12 +492,94 @@ class JidelnaWarningTests(unittest.TestCase):
             self.assertIn(jidelnasql_warning.BEGIN, content)
             self.assertIn("23.08.2026 15:20", content)
             self.assertTrue(
-                path.with_name(path.name + ".autoreport-backup").is_file()
+                path.with_name(path.name + ".mailpilot-backup").is_file()
             )
             self.assertIsNone(jidelnasql_warning.clear_jidelnasql_mail_warning(settings))
             self.assertNotIn(
                 jidelnasql_warning.BEGIN, path.read_text(encoding="utf-8")
             )
+
+    def test_detects_and_replaces_legacy_warning_marker(self):
+        template = """
+<div id="info-system">
+  <div class="info-content">
+    <p><span class="popis">Export:</span><span id="synchronizace-export">včera</span></p>
+    <!-- AUTOREPORT_AUTOMAIL_BEGIN -->
+    <div>legacy warning</div>
+    <!-- AUTOREPORT_AUTOMAIL_END -->
+  </div>
+</div>
+""".strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dashboard.template.html"
+            path.write_text(template, encoding="utf-8")
+            settings = jidelnasql_warning.JidelnaWarningSettings(
+                enabled=True, template_path=path
+            )
+            self.assertTrue(jidelnasql_warning.is_jidelnasql_mail_warning_active(settings))
+            self.assertIsNone(jidelnasql_warning.show_jidelnasql_mail_warning(settings))
+            content = path.read_text(encoding="utf-8")
+            self.assertIn(jidelnasql_warning.MAILPILOT_BEGIN, content)
+            self.assertNotIn(jidelnasql_warning.LEGACY_BEGIN, content)
+            self.assertEqual(content.count(jidelnasql_warning.MAILPILOT_BEGIN), 1)
+            self.assertIsNone(jidelnasql_warning.clear_jidelnasql_mail_warning(settings))
+            self.assertFalse(
+                jidelnasql_warning.is_jidelnasql_mail_warning_active(settings)
+            )
+
+    def test_warning_message_is_html_escaped(self):
+        template = """
+<div id="info-system">
+  <div class="info-content">
+    <p><span class="popis">Export:</span><span id="synchronizace-export">včera</span></p>
+  </div>
+</div>
+""".strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dashboard.template.html"
+            path.write_text(template, encoding="utf-8")
+            settings = jidelnasql_warning.JidelnaWarningSettings(
+                enabled=True, template_path=path
+            )
+            self.assertIsNone(
+                jidelnasql_warning.show_jidelnasql_mail_warning(
+                    settings, message="<smtp timeout>"
+                )
+            )
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("&lt;smtp timeout&gt;", content)
+            self.assertNotIn("<smtp timeout>", content)
+
+    def test_warning_fails_safely_without_anchor(self):
+        template = "<html><body><p>Bez anchoru</p></body></html>"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dashboard.template.html"
+            path.write_text(template, encoding="utf-8")
+            settings = jidelnasql_warning.JidelnaWarningSettings(
+                enabled=True, template_path=path
+            )
+            note = jidelnasql_warning.show_jidelnasql_mail_warning(settings)
+            self.assertIsNotNone(note)
+            self.assertIn("anchor Export", str(note))
+            self.assertEqual(path.read_text(encoding="utf-8"), template)
+
+    def test_warning_write_is_atomic_without_leftover_temp_file(self):
+        template = """
+<div id="info-system">
+  <div class="info-content">
+    <p><span class="popis">Export:</span><span id="synchronizace-export">včera</span></p>
+  </div>
+</div>
+""".strip()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dashboard.template.html"
+            path.write_text(template, encoding="utf-8")
+            settings = jidelnasql_warning.JidelnaWarningSettings(
+                enabled=True, template_path=path
+            )
+            self.assertIsNone(jidelnasql_warning.show_jidelnasql_mail_warning(settings))
+            tmp_path = path.with_name(f".{path.name}.tmp")
+            self.assertFalse(tmp_path.exists())
 
     def test_warning_config_roundtrip(self):
         raw = {}
@@ -536,7 +618,34 @@ class UserOverviewTests(unittest.TestCase):
                 config_directory=Path(directory),
             )
             scheduler.write_jobs(scheduler.scheduler_path(config), [job])
-            overview = user_overview.load_automail_overview(config)
+            with (
+                mock.patch.object(
+                    user_overview,
+                    "peek_service_config",
+                    return_value=SimpleNamespace(service_name="MailPilot_denniprehled"),
+                ),
+                mock.patch.object(
+                    user_overview,
+                    "read_runtime_snapshot",
+                    return_value=SimpleNamespace(
+                        running=True,
+                        runtime_type="nssm",
+                        service_name="MailPilot_denniprehled",
+                        service_installed=True,
+                        service_running=True,
+                        service_account="DOMAIN\\user",
+                        runtime_identity="DOMAIN\\user",
+                        credential_ok=True,
+                        credential_detail="OK",
+                        last_heartbeat="2026-08-23 07:59:50",
+                        last_run="2026-08-23 08:00:00",
+                        last_result="OK",
+                        next_run="2026-08-24 09:30:00",
+                        last_error="—",
+                    ),
+                ),
+            ):
+                overview = user_overview.load_automail_overview(config)
         self.assertTrue(overview.configured)
         self.assertTrue(overview.enabled)
         self.assertEqual(overview.job_names, ("Denní stav",))
@@ -544,6 +653,9 @@ class UserOverviewTests(unittest.TestCase):
         self.assertIn("23.08.2026 08:02", overview.last_success)
         self.assertTrue(overview.next_send)
         self.assertEqual(len(overview.errors), 1)
+        self.assertTrue(overview.runtime_running)
+        self.assertEqual(overview.runtime_type, "nssm")
+        self.assertTrue(overview.credential_ok)
 
     def test_retry_reports_success(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -552,7 +664,7 @@ class UserOverviewTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     user_overview,
-                    "run_scheduled_export",
+                    "run_scheduled_export_with_retry",
                     return_value={
                         "status": "sent",
                         "path": Path("x.pdf"),
@@ -569,6 +681,50 @@ class UserOverviewTests(unittest.TestCase):
                 result = user_overview.retry_daily_mail(config)
         self.assertTrue(result.success)
         self.assertIn("Odesláno", result.message)
+
+    def test_overview_does_not_show_active_next_run_when_runtime_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.json"
+            config.write_text("{}", encoding="utf-8")
+            job = scheduler.build_job(
+                name="Denní stav",
+                action=scheduler.ACTION_POCTY,
+                schedule_type="daily",
+                launcher=str(Path(directory) / "spustit_poctyemailem.bat"),
+                enabled=True,
+                time="09:30",
+                config_directory=Path(directory),
+            )
+            scheduler.write_jobs(scheduler.scheduler_path(config), [job])
+            with (
+                mock.patch.object(
+                    user_overview,
+                    "peek_service_config",
+                    return_value=SimpleNamespace(service_name="MailPilot_denniprehled"),
+                ),
+                mock.patch.object(
+                    user_overview,
+                    "read_runtime_snapshot",
+                    return_value=SimpleNamespace(
+                        running=False,
+                        runtime_type="not running",
+                        service_name="MailPilot_denniprehled",
+                        service_installed=False,
+                        service_running=False,
+                        service_account="—",
+                        runtime_identity="DOMAIN\\user",
+                        credential_ok=True,
+                        credential_detail="OK",
+                        last_heartbeat="—",
+                        last_run="—",
+                        last_result="—",
+                        next_run="—",
+                        last_error="—",
+                    ),
+                ),
+            ):
+                overview = user_overview.load_automail_overview(config)
+        self.assertIn("runtime neběží", overview.next_send)
 
 
 class MailSettingsTests(unittest.TestCase):

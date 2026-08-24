@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+# LEGACY: historický AutoReport spec, nepoužívá se pro build MailPilotu v12.8.
 
 
 a = Analysis(

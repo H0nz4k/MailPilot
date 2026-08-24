@@ -9,6 +9,7 @@ from fksp_sestava import (
     FkspReport,
     FkspRow,
     create_fksp_pdf,
+    fksp_report_from_podklady,
     format_money,
 )
 from uzaverka_nastaveni import parse_closing_settings
@@ -78,6 +79,86 @@ class FkspReportTests(unittest.TestCase):
                 config_directory=Path(directory),
             )
         self.assertIn("2026-07", str(settings.output_directory))
+
+    def test_report_keeps_only_nonzero_fksp_rows(self):
+        podklady = SimpleNamespace(
+            header=SimpleNamespace(
+                subject_name="ZS Kozinova",
+                address="Kozinova 1000",
+                zip_code="102 00",
+                city="Praha 15",
+                company_id="47611332",
+                vat_id="47611332",
+            ),
+            period=date(2026, 7, 1),
+            individuals=(
+                SimpleNamespace(
+                    name="Novak Jan",
+                    diner_category="6",
+                    diner_category_name="Ucitele",
+                    category_code="6",
+                    category_name="Ucitele",
+                    meal_type="Obed",
+                    portions_live=10,
+                    portions=10,
+                    fksp_diner=50.0,
+                    fksp=50.0,
+                    other_overhead_diner=0.0,
+                    other_overhead=0.0,
+                    deleted=False,
+                ),
+                SimpleNamespace(
+                    name="Svoboda Petr",
+                    diner_category="7",
+                    diner_category_name="Cizi",
+                    category_code="7",
+                    category_name="Cizi",
+                    meal_type="Obed",
+                    portions_live=10,
+                    portions=10,
+                    fksp_diner=0.0,
+                    fksp=0.0,
+                    other_overhead_diner=0.0,
+                    other_overhead=0.0,
+                    deleted=False,
+                ),
+            ),
+            bulk=(
+                SimpleNamespace(
+                    name="Firma A",
+                    diner_category="6",
+                    diner_category_name="Ucitele",
+                    category_code="6",
+                    category_name="Ucitele",
+                    meal_type="Obed",
+                    portions_live=8,
+                    portions=8,
+                    fksp_diner=0.0,
+                    fksp=40.0,
+                    other_overhead_diner=0.0,
+                    other_overhead=0.0,
+                    deleted=False,
+                ),
+                SimpleNamespace(
+                    name="Firma B",
+                    diner_category="7",
+                    diner_category_name="Cizi",
+                    category_code="7",
+                    category_name="Cizi",
+                    meal_type="Obed",
+                    portions_live=8,
+                    portions=8,
+                    fksp_diner=0.0,
+                    fksp=0.0,
+                    other_overhead_diner=0.0,
+                    other_overhead=0.0,
+                    deleted=False,
+                ),
+            ),
+        )
+        report = fksp_report_from_podklady(podklady, categories=("6", "7"))
+        self.assertEqual([row.name for row in report.individuals], ["Novak Jan"])
+        self.assertEqual([row.name for row in report.bulk], ["Firma A"])
 
 
 if __name__ == "__main__":

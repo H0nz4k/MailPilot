@@ -4,16 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
+import os
+import re
 import socket
 import sys
 import time
 from datetime import date, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Sequence
 
 from credential_store import CredentialStoreError
 from env_store import EnvStoreError, get_resend_api_key
+from gui_qt import APP_TITLE, APP_VERSION
 from mail_service import (
     cooking_status_message,
     fetch_cooking_status,
@@ -30,11 +35,16 @@ from services.jidelnasql_warning import (
     peek_warning_settings,
     show_jidelnasql_mail_warning,
 )
+from services.pricing_mode import detect_pricing_mode_info, pricing_mode_label
 from stravovaci_sestava import ConfigError, create_pdf, fetch_report, load_config
 
 
 LOG_MAX_BYTES = 5 * 1024 * 1024
 RETRY_DELAYS_SECONDS = (60, 300, 900)
+_HTTP_STATUS_RE = re.compile(r"\b([1-5]\d{2})\b")
+_RETRY_AFTER_RE = re.compile(
+    r"retry[- ]after\s*[:=]?\s*([0-9]+)", re.IGNORECASE
+)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -168,8 +178,60 @@ def _has_internet() -> bool:
     return False
 
 
+def _extract_http_status(message: str) -> int | None:
+    for token in _HTTP_STATUS_RE.findall(message):
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if 100 <= value <= 599:
+            return value
+    return None
+
+
+def _extract_retry_after_seconds(message: str) -> int | None:
+    match = _RETRY_AFTER_RE.search(message)
+    if match:
+        try:
+            return max(1, int(match.group(1)))
+        except ValueError:
+            return None
+    # Fallback na HTTP-date formát.
+    marker = message.lower().find("retry-after:")
+    if marker < 0:
+        return None
+    raw = message[marker + len("retry-after:") :].splitlines()[0].strip()
+    if not raw:
+        return None
+    try:
+        target = parsedate_to_datetime(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    delta = int((target - datetime.now(target.tzinfo)).total_seconds())
+    return max(1, delta)
+
+
 def _is_retryable(exc: Exception) -> bool:
-    text = str(exc).lower()
+    text = str(exc)
+    lower = text.lower()
+    status = _extract_http_status(text)
+    if status == 429 or status == 408 or (status is not None and 500 <= status <= 599):
+        return True
+    if status in {400, 401, 403, 404, 422}:
+        return False
+    permanent_tokens = (
+        "invalid api key",
+        "neplatný api klíč",
+        "unauthorized",
+        "forbidden",
+        "invalid recipient",
+        "validation error",
+        "neplatná e-mailová adresa",
+        "chybí resend api klíč",
+        "zadejte resend api klíč",
+    )
+    if any(token in lower for token in permanent_tokens):
+        return False
     retry_tokens = (
         "timeout",
         "timed out",
@@ -184,8 +246,11 @@ def _is_retryable(exc: Exception) -> bool:
         "server closed the connection",
         "connection reset",
         "refused",
+        "too many requests",
+        "rate limit",
+        "retry-after",
     )
-    return any(token in text for token in retry_tokens)
+    return any(token in lower for token in retry_tokens)
 
 
 def run_scheduled_export_with_retry(
@@ -193,29 +258,52 @@ def run_scheduled_export_with_retry(
     run_date: date,
     log_path: Path,
 ) -> dict[str, Any]:
-    if not _has_internet():
-        raise RuntimeError("Internet není dostupný (kontrola spojení selhala).")
     attempts = 1 + len(RETRY_DELAYS_SECONDS)
     last_error: Exception | None = None
     for index in range(attempts):
         attempt_no = index + 1
-        try:
-            if attempt_no > 1:
-                write_log(
-                    log_path,
-                    "WARN",
-                    f"Retry pokus {attempt_no}/{attempts} pro automatický export.",
-                )
-            return run_scheduled_export(config_path, run_date)
-        except (ConfigError, CredentialStoreError, EnvStoreError, RuntimeError) as exc:
-            last_error = exc
-            if index >= len(RETRY_DELAYS_SECONDS) or not _is_retryable(exc):
-                raise
-            delay = RETRY_DELAYS_SECONDS[index]
+        write_log(
+            log_path,
+            "INFO",
+            f"Automatický export attempt {attempt_no}/{attempts}.",
+        )
+        if not _has_internet():
             write_log(
                 log_path,
                 "WARN",
-                f"Automatický export selhal ({exc}); další pokus za {delay} s.",
+                "Diagnostika: internet check selhal, zkouším API volání i tak.",
+            )
+        try:
+            result = run_scheduled_export(config_path, run_date)
+            write_log(
+                log_path,
+                "INFO",
+                f"Automatický export attempt {attempt_no}/{attempts} uspěl.",
+            )
+            return result
+        except (ConfigError, CredentialStoreError, EnvStoreError, RuntimeError) as exc:
+            last_error = exc
+            retryable = _is_retryable(exc)
+            status = _extract_http_status(str(exc))
+            retry_after = (
+                _extract_retry_after_seconds(str(exc)) if status == 429 else None
+            )
+            if index >= len(RETRY_DELAYS_SECONDS) or not retryable:
+                write_log(
+                    log_path,
+                    "ERROR",
+                    f"Attempt {attempt_no}/{attempts} selhal: {exc} "
+                    f"(retry={retryable}).",
+                )
+                raise
+            delay = RETRY_DELAYS_SECONDS[index]
+            if retry_after is not None:
+                delay = max(delay, retry_after)
+            write_log(
+                log_path,
+                "WARN",
+                f"Attempt {attempt_no}/{attempts} selhal: {exc}; "
+                f"další retry za {delay} s.",
             )
             time.sleep(delay)
     if last_error is not None:
@@ -223,16 +311,53 @@ def run_scheduled_export_with_retry(
     raise RuntimeError("Automatický export selhal bez detailu.")
 
 
+def _runtime_identity() -> str:
+    user = getpass.getuser().strip()
+    domain = str(os.environ.get("USERDOMAIN") or "").strip()
+    if domain and "\\" not in user:
+        return f"{domain}\\{user}"
+    return user or "unknown"
+
+
+def _detect_pricing_mode(config_path: Path, run_date: date) -> str:
+    try:
+        import psycopg
+    except ImportError:
+        return "nelze určit (chybí psycopg)"
+    try:
+        config = load_config(config_path, date_override=run_date.strftime("%d.%m.%Y"))
+    except Exception as exc:
+        return f"nelze určit ({exc})"
+    try:
+        with psycopg.connect(**config.database) as connection:
+            with connection.cursor() as cursor:
+                info = detect_pricing_mode_info(cursor)
+    except Exception as exc:
+        return f"nelze určit ({exc})"
+    return f"{pricing_mode_label(info.mode)} [{info.source}]"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     today = date.today()
-    write_log(args.log, "START", f"Automatický export pro {today.strftime('%d.%m.%Y')}")
+    write_log(
+        args.log,
+        "START",
+        f"{APP_TITLE} {APP_VERSION} · mode=automatic_export · "
+        f"identity={_runtime_identity()} · date={today.strftime('%d.%m.%Y')}",
+    )
+    write_log(args.log, "INFO", f"Cenový režim: {_detect_pricing_mode(args.config, today)}")
     warning_settings = None
 
-    def warning_failure(reason: str) -> None:
+    def warning_failure(reason: str, detail: str = "") -> None:
         if warning_settings is None:
             return
-        note = show_jidelnasql_mail_warning(warning_settings, when=datetime.now())
+        message = f"{reason}: {detail}".strip(": ").strip()
+        note = show_jidelnasql_mail_warning(
+            warning_settings,
+            when=datetime.now(),
+            message=message,
+        )
         if note:
             write_log(
                 args.log,
@@ -245,12 +370,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = run_scheduled_export_with_retry(args.config, today, args.log)
     except (ConfigError, CredentialStoreError, EnvStoreError, RuntimeError) as exc:
         write_log(args.log, "ERROR", str(exc))
-        warning_failure("Automatický export selhal")
+        warning_failure("Automatický export selhal", str(exc))
         print(f"CHYBA: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:
         write_log(args.log, "ERROR", f"Neočekávaná chyba: {exc}")
-        warning_failure("Automatický export selhal")
+        warning_failure("Automatický export selhal", str(exc))
         print(f"CHYBA: {exc}", file=sys.stderr)
         return 1
 

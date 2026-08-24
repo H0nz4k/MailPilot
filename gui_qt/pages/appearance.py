@@ -228,10 +228,10 @@ class AppearancePage(QWidget):
         grid.setHorizontalSpacing(metrics.normal_gap)
         grid.setVerticalSpacing(metrics.small_gap)
 
-        self._sample_title = section_title("AutoReport · ZŠ Kozinova")
+        self._sample_title = section_title("MailPilot · ZŠ Kozinova")
         grid.addWidget(self._sample_title, 0, 0, 1, 3)
 
-        sample_input = QLineEdit("vystup/AutoReport_{datum}.pdf")
+        sample_input = QLineEdit("vystup/MailPilot_{datum}.pdf")
         sample_input.setMinimumWidth(metrics.px(240))
         sample_input.setMaximumWidth(metrics.px(340))
         grid.addWidget(field_label("Ukázka pole", sample_input), 1, 0)

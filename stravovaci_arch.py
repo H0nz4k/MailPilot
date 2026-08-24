@@ -466,7 +466,7 @@ def create_arch_pdf(
         topMargin=10 * mm,
         bottomMargin=12 * mm,
         title=f"Stravovací archy {period_title(report.period.month, report.period.year)}",
-        author="AutoReport",
+        author="MailPilot",
     )
     document.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
     return target

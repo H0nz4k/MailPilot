@@ -6,12 +6,14 @@ from pathlib import Path
 import textwrap
 from datetime import datetime
 
-import fitz
+import pymupdf as fitz
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "UZIVATELSKY_NAVOD_MailPilot_v12_7.md"
-TARGET = ROOT / "UZIVATELSKY_NAVOD_MailPilot_v12_7.pdf"
+VERSION = "12.8"
+VERSION_SLUG = "v12_8"
+SOURCE = ROOT / f"UZIVATELSKY_NAVOD_MailPilot_{VERSION_SLUG}.md"
+TARGET = ROOT / f"UZIVATELSKY_NAVOD_MailPilot_{VERSION_SLUG}.pdf"
 STABLE_COPY = ROOT / "UZIVATELSKY_NAVOD_MailPilot.pdf"
 LEGACY_COPY = ROOT / "UZIVATELSKY_NAVOD_AutoReport_v10_4.pdf"
 
@@ -105,7 +107,7 @@ def generate(
         )
         page.insert_text(
             fitz.Point(MARGIN_X, 19),
-            "MailPilot v12.7 - Uzivatelsky navod",
+            f"MailPilot v{VERSION} - Uzivatelsky navod",
             fontname=fontname,
             fontsize=9.0,
             color=COLOR_MUTED,
@@ -128,7 +130,7 @@ def generate(
         )
         page.insert_text(
             fitz.Point(MARGIN_X, 58),
-            "MailPilot v12.7",
+            f"MailPilot v{VERSION}",
             fontname=fontname,
             fontsize=28,
             color=(1, 1, 1),

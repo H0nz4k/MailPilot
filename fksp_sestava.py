@@ -118,6 +118,11 @@ def _row_from_podklad(row: Any, *, diner_category: bool) -> FkspRow:
     )
 
 
+def _has_nonzero_fksp(value: float, *, epsilon: float = 0.0001) -> bool:
+    """FKSP sazba 0.00 je mimo sestavu; bereme jen nenulové hodnoty."""
+    return abs(float(value)) > epsilon
+
+
 def fksp_report_from_podklady(podklady: Any, *, categories: Sequence[str]) -> FkspReport:
     """Složí sestavu FKSP ze sdílených podkladů uzávěrky."""
     from uzaverka_podklady import in_categories
@@ -130,6 +135,7 @@ def fksp_report_from_podklady(podklady: Any, *, categories: Sequence[str]) -> Fk
                 if not row.deleted
                 and row.portions_live > 0
                 and in_categories(row.diner_category, categories)
+                and _has_nonzero_fksp(row.fksp_diner)
             ),
             key=lambda item: (
                 (item.name or "").lower(),
@@ -146,6 +152,7 @@ def fksp_report_from_podklady(podklady: Any, *, categories: Sequence[str]) -> Fk
                 if not row.deleted
                 and row.portions > 0
                 and in_categories(row.category_code, categories)
+                and _has_nonzero_fksp(row.fksp)
             ),
             key=lambda item: (
                 (item.name or "").lower(),
@@ -504,7 +511,7 @@ def create_fksp_pdf(
         topMargin=14 * mm,
         bottomMargin=16 * mm,
         title=f"FKSP {czech_month_name(report.period.month)} {report.period.year}",
-        author="AutoReport",
+        author="MailPilot",
     )
     document.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
     return target

@@ -1,4 +1,4 @@
-"""Napojení AutoReportu na Resend podle projektu MailSender.
+"""Napojení MailPilotu na Resend podle projektu MailSender.
 
 Každý příjemce dostane samostatnou zprávu přes Resend Emails API. Batch API se
 záměrně nepoužívá, protože Resend v dávkovém endpointu přílohy nepodporuje.

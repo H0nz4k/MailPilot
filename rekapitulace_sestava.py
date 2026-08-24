@@ -584,7 +584,7 @@ def create_recap_pdf(
         topMargin=12 * mm,
         bottomMargin=14 * mm,
         title=f"{title_name} {period_title(report.period.month, report.period.year)}",
-        author="AutoReport",
+        author="MailPilot",
     )
     document.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
     return target

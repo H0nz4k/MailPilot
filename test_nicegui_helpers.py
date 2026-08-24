@@ -445,7 +445,12 @@ class NiceGuiHelperTests(unittest.TestCase):
     def test_database_test_reads_same_subject_name_as_pdf(self):
         cursor = mock.MagicMock()
         cursor.__enter__.return_value = cursor
-        cursor.fetchone.side_effect = [("vyvoj",), ("Školní jídelna U Parku",)]
+        cursor.fetchone.side_effect = [
+            ("vyvoj",),
+            ("Školní jídelna U Parku",),
+            ("0",),
+            ("0",),
+        ]
         cursor.fetchall.side_effect = [
             [("MŠ T", "Mateřská škola")],
             [("tentomesic", "7"), ("tentorok", "2026")],
@@ -473,9 +478,13 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertEqual(subject_name, "Školní jídelna U Parku")
         self.assertEqual(jidelna_period, (2026, 7))
         executed = [call.args[0] for call in cursor.execute.call_args_list]
-        self.assertEqual(executed[-2], gui.SUBJECT_NAME_QUERY)
-        self.assertIn("TentoMesic", executed[-1])
-        self.assertIn("TentoRok", executed[-1])
+        self.assertIn(gui.SUBJECT_NAME_QUERY, executed)
+        self.assertTrue(
+            any("pouzivatcenik" in query.lower() for query in executed),
+            msg="TEST DB má načítat i cenový režim.",
+        )
+        self.assertTrue(any("TentoMesic" in query for query in executed))
+        self.assertTrue(any("TentoRok" in query for query in executed))
 
 
 if __name__ == "__main__":

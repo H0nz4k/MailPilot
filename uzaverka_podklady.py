@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from runtime_paths import application_directory
+from services.pricing_mode import detect_pricing_mode_info
 from stravovaci_sestava import AppConfig
 from uzaverka_pdf import (
     SubjectHeader,
@@ -30,6 +31,7 @@ from uzaverka_pdf import (
 CACHE_VERSION = 1
 CACHE_DIRNAME = "cache"
 CACHE_SUBDIR = "uzaverka"
+PRICING_TABLES = ("public.cenik", "public.cenik_sluzeb", "public.sazby")
 
 PAYMENT_QUERY = """
         SELECT BTRIM(typplatby::text), NULLIF(BTRIM(popis), '')
@@ -504,6 +506,16 @@ def fingerprint_digest(parts: Sequence[Any]) -> str:
 
 
 def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    iso = getattr(value, "isoformat", None)
+    if callable(iso):
+        try:
+            return iso()
+        except Exception:
+            pass
     if hasattr(value, "__float__") and not isinstance(value, (int, float, bool)):
         try:
             return float(value)
@@ -625,7 +637,46 @@ def fetch_fingerprint(cursor: Any, year: int, month: int) -> str:
     )
     cursor.execute(FINGERPRINT_QUERY, params)
     row = cursor.fetchone() or ()
-    return fingerprint_digest(row)
+    pricing = detect_pricing_mode_info(cursor)
+    table_parts: list[Any] = []
+    for table_name in PRICING_TABLES:
+        table_parts.extend(_table_fingerprint(cursor, table_name))
+    return fingerprint_digest((row, pricing.mode, pricing.source, table_parts))
+
+
+def _table_fingerprint(cursor: Any, table_name: str) -> tuple[str, int, str]:
+    """Deterministický otisk cenové tabulky bez předpokladu konkrétního schema."""
+    try:
+        from psycopg import sql
+    except ImportError:
+        return (table_name, 0, "missing-psycopg")
+    schema, table = table_name.split(".", 1)
+    cursor.execute("SELECT to_regclass(%s)", (f"{schema}.{table}",))
+    exists = cursor.fetchone()
+    if not exists or exists[0] is None:
+        return (table_name, 0, "missing")
+    query = sql.SQL(
+        """
+        SELECT
+            COUNT(*)::integer,
+            COALESCE(
+                md5(
+                    string_agg(
+                        row_to_json(t)::text,
+                        ',' ORDER BY row_to_json(t)::text
+                    )
+                ),
+                ''
+            )
+        FROM {schema}.{table} AS t
+        """
+    ).format(
+        schema=sql.Identifier(schema),
+        table=sql.Identifier(table),
+    )
+    cursor.execute(query)
+    count, digest = cursor.fetchone() or (0, "")
+    return (table_name, int(count or 0), str(digest or ""))
 
 
 def _load_payment_names(cursor: Any) -> dict[str, str]:

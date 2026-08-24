@@ -1,4 +1,4 @@
-"""Design tokeny, barevná schémata a UI šablony AutoReportu.
+"""Design tokeny, barevná schémata a UI šablony MailPilotu.
 
 Jen prezentační vrstva: velikosti, rozestupy, barvy a rozvržení. Business
 logika (databáze, PDF, maily) sem nepatří. Šablony mění pouze hodnoty tokenů

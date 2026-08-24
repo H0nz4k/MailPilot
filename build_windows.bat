@@ -2,13 +2,13 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-rem MailPilot v12.7: jeden EXE bez konzole, ktery umi okno i bezobsluzne rezimy.
+rem MailPilot v12.8: jeden EXE bez konzole, ktery umi okno i bezobsluzne rezimy.
 
 set "BUILD_VENV=%~dp0.venv"
 if not exist "%BUILD_VENV%\Scripts\python.exe" set "BUILD_VENV=%~dp0.build-venv"
 set "BUILD_PYTHON=%BUILD_VENV%\Scripts\python.exe"
 set "OUTPUT=%~dp0dist\MailPilot"
-set "ARCHIVE=%~dp0dist\MailPilot-v12_7-portable.zip"
+set "ARCHIVE=%~dp0dist\MailPilot-v12.8-portable.zip"
 set "APP_ICON=%~dp0assets\app_icon.ico"
 set "NSSM_SOURCE=%~dp0..\nssm"
 
@@ -27,6 +27,7 @@ if errorlevel 1 goto :error
 echo [4/6] Sestavuji aplikaci (PySide6, bez konzole)...
 "%BUILD_PYTHON%" -m PyInstaller --noconfirm --clean ^
   --name MailPilot --onedir --windowed ^
+  --specpath "%~dp0build" ^
   --icon "%APP_ICON%" ^
   --exclude-module nicegui ^
   --exclude-module webview ^
@@ -47,7 +48,7 @@ copy /Y "%~dp0spustit_poctyemailem.bat" "%OUTPUT%\spustit_poctyemailem.bat" >nul
 copy /Y "%~dp0spustit_uzaverku.bat" "%OUTPUT%\spustit_uzaverku.bat" >nul
 copy /Y "%~dp0spustit_z17.bat" "%OUTPUT%\spustit_z17.bat" >nul
 copy /Y "%~dp0UZIVATELSKY_NAVOD_MailPilot.pdf" "%OUTPUT%\UZIVATELSKY_NAVOD_MailPilot.pdf" >nul
-copy /Y "%~dp0UZIVATELSKY_NAVOD_MailPilot_v12_7.pdf" "%OUTPUT%\UZIVATELSKY_NAVOD_MailPilot_v12_7.pdf" >nul
+copy /Y "%~dp0UZIVATELSKY_NAVOD_MailPilot_v12_8.pdf" "%OUTPUT%\UZIVATELSKY_NAVOD_MailPilot_v12_8.pdf" >nul
 if exist "%NSSM_SOURCE%\*" (
   echo [5/6] Pribaluji NSSM do distribuce...
   robocopy "%NSSM_SOURCE%" "%OUTPUT%\nssm" /E /NFL /NDL /NJH /NJS /NC /NS >nul

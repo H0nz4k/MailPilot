@@ -100,6 +100,8 @@ def run(config_path: Path) -> int:
     window.setAttribute(Qt.WA_DontShowOnScreen, True)
     window.show()
     QApplication.processEvents()
+    window._admin_unlocked = True
+    window._refresh_admin_lock_state()
 
     connected = _wait(lambda: window.connection() is not None, 60.0)
     report.add(connected, "Připojení k databázi", _status(window))
@@ -162,14 +164,15 @@ def run(config_path: Path) -> int:
         else _status(window),
     )
 
-    window.sidebar.select(PAGE_ADMIN)
+    window._activate_page(PAGE_ADMIN)
+    window.sidebar.clearSelection()
     for section in window.admin_page.sections():
         window.admin_page.show_section(section)
         QApplication.processEvents()
         page = window.admin_page.current_widget()
         report.add(
             page is not None and page.isVisible(),
-            f"Administrace → {section}",
+            f"Administrace -> {section}",
         )
 
     window._change_scale(1.6)

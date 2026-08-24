@@ -1,4 +1,4 @@
-"""Hlavní okno AutoReportu: navigace, stav a obsluha akcí."""
+"""Hlavní okno MailPilotu: navigace, stav a obsluha akcí."""
 
 from __future__ import annotations
 
@@ -38,7 +38,12 @@ from gui_qt.icons import (
     muted_icon,
     nav_icon,
 )
-from gui_qt.pages.admin import SECTION_DATABASE, AdminPage
+from gui_qt.pages.admin import (
+    SECTION_ADVANCED,
+    SECTION_DATABASE,
+    SECTION_SCHEDULER,
+    AdminPage,
+)
 from gui_qt.pages.bulk import BulkPage
 from gui_qt.pages.closing import ClosingPage
 from gui_qt.pages.daily import DailyPage
@@ -102,6 +107,7 @@ from services.jidelnasql_warning import (
     JidelnaWarningSettings,
     apply_warning_settings,
     clear_jidelnasql_mail_warning,
+    is_jidelnasql_mail_warning_active,
     peek_warning_settings,
     show_jidelnasql_mail_warning,
 )
@@ -117,6 +123,7 @@ from services.scheduler_runtime import (
     apply_service_config,
     install_service,
     peek_service_config,
+    read_runtime_snapshot,
     read_service_status,
     read_runtime_status,
     remove_service,
@@ -201,6 +208,7 @@ class MainWindow(QMainWindow):
         self._bulk_data = BulkData()
         self._bulk_preview: BulkPreview | None = None
         self._admin_unlocked = False
+        self._runtime_snapshot = None
 
         self.setWindowTitle(f"{APP_TITLE} {APP_VERSION}")
         self.setMinimumSize(940, 600)
@@ -293,6 +301,7 @@ class MainWindow(QMainWindow):
         self.user_page.resend_requested.connect(self._retry_automail)
 
         self.admin_page = AdminPage(metrics, self.stack, palette=self._palette)
+        self.admin_page.nav.section_selected.connect(self._admin_section_changed)
         self.admin_page.database_page.test_requested.connect(self._test_connection)
         self.admin_page.appearance_page.theme_selected.connect(self._change_theme)
         self.admin_page.appearance_page.scale_selected.connect(self._change_scale)
@@ -443,6 +452,7 @@ class MainWindow(QMainWindow):
             enabled=warning.enabled,
             template_path=warning.template_path,
         )
+        self._sync_warning_state_from_file(silent=True)
         self._load_planned_jobs()
         self._refresh_actions()
 
@@ -498,6 +508,7 @@ class MainWindow(QMainWindow):
         return ""
 
     def _open_overview_page(self) -> None:
+        self._refresh_user_overview()
         self._activate_page(PAGE_USER)
         self.sidebar.clearSelection()
 
@@ -522,6 +533,13 @@ class MainWindow(QMainWindow):
         self.admin_page.show_section(SECTION_DATABASE)
         self._activate_page(PAGE_ADMIN)
         self.sidebar.clearSelection()
+
+    def _admin_section_changed(self, key: str) -> None:
+        if key == SECTION_ADVANCED:
+            self._sync_warning_state_from_file(silent=True)
+        elif key == SECTION_SCHEDULER:
+            self._refresh_scheduler_service()
+            self._refresh_scheduler_runtime()
 
     def set_status(self, text: str, detail: str = "") -> None:
         """Krátká zpráva do lišty; delší vysvětlení nese tooltip lišty."""
@@ -632,6 +650,24 @@ class MainWindow(QMainWindow):
         self._pending_admin.add(kind)
         self._admin_timer.start()
 
+    def _warning_settings(self) -> JidelnaWarningSettings:
+        page = self.admin_page.advanced_page
+        return JidelnaWarningSettings(
+            enabled=page.warning_enabled(),
+            template_path=page.warning_template_path(),
+        )
+
+    def _sync_warning_state_from_file(self, *, silent: bool) -> bool:
+        settings = self._warning_settings()
+        active = is_jidelnasql_mail_warning_active(settings)
+        self.admin_page.advanced_page.set_warning_active(active)
+        if not active and not settings.template_path.is_file() and not silent:
+            self.set_status(
+                "Dashboard šablona nebyla nalezena",
+                str(settings.template_path),
+            )
+        return active
+
     def _flush_admin_save(self) -> None:
         pending = set(self._pending_admin)
         self._pending_admin.clear()
@@ -668,27 +704,32 @@ class MainWindow(QMainWindow):
             )
             if note:
                 self.set_status("Warning JídelnaSQL se nepodařilo smazat", note)
+        self._sync_warning_state_from_file(silent=True)
         self.set_status("Pokročilá nastavení uložena.")
 
     def _manual_show_warning(self) -> None:
-        page = self.admin_page.advanced_page
         settings = JidelnaWarningSettings(
             enabled=True,
-            template_path=page.warning_template_path(),
+            template_path=self._warning_settings().template_path,
         )
         note = show_jidelnasql_mail_warning(settings)
         if note:
             self.set_status("Test warningu selhal", note)
             self._show_error("JídelnaSQL warning", note)
             return
-        self.admin_page.advanced_page.set_warning_active(True)
+        active = self._sync_warning_state_from_file(silent=True)
+        if not active:
+            self._show_error(
+                "JídelnaSQL warning",
+                "Warning nebyl po zápisu v dashboardu nalezen.",
+            )
+            return
         self.set_status(
             "Test warningu: blok byl vložen do dashboard.template.html",
             str(settings.template_path),
         )
 
     def _manual_show_warning_custom(self) -> None:
-        page = self.admin_page.advanced_page
         message, ok = QInputDialog.getText(
             self,
             "Test warningu JídelnaSQL",
@@ -704,31 +745,42 @@ class MainWindow(QMainWindow):
             return
         settings = JidelnaWarningSettings(
             enabled=True,
-            template_path=page.warning_template_path(),
+            template_path=self._warning_settings().template_path,
         )
         note = show_jidelnasql_mail_warning(settings, message=text)
         if note:
             self.set_status("Test warningu selhal", note)
             self._show_error("JídelnaSQL warning", note)
             return
-        self.admin_page.advanced_page.set_warning_active(True)
+        active = self._sync_warning_state_from_file(silent=True)
+        if not active:
+            self._show_error(
+                "JídelnaSQL warning",
+                "Warning nebyl po zápisu v dashboardu nalezen.",
+            )
+            return
         self.set_status(
             "Test warningu: vložen vlastní text chyby do dashboardu",
             text,
         )
 
     def _manual_clear_warning(self) -> None:
-        page = self.admin_page.advanced_page
         settings = JidelnaWarningSettings(
             enabled=True,
-            template_path=page.warning_template_path(),
+            template_path=self._warning_settings().template_path,
         )
         note = clear_jidelnasql_mail_warning(settings)
         if note:
             self.set_status("Mazání warningu selhalo", note)
             self._show_error("JídelnaSQL warning", note)
             return
-        self.admin_page.advanced_page.set_warning_active(False)
+        active = self._sync_warning_state_from_file(silent=True)
+        if active:
+            self._show_error(
+                "JídelnaSQL warning",
+                "Warning se nepodařilo odstranit z dashboardu.",
+            )
+            return
         self.set_status(
             "Test warningu: blok byl odstraněn z dashboard.template.html",
             str(settings.template_path),
@@ -814,10 +866,43 @@ class MainWindow(QMainWindow):
             return f"Auto NSSM: {exc}"
 
     def _refresh_scheduler_runtime(self) -> None:
-        status = read_runtime_status(self._config_path)
+        service_name, _nssm = self._service_inputs()
+        snapshot = read_runtime_snapshot(
+            self._config_path,
+            service_name or DEFAULT_SERVICE_NAME,
+            probe_service=False,
+        )
+        cached = self._runtime_snapshot
+        service_running = bool(getattr(cached, "service_running", False))
+        service_installed = bool(getattr(cached, "service_installed", False))
+        service_account = str(getattr(cached, "service_account", "—"))
+        service_name_text = str(
+            getattr(cached, "service_name", service_name or DEFAULT_SERVICE_NAME)
+        )
+        running = bool(snapshot.running or service_running)
+        runtime_type = "NSSM service" if service_running else snapshot.runtime_type
+        next_run = snapshot.next_run if running else "—"
+        detail = (
+            f"{runtime_type} · heartbeat: {snapshot.last_heartbeat} · "
+            f"poslední běh: {snapshot.last_run} · {snapshot.last_result} · "
+            f"další: {next_run}"
+        )
+        if snapshot.last_error != "—":
+            detail = f"{detail} · chyba: {snapshot.last_error}"
         self.admin_page.scheduler_page.set_runtime_status(
-            status.detail,
-            running=status.running,
+            detail,
+            running=running,
+        )
+        service_text = ""
+        if service_installed:
+            state = "běží" if service_running else "nainstalovaná, ale zastavená"
+            service_text = (
+                f"{service_name_text}: {state} · účet: {service_account}"
+            )
+        self.admin_page.scheduler_page.set_service_status(
+            service_text,
+            running=service_running,
+            installed=service_installed,
         )
 
     def _service_inputs(self) -> tuple[str, str]:
@@ -835,12 +920,31 @@ class MainWindow(QMainWindow):
 
     def _refresh_scheduler_service(self) -> None:
         service_name, _nssm = self._service_inputs()
-        status = read_service_status(service_name or DEFAULT_SERVICE_NAME)
-        text = status.detail if status.installed else ""
+        snapshot = read_runtime_snapshot(
+            self._config_path,
+            service_name or DEFAULT_SERVICE_NAME,
+            probe_service=True,
+        )
+        self._runtime_snapshot = snapshot
+        text = ""
+        if snapshot.service_installed:
+            state = "běží" if snapshot.service_running else "nainstalovaná, ale zastavená"
+            text = (
+                f"{snapshot.service_name}: {state} · účet: {snapshot.service_account} · "
+                f"credentials: {'OK' if snapshot.credential_ok else 'NEOK'}"
+            )
+            if snapshot.credential_detail:
+                text = f"{text} · {snapshot.credential_detail}"
+        self.admin_page.scheduler_page.set_runtime_status(
+            f"{snapshot.runtime_type} · poslední běh: {snapshot.last_run} · "
+            f"{snapshot.last_result} · další: {snapshot.next_run}"
+            + (f" · chyba: {snapshot.last_error}" if snapshot.last_error != "—" else ""),
+            running=snapshot.running,
+        )
         self.admin_page.scheduler_page.set_service_status(
             text,
-            running=status.running,
-            installed=status.installed,
+            running=snapshot.service_running,
+            installed=snapshot.service_installed,
         )
 
     def _start_scheduler_runtime(self) -> None:
@@ -1016,7 +1120,7 @@ class MainWindow(QMainWindow):
 
     def _rebuild_ui(self) -> None:
         """Postaví rozhraní znovu; ikony i tečky se obarví novou paletou."""
-        current_page = self.sidebar.current_key() or PAGE_DAILY
+        current_page = self._current_page_key() or self.sidebar.current_key() or PAGE_DAILY
         admin_section = self.admin_page.current_section() or SECTION_DATABASE
         if not self._persist(silent=True):
             self._raw = apply_ui_settings(self._raw, self._ui)
@@ -1037,7 +1141,12 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu()
         self._apply_connection_to_view()
-        self.sidebar.select(current_page)
+        nav_keys = {item.key for item in NAV_ITEMS}
+        if current_page in nav_keys:
+            self.sidebar.select(current_page)
+        else:
+            self._activate_page(current_page)
+            self.sidebar.clearSelection()
         self.admin_page.show_section(admin_section)
         self._fit_to_screen()
         self._persist_ui_only()
@@ -1053,7 +1162,12 @@ class MainWindow(QMainWindow):
         )
 
     def _refresh_user_overview(self) -> None:
-        self.user_page.set_overview(load_automail_overview(self._config_path))
+        try:
+            overview = load_automail_overview(self._config_path)
+        except Exception as exc:
+            self.set_status("Přehled automailu se nepodařilo načíst", str(exc))
+            return
+        self.user_page.set_overview(overview)
 
     def _retry_automail(self) -> None:
         overview = load_automail_overview(self._config_path)
@@ -1099,18 +1213,17 @@ class MainWindow(QMainWindow):
 
     def _show_help(self) -> None:
         text = (
-            "<h3>MailPilot v12.7 · nápověda</h3>"
+            "<h3>MailPilot v12.8 · nápověda</h3>"
             "<p><b>Běžný uživatel</b> používá stránky Denní stav, Uzávěrka, "
             "Speciál, Hromadná zpráva a Přehled.</p>"
             "<p><b>Administrace</b> je chráněná heslem. Vstup: "
-            "<i>Soubor → Vstup do administrace</i> nebo položka "
-            "<i>Administrace</i> v levém menu. Zamknutí: "
-            "<i>Soubor → Uzamknout administraci</i>.</p>"
+            "<i>tlačítko Administrace</i> v horní liště. Zamknutí: "
+            "<i>tlačítko Uzamknout</i>.</p>"
             "<h4>První spuštění</h4>"
             "<ol>"
             "<li>V Administraci vyplňte Databázi a spusťte test připojení.</li>"
             "<li>Nastavte E-maily (odesílatel, příjemci, texty).</li>"
-            "<li>Zkontrolujte Plánovač automatických úloh.</li>"
+            "<li>Zkontrolujte Plánovač automatických úloh a runtime stav.</li>"
             "</ol>"
             "<h4>Základní ovládání</h4>"
             "<ul>"
@@ -1204,8 +1317,14 @@ class MainWindow(QMainWindow):
         return True
 
     def eventFilter(self, watched, event):  # noqa: N802, ANN001
-        if self._admin_unlocked and event is not None:
-            event_type = event.type()
+        if event is None:
+            return super().eventFilter(watched, event)
+        event_type = event.type()
+        if watched is self and event_type == QEvent.WindowActivate:
+            self._sync_warning_state_from_file(silent=True)
+            if self._current_page_key() == PAGE_USER:
+                self._refresh_user_overview()
+        if self._admin_unlocked:
             tracked = {
                 QEvent.MouseButtonPress,
                 QEvent.MouseButtonDblClick,
@@ -1296,15 +1415,17 @@ class MainWindow(QMainWindow):
         self.admin_page.database_page.clear_password_field()
         self.admin_page.database_page.set_status(
             f"Připojeno · {info.name}",
-            f"{info.details} · {len(info.categories)} kategorií",
+            f"{info.details} · {len(info.categories)} kategorií · "
+            f"Cenový režim: {info.pricing_mode_text}",
         )
         self._apply_connection_to_view()
         self._persist(silent=True)
         message = f"Připojeno · {info.name}"
         note = resolution.status_note(len(info.categories))
+        note_parts = [part for part in (note, f"Cenový režim: {info.pricing_mode_text}") if part]
         if note:
             message += " · výběr kategorií upraven podle databáze"
-        self.set_status(message, note)
+        self.set_status(message, " · ".join(note_parts))
         self._load_bulk_data()
 
     def _connection_failed(self, message: str, *, silent: bool) -> None:
@@ -1343,6 +1464,7 @@ class MainWindow(QMainWindow):
         meta_parts = [info.database_name]
         if info.period_label:
             meta_parts.append(info.period_label)
+        meta_parts.append(f"Cenový režim: {info.pricing_mode_text}")
         self.header.set_state(STATE_OK, "Připojeno", detail)
         self.header.set_setup_hint_enabled(False)
         self.header.set_connection_meta(

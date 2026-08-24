@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Spoustim MailPilot v12.7 (desktopove rozhrani PySide6)...
+echo Spoustim MailPilot v12.8 (desktopove rozhrani PySide6)...
 
 if exist "%~dp0MailPilot.exe" (
     echo Nalezen MailPilot.exe, spoustim ho.

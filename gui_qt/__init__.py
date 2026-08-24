@@ -3,5 +3,5 @@
 from __future__ import annotations
 
 APP_TITLE = "MailPilot"
-APP_VERSION = "v12.7"
+APP_VERSION = "v12.8"
 APP_CREDIT = "MailPilot by HanzG"

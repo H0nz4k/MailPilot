@@ -740,7 +740,7 @@ def create_z17_pdf(config: AppConfig, report: Z17Report, output_path: Path) -> P
         topMargin=12 * mm,
         bottomMargin=14 * mm,
         title=f"Podklad Z 17-01 {report.year}",
-        author="AutoReport",
+        author="MailPilot",
     )
     document.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
     return target
