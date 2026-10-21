@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NiceGUI rozhraní pro AutoReport."""
+"""NiceGUI rozhraní pro DataShip."""
 
 from __future__ import annotations
 
@@ -109,6 +109,9 @@ from services.config_io import (
 )
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
+from services.web_branding import (
+    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON,
+)
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from ui_theme import (
@@ -161,8 +164,8 @@ from stravovaci_sestava import (
 )
 
 
-APP_TITLE = "AutoReport"
-APP_VERSION = "v10.4"
+APP_TITLE = BRAND_NAME
+APP_VERSION = BRAND_STAGE
 NATIVE_WINDOW_SIZE = (1280, 860)
 SCHEDULER_HELP_TEXT = (
     "Úlohu přiřaďte k funkci: Denní stav (--poctyemailem, "
@@ -172,11 +175,11 @@ SCHEDULER_HELP_TEXT = (
 CLI_HELP_INTRO = (
     "Bez parametru se otevře toto okno. Příkazy níže GUI neotevřou: použijí "
     "aktuální config.json vedle EXE a nastavení ze záložek. Pište je ve složce "
-    "s AutoReport.exe, v Jídelně, nebo v Plánovači úloh."
+    "s DataShip.exe, v Jídelně, nebo v Plánovači úloh."
 )
 CLI_COMMANDS = (
     {
-        "command": "AutoReport.exe --poctyemailem",
+        "command": "DataShip.exe --poctyemailem",
         "title": "Denní stav bez okna",
         "detail": (
             "Vezme dnešní datum (uložené datum v configu ignoruje), spočítá počty "
@@ -188,7 +191,7 @@ CLI_COMMANDS = (
         ),
     },
     {
-        "command": "AutoReport.exe --zaverka_072026",
+        "command": "DataShip.exe --zaverka_072026",
         "title": "Měsíční uzávěrka bez okna",
         "detail": (
             "Číslo 072026 znamená červenec 2026 (tvar MMRRRR). Vytvoří sestavy "
@@ -200,7 +203,7 @@ CLI_COMMANDS = (
         ),
     },
     {
-        "command": "AutoReport.exe --zaverka_am",
+        "command": "DataShip.exe --zaverka_am",
         "title": "Uzávěrka aktuálního měsíce",
         "detail": (
             "Stejné sestavy, složka, ZIP a mail jako --zaverka_MMRRRR, ale období "
@@ -211,7 +214,7 @@ CLI_COMMANDS = (
         ),
     },
     {
-        "command": "AutoReport.exe --z17_2026",
+        "command": "DataShip.exe --z17_2026",
         "title": "Podklad Z 17-01 bez okna",
         "detail": (
             "Spočítá roční podklad k výkazu Z 17-01 za rok 2026 (stav zapsaných "
@@ -398,7 +401,7 @@ def configure_ui_window(*, browser: bool, native_window: bool, port: int) -> dic
 
 
 def shutdown_when_last_client_closes(current_client: Any) -> None:
-    """Ukončí lokální server po zavření poslední stránky AutoReportu."""
+    """Ukončí lokální server po zavření poslední stránky DataShipu."""
     other_clients = [
         client
         for client in app.clients()
@@ -527,13 +530,13 @@ class NiceGuiApp:
                 self.set_status(self.initial_status)
             self._build_workspace()
             with ui.row().classes("w-full justify-end pt-1"):
-                ui.label("AutoReport by HanzG").classes("app-footer")
+                ui.label(BRAND_FOOTER).classes("app-footer")
 
     def _build_topbar(self) -> None:
-        """Kompaktní hlavička: AutoReport | provozovna | stav DB | období | Administrace."""
+        """Kompaktní hlavička: DataShip | provozovna | stav DB | období | Administrace."""
         with ui.element("div").classes("app-topbar no-wrap"):
             with ui.row().classes("brand-mark items-center no-wrap shrink-0"):
-                ui.icon("restaurant_menu", size="1.25rem")
+                ui.icon(BRAND_ICON, size="1.25rem")
                 ui.label(APP_TITLE).classes("app-title")
                 ui.label(APP_VERSION).classes("ui-help")
             with ui.row().classes(
@@ -900,7 +903,7 @@ class NiceGuiApp:
         with ui.column().classes("ui-block w-full"):
             w.section_header(
                 "Uzávěrka",
-                "Volby pro AutoReport.exe --zaverka_MMRRRR nebo --zaverka_am.",
+                "Volby pro DataShip.exe --zaverka_MMRRRR nebo --zaverka_am.",
                 "print",
             )
             with w.card():
@@ -1022,7 +1025,7 @@ class NiceGuiApp:
                 with w.toolbar():
                     w.field_label(
                         "Kategorie",
-                        "Jídelna spustí AutoReport.exe --z17_RRRR se stejným výběrem.",
+                        "Jídelna spustí DataShip.exe --z17_RRRR se stejným výběrem.",
                     )
                     self.z17_category_mode = ui.radio(
                         {"all": "Všechny", "selected": "Jen zvolené"},
@@ -1549,7 +1552,7 @@ class NiceGuiApp:
             str(self.raw.get("pdf_vystup", DEFAULT_PDF_OUTPUT)),
             "Procházet vybere složku. Název souboru zůstane. "
             "Lze použít {datum} a {datum_cz}.",
-            filename="AutoReport_{datum}.pdf",
+            filename="DataShip_{datum}.pdf",
             on_change=self.save_pdf_output_path,
             grow=False,
         )
@@ -1635,7 +1638,7 @@ class NiceGuiApp:
     def _build_cli_help_panel(self) -> None:
         w.section_header(
             "Spuštění bez GUI",
-            "Jak volat AutoReport z Jídelny, BAT souboru nebo Plánovače úloh.",
+            "Jak volat DataShip z Jídelny, BAT souboru nebo Plánovače úloh.",
             "terminal",
         )
         with w.card():
@@ -2823,7 +2826,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     remaining, period = consume_closing_flag(raw_argv)
     remaining, z17_year = consume_z17_flag(remaining)
-    parser = argparse.ArgumentParser(description="NiceGUI pro AutoReport")
+    parser = argparse.ArgumentParser(description="NiceGUI pro DataShip")
     parser.add_argument(
         "--config",
         type=Path,
@@ -2941,7 +2944,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_options: dict[str, Any] = {
         "root": application.build,
         "title": f"{APP_TITLE} · {APP_VERSION}",
-        "favicon": "🍽️",
+        "favicon": BRAND_FAVICON,
         "language": "cs-CZ",
         "reload": False,
         "show_welcome_message": False,
@@ -2966,7 +2969,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             port=port,
         )
     )
-    print(f"Spouštím AutoReport na http://127.0.0.1:{port}", flush=True)
+    print(f"Spouštím DataShip na http://127.0.0.1:{port}", flush=True)
     ui.run(**run_options)
     return 0
 
