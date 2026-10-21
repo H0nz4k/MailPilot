@@ -9,8 +9,8 @@ Vývojová větev `feat/web-mail-scheduler` obsahuje NiceGUI správu nezávislý
 - `services/web_mail_cooking_days.py` čte výhradně DB a používá existující připojení `stravovaci_sestava.load_config` (heslo ze systémového úložiště). Výběr podle roku, měsíce a typu služby; měsíční cache.
 - Nastavení typu služby v `web_mail_settings.json` přes WebGUI (výchozí `Oběd`). Worker i náhled termínu ve WebGUI používají společné `resolve_task_date`.
 - Pokud chybí měsíc/typ, existuje duplicitní záznam nebo stav není `A/N`, výpočet končí chybou; datum se neodhaduje a PDF se neodešle.
-- `test_web_mail_cooking_days.py`: 14 scénářů včetně soboty, neděle, svátku 28. 10. 2026, všedního dne `N`, přechodu mezi měsíci, chybějící/duplicitní řádky, neplatných hodnot a typu služby.
-- **Lokální izolovaný běh: 14/14 úspěšných** s mockovaným PostgreSQL; nutno ještě otestovat proti skutečné DB, celou aplikaci a službu NSSM na Windows. Žádné skutečné e-maily nebyly odeslány.
+- `test_web_mail_cooking_days.py`: 21 scénářů, z toho 14 syntetických a 7 podle skutečně poskytnutých ukázkových řádků pro Oběd (09/2010 a 10/2010). Pokrývají sobotu/neděli se stavem `A`, svátek, všední den `N`, přechod mezi měsíci, chybějící/duplicitní řádky, neplatné hodnoty a typ služby.
+- **Aktuální lokální ověření ukázkových dat: 7/7 úspěšných** s mockovaným PostgreSQL a stejnou implementací výběru kalendáře. Nových 7 testů je zapsáno i v GitHub testovacím souboru. Celou 21-testovou sadu zatím znovu neověřeno v projektovém prostředí; nutno ještě provést test proti živé DB, celé aplikaci a NSSM na Windows. Žádné skutečné e-maily nebyly odeslány.
 
 ## Následující práce
 - Dokončit sestavu „souhrn počtu jídel“ (`meal_summary`).
