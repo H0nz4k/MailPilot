@@ -163,3 +163,48 @@ def test_other_date_modes_do_not_require_database(monkeypatch, tmp_path):
     assert calendar.resolve_task_date(
         tmp_path / "config.json", task("tomorrow"), date(2026, 10, 23)
     ) == date(2026, 10, 24)
+
+
+# Two real example rows supplied with the JídelnaSQL schema export.
+# No current production calendar or customer data is required for this fixture.
+SEPTEMBER_2010_LUNCH = "NAANNAAAAANNAAAAANNAAAAANNANAAN"
+OCTOBER_2010_LUNCH = "ANNAAAAANNAAAAANNAAAAANNAANNNNN"
+
+
+def sample_calendar_rows():
+    assert len(SEPTEMBER_2010_LUNCH) == len(OCTOBER_2010_LUNCH) == 31
+    return {
+        (2010, 9, "Oběd"): [tuple(SEPTEMBER_2010_LUNCH)],
+        (2010, 10, "Oběd"): [tuple(OCTOBER_2010_LUNCH)],
+    }
+
+
+@pytest.mark.parametrize(
+    ("sent_on", "expected"),
+    [
+        (date(2010, 9, 1), date(2010, 9, 2)),
+        (date(2010, 9, 3), date(2010, 9, 6)),
+        (date(2010, 9, 27), date(2010, 9, 29)),
+        (date(2010, 9, 29), date(2010, 9, 30)),
+        (date(2010, 9, 30), date(2010, 10, 1)),
+        (date(2010, 10, 1), date(2010, 10, 4)),
+    ],
+)
+def test_user_provided_september_october_2010_calendar(
+    monkeypatch, sent_on, expected,
+):
+    """Real A/N patterns: skip N, accept A, cross the month boundary."""
+    fake_database(monkeypatch, sample_calendar_rows())
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_cooking:
+        actual = calendar.target_date(task(), sent_on, is_cooking_day=is_cooking)
+    assert actual == expected
+
+
+def test_user_provided_example_does_not_invent_missing_november(monkeypatch):
+    """After last October A, a November row is required to choose a date."""
+    fake_database(monkeypatch, sample_calendar_rows())
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_cooking:
+        with pytest.raises(ValueError, match="11/2010"):
+            calendar.target_date(
+                task(), date(2010, 10, 26), is_cooking_day=is_cooking,
+            )
