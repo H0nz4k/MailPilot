@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from nicegui import ui
 from services.web_mail_settings import load_settings, save_settings, settings_path
+from services.web_mail_nssm import service_command
+from nicegui import run
 from services.jidelnasql_warning import (
     JidelnaWarningSettings, show_jidelnasql_mail_warning,
     clear_jidelnasql_mail_warning, is_jidelnasql_mail_warning_active,
@@ -24,7 +26,24 @@ def build_web_settings_panel(directory: Path) -> None:
         ui.label("Windows služba NSSM").classes("text-subtitle1")
         nssm = ui.input("Cesta k nssm.exe", value=values["nssm_path"]).classes("w-full")
         name = ui.input("Název služby", value=values["service_name"]).classes("w-full")
-        ui.label("Instalaci, spuštění a zastavení služby bude možné ovládat až po dokončení servisního adaptéru.").classes("text-caption")
+        ui.label("Správa služby vyžaduje na Windows oprávnění správce.").classes("text-caption")
+        async def control(action: str):
+            try:
+                # Save current service paths before invoking NSSM.
+                current = load_settings(path)
+                current.update(nssm_path=nssm.value.strip(), service_name=name.value.strip())
+                save_settings(path, current)
+                result = await run.io_bound(service_command, directory, action)
+                ui.notify(result or "Operace dokončena.", type="positive")
+            except Exception as exc:
+                ui.notify(f"NSSM: {exc}", type="negative")
+        with ui.row().classes("gap-2"):
+            for action, caption in (
+                ("install", "Instalovat"), ("start", "Spustit"),
+                ("stop", "Zastavit"), ("restart", "Restart"),
+                ("status", "Stav")
+            ):
+                ui.button(caption, on_click=lambda op=action: control(op)).props("outline")
 
     with ui.card().classes("w-full"):
         ui.label("Upozornění v dashboardu Jídelny").classes("text-subtitle1")
