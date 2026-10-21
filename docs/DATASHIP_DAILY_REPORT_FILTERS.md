@@ -6,15 +6,16 @@ Původní Qt MailPilot na větvi `master` nebyl měněn.
 ## Kategorie
 
 - **Výchozí: všechny aktuální kategorie z `public.kategor`.** I když historický `config.json` obsahuje omezený seznam `povolene_kategorie`, tento seznam **automaticky neomezuje** export.
-- Správce může v **Administrace → Kategorie denního stavu** zvolit **Jen vybrané kategorie**. Změna je aktivní teprve po tlačítku **Uložit nastavení kategorií**.
+- Správce může v **Administrace → Povolené kategorie** zvolit **Jen vybrané kategorie**. Změna je aktivní teprve po tlačítku **Uložit nastavení kategorií**.
 - Zápis `poctyemailem.vsechny_kategorie=true` znamená všechny; `false` znamená použití `poctyemailem.povolene_kategorie` (minimálně jedna kategorie). Chybějící volba = všechny.
-- V Denním stavu je výběr kategorií pouze pro čtení. Automatické denní sestavy používají stejný uložený režim jako ruční PDF.
+- **Běžný uživatel** v **Denní stav → Kategorie → Změnit výběr** zvolí podmnožinu kategorií povolených správcem; přednastavené jsou **všechny povolené**. Volba ovlivňuje jen aktuální ruční PDF či ruční e-mail, ne uložený administrátorský whitelist ani Worker.
+- Automatické denní sestavy používají uložený seznam **povolených kategorií**. Ruční sestavy používají uživatelův aktuální výběr.
 - Při výchozím režimu se kategorie načítají v okamžiku sestavy z DB, takže nově přidaná kategorie nepřestane být započítávána.
 
 ## Typ stravy
 
-- **Denní stav** po úspěšném TESTu DB načte typy stravy s objednávkami pro vybrané datum.
-- Při více typech zobrazí filtr **Typ stravy** s výchozí volbou **Všechny typy stravy** a jednotlivými typy (např. Oběd, Snídaně, Večeře).
+- **Denní stav** po úspěšném TESTu DB načte skutečné typy služby evidované v aktuálním roce v tabulkách `prihlas`, `varnedny` a `jidelnicek` (nikoliv jen objednávky pro jeden den).
+- Filtr **Typ stravy** se zobrazuje vždy, také pokud existuje jen jeden typ. Obsahuje s výchozí volbou **Všechny typy stravy** a jednotlivými typy (např. Oběd, Snídaně, Večeře).
 - Filtr se současně uplatní na souhrn menu, kategorie, rozpad norem, jmenný seznam a kontrolu varných dnů v ručním odeslání.
 - Volba v GUI je **pro konkrétní ruční export**, ne pro bezobslužné úlohy Workeru. Při novém otevření zůstává výchozí **Všechny**.
 
@@ -42,6 +43,6 @@ git pull
 bash scripts/run_web_dev_windows.sh
 ```
 
-Poté: Administrace → TEST připojení → Kategorie denního stavu; v Denním stavu datum / případně Typ stravy / Pokročilé nastavení PDF. Pro zabalený EXE spusťte `bash scripts/build_web_windows.sh`.
+Poté: Administrace → TEST připojení → Povolené kategorie; v Denním stavu datum / Kategorie → Změnit výběr / Typ stravy / Pokročilé nastavení PDF. Pro zabalený EXE spusťte `bash scripts/build_web_windows.sh`.
 
 **Pozor:** Tlačítko „Vytvořit a odeslat“ opravdu rozesílá e-maily – před testováním odešlete jen na bezpečnou testovací adresu, případně použijte „Vytvořit PDF“.
