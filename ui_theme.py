@@ -160,7 +160,7 @@ UI_ZOOM_STEP = 5
 # Barevná schémata
 # ---------------------------------------------------------------------------
 
-DEFAULT_UI_THEME = "horcicova"
+DEFAULT_UI_THEME = "kremova"
 # Starší uložená schémata (svetle, tmave, ocean, les, pisek, burgund) se mapují na výchozí.
 UI_THEME_LABELS = {
     "horcicova": "Hořčicová na antracitu",

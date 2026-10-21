@@ -175,4 +175,80 @@ html.theme-kremova .dataship-ui .app-card { box-shadow: 0 1px 3px rgba(40,30,20,
 @media (prefers-reduced-motion: reduce) {
     .dataship-ui *, .dataship-ui *:before, .dataship-ui *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---- v3: jednotná šířka, výrazná aktivní položka, kompaktní stránky ---- */
+.dataship-ui { max-width: 1120px !important; width: 100%; margin: 0 auto !important; padding: 12px 20px 16px !important; }
+.dataship-ui .app-topbar {
+    margin: 0 0 12px !important; width: 100%; border: 1px solid var(--app-border) !important;
+    border-radius: 12px !important; padding: 0 12px !important; min-height: 56px; top: 8px; gap: 16px;
+    background: var(--ds-bar, var(--app-surface)) !important;
+}
+html.theme-kremova .dataship-ui .app-topbar {
+    --app-ink: #2a1a14; --app-muted: #5e4b40; --app-tab: #5e4b40; --app-tab-active: #ffffff;
+    --app-border: #d3c3a3; color: #2a1a14; background: #fffdf7 !important;
+}
+html.theme-kremova .dataship-ui .app-topbar .brand-mark > .q-icon { background: var(--app-primary); color: #ffffff; }
+.dataship-ui .ds-top-nav .q-tab { min-height: 40px !important; margin: 8px 2px; padding: 0 14px; border-radius: 999px !important; border-left: 0 !important; }
+.dataship-ui .ds-top-nav .q-tab__indicator { display: none !important; }
+.dataship-ui .ds-top-nav .q-tab--active {
+    background: var(--app-primary) !important; color: var(--ds-on-primary) !important;
+}
+.dataship-ui .ds-top-nav .q-tab--active .q-tab__label, .dataship-ui .ds-top-nav .q-tab--active .q-icon { color: var(--ds-on-primary) !important; font-weight: 700; }
+.dataship-ui .app-shell, .dataship-ui .workspace, .dataship-ui .q-tab-panel { padding: 0 !important; margin: 0 !important; width: 100%; }
+/* žádné banery a boční čáry (ani při „Zvýraznit rámování“) */
+html.blocks-emphasized .dataship-ui .ui-block, .dataship-ui .ui-block { border-left: 0 !important; padding-left: 0 !important; }
+html.blocks-emphasized .dataship-ui .section-header, .dataship-ui .section-header { background: transparent !important; padding: 0 !important; border: 0 !important; }
+.dataship-ui .q-tab-panel > .section-header:first-child .section-icon,
+.dataship-ui .q-tab-panel > .section-header:first-child .app-heading,
+.dataship-ui .q-tab-panel > .ui-block:first-child > .section-header:first-child .section-icon,
+.dataship-ui .q-tab-panel > .ui-block:first-child > .section-header:first-child .app-heading { display: none !important; }
+.dataship-ui .section-help { color: var(--app-muted); font-size: 13px; }
+/* administrace: submenu + obsah ve stejném kontejneru */
+.dataship-ui .admin-nav { border-radius: 10px; border: 1px solid var(--app-border); background: var(--app-surface); margin-right: 16px; }
+.dataship-ui .admin-nav .q-tab--active { background: var(--app-primary) !important; color: var(--ds-on-primary) !important; border-radius: 8px; }
+.dataship-ui .admin-nav .q-tab--active .q-tab__label, .dataship-ui .admin-nav .q-tab--active .q-icon { color: var(--ds-on-primary) !important; }
+.dataship-ui .admin-nav .q-tab__indicator { display: none !important; }
+/* kompaktní Denní stav */
+.ds-daily-grid.ds-daily-single { max-width: none !important; margin: 0 !important; }
+.ds-daily .action-bar { max-width: none !important; }
+.dataship-ui .ds-daily .app-card { padding: 16px 20px !important; gap: 10px !important; }
+.ds-profile-row { gap: 12px; }
+.ds-profile-row .ds-profile-choices { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.dataship-ui .ds-profile { min-height: 34px; width: auto; }
+.ds-daily-fields.ds-daily-fields-3 { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.ds-total-line { margin-top: 4px !important; padding: 8px 14px !important; gap: 12px; }
+.ds-total-line .ds-summary-total { font-size: 26px; margin: 0; }
+.ds-total-status { flex: 1; text-align: right; }
+.dataship-ui .ds-advanced { margin-top: 0 !important; }
+.dataship-ui .action-bar { margin-top: 12px !important; padding: 10px 12px !important; gap: 8px !important; flex-wrap: nowrap !important; }
+.dataship-ui .ds-action-status .inline-status { font-size: 12px; line-height: 1.3; }
+.dataship-ui .action-bar .ds-primary-cta { min-height: 44px; }
+/* výběr: jen jedna indikace – plná barva + ✓, bez checkboxu */
+.ds-category .q-checkbox__inner, .ds-toggle-card .q-checkbox__inner { display: none !important; }
+.ds-category { padding: 4px 14px !important; min-height: 36px !important; }
+.ds-category .q-checkbox__label, .ds-toggle-card .q-checkbox__label { padding-left: 0 !important; }
+.ds-category[aria-checked=true] .q-checkbox__label::before, .ds-toggle-card[aria-checked=true] .q-checkbox__label::before { content: "✓ "; font-weight: 700; }
+/* Uzávěrka a E-mailové úlohy přes celou šířku kontejneru */
+.dataship-ui .ds-steps { max-width: none !important; gap: 18px !important; padding: 16px 20px !important; }
+.ds-toggle-card { min-height: 48px; padding: 10px 14px; }
+.ds-switch-row { padding: 6px 0; }
+.ds-empty { max-width: none !important; margin: 8px 0 !important; padding: 36px 24px !important; }
+.dataship-ui .ds-page-heading { margin: 0 0 8px !important; }
+.dataship-ui .app-footer { font-size: 12px; }
+@media (max-width: 1000px) {
+    .ds-daily-fields.ds-daily-fields-3 { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+    .dataship-ui .action-bar { flex-wrap: wrap !important; }
+}
+.ds-empty { width: 100% !important; align-self: stretch !important; box-shadow: 0 1px 3px rgba(0,0,0,.12) !important; }
+.dataship-ui .ds-top-nav .q-tab--active:hover, .dataship-ui .ds-top-nav .q-tab--active:focus { background: var(--app-primary) !important; }
+.dataship-ui .ds-top-nav .q-tab--active .q-focus-helper { display: none !important; }
+.dataship-ui .action-bar .q-btn--flat .q-btn__content { flex-direction: row !important; gap: 6px; flex-wrap: nowrap; }
+.dataship-ui .ds-top-nav { flex: 0 0 auto !important; min-width: 0; }
+.dataship-ui .ds-top-nav .q-tabs__content { overflow: visible !important; }
+.dataship-ui .ds-top-nav .q-tabs__arrow { display: none !important; }
+.dataship-ui .ds-top-nav .q-tab { padding: 0 12px; margin: 8px 1px; }
+.dataship-ui .admin-nav .q-tab--active { opacity: 1 !important; }
+.dataship-ui .section-help, .dataship-ui .section-header .ui-help { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+.dataship-ui .action-bar .q-btn .q-btn__content, .dataship-ui .action-bar .q-btn .block { white-space: nowrap !important; }
+.dataship-ui .action-bar .q-btn--flat { padding: 0 10px !important; }
 """

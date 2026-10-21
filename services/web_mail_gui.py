@@ -29,7 +29,7 @@ def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = No
     path = task_file(Path(config_directory))
     active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
     with ui.row().classes("ds-page-heading w-full items-center gap-2"):
-        ui.label("E-mailové úlohy").classes("ds-page-title").props('role="heading" aria-level="1"')
+        ui.label("Automatické posílání sestav e-mailem.").classes("ui-help")
         ui.icon("info", size="1.1rem").classes("ds-info-icon").tooltip(
             "Automatické odesílání funguje po instalaci plánovací služby. "
             f"Konfigurace: {path}"

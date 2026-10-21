@@ -628,7 +628,7 @@ class NiceGuiApp(DailyDesignMixin):
 
     def _build_navigation(self) -> None:
         with ui.tabs().props("inline-label no-caps indicator-color=primary").classes(
-            "app-nav ds-top-nav"
+            "ds-top-nav"
         ) as self.tabs:
             self.daily_tab = ui.tab("daily", label="Denní stav", icon="today")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
@@ -1057,12 +1057,8 @@ class NiceGuiApp(DailyDesignMixin):
     def _build_closing_panel(self) -> None:
         closing = peek_closing_ui(self.raw)
         with ui.column().classes("ui-block w-full"):
-            w.section_header(
-                "Uzávěrka",
-                "Měsíční sestavy, uložení a odeslání e-mailem.",
-                "print",
-            )
-            with w.card().classes("ds-steps ds-narrow"):
+            # Bez duplicitního nadpisu – stránku určuje horní navigace.
+            with w.card().classes("ds-steps"):
                 with ui.row().classes("ds-step w-full no-wrap"):
                     ui.label("1").classes("ds-step-num")
                     with ui.column().classes("ds-step-body"):
@@ -1097,14 +1093,6 @@ class NiceGuiApp(DailyDesignMixin):
                                     "Příjemce nastaví správce v Administraci → E-maily."
                                 ).classes("ui-help")
                             self.closing_mail = ui.switch(value=bool(closing["odeslat_mail"]))
-                with ui.row().classes("ds-step w-full no-wrap"):
-                    ui.label("3").classes("ds-step-num")
-                    with ui.column().classes("ds-step-body"):
-                        ui.label("Hotovo").classes("ds-section-title")
-                        ui.label(
-                            "Nastavení se uloží samo. Uzávěrka proběhne podle "
-                            "tohoto nastavení při spuštění z Jídelny."
-                        ).classes("ui-help")
                 with ui.expansion("Pokročilé", icon="tune").classes("w-full app-note ds-advanced"):
                     self.closing_output = self._output_path_field(
                         "Složka pro uložení",
@@ -1114,7 +1102,8 @@ class NiceGuiApp(DailyDesignMixin):
                         on_change=self.save_closing_settings,
                     )
                 self.closing_status = ui.label(
-                    "Nastavení se ukládá automaticky."
+                    "Nastavení se ukládá automaticky. Uzávěrka proběhne podle něj "
+                    "při spuštění z Jídelny."
                 ).classes("inline-status")
         for element in (
             self.closing_fksp,
@@ -1875,35 +1864,6 @@ class NiceGuiApp(DailyDesignMixin):
 
     def _build_appearance_panel(self) -> None:
         appearance = peek_ui_appearance(self.raw)
-        w.section_header(
-            "Vzhled aplikace",
-            "Šablona řídí rozvržení i hustotu. PDF sestavy zůstávají bez změny.",
-            "palette",
-        )
-        with w.card():
-            w.field_label(
-                "Šablona UI",
-                "Mění navigaci, hustotu prvků a rámování. Uloží se do config.json.",
-            )
-            self.ui_layout = ui.select(
-                UI_LAYOUT_LABELS,
-                label="Šablona",
-                value=appearance["layout"],
-            ).props("dense options-dense").classes("w-full max-w-[320px]")
-            self.layout_cards: dict[str, Any] = {}
-            with w.form_grid(3):
-                for name, label in UI_LAYOUT_LABELS.items():
-                    tokens = UI_LAYOUTS[name]
-                    card = ui.element("div").classes("template-card")
-                    card.on("click", lambda _e=None, item=name: self._pick_layout(item))
-                    self.layout_cards[name] = card
-                    with card:
-                        ui.html(self.LAYOUT_PREVIEWS[name])
-                        ui.label(label).classes("app-label")
-                        ui.label(str(tokens["popis"])).classes("ui-help")
-                        ui.tooltip(str(tokens["vhodne"]))
-            self.ui_layout.on("update:model-value", lambda: self.save_ui_appearance())
-
         with w.card():
             w.field_label("Barvy a přiblížení", "Platí okamžitě v celém okně.")
             with w.form_grid(2):
@@ -1911,7 +1871,7 @@ class NiceGuiApp(DailyDesignMixin):
                     "Barevné schéma",
                     UI_THEME_LABELS,
                     appearance["schema"],
-                    "Tmavé zapne dark mode. Schéma nemění hustotu prvků.",
+                    "Krémová je světlá (výchozí), Hořčicová a Švestková jsou tmavé.",
                 )
                 with ui.row().classes("items-center gap-2 no-wrap"):
                     ui.label("Přiblížení").classes("app-label shrink-0")
@@ -1929,9 +1889,36 @@ class NiceGuiApp(DailyDesignMixin):
                         "app-label w-12 text-right shrink-0"
                     )
 
-        with ui.expansion("Doladění hustoty a písma", icon="tune").props(
+        with ui.expansion("Pokročilé", icon="tune").props(
             "dense"
         ).classes("w-full app-note"):
+            ui.label(
+                "Starší šablony a doladění hustoty. Běžně není potřeba nic měnit."
+            ).classes("ui-help")
+            with w.card():
+                w.field_label(
+                    "Šablona UI",
+                    "Mění navigaci, hustotu prvků a rámování. Uloží se do config.json.",
+                )
+                self.ui_layout = ui.select(
+                    UI_LAYOUT_LABELS,
+                    label="Šablona",
+                    value=appearance["layout"],
+                ).props("dense options-dense").classes("w-full max-w-[320px]")
+                self.layout_cards: dict[str, Any] = {}
+                with w.form_grid(3):
+                    for name, label in UI_LAYOUT_LABELS.items():
+                        tokens = UI_LAYOUTS[name]
+                        card = ui.element("div").classes("template-card")
+                        card.on("click", lambda _e=None, item=name: self._pick_layout(item))
+                        self.layout_cards[name] = card
+                        with card:
+                            ui.html(self.LAYOUT_PREVIEWS[name])
+                            ui.label(label).classes("app-label")
+                            ui.label(str(tokens["popis"])).classes("ui-help")
+                            ui.tooltip(str(tokens["vhodne"]))
+                self.ui_layout.on("update:model-value", lambda: self.save_ui_appearance())
+
             with w.form_grid(4):
                 self.ui_template = w.setting_select(
                     "Hustota (předvolba)",
@@ -2309,7 +2296,11 @@ class NiceGuiApp(DailyDesignMixin):
     def _build_pdf_panel(self) -> None:
         """Sticky lišta hlavních akcí denního stavu."""
         with w.action_bar():
-            with ui.column().classes("gap-0 min-w-0 flex-grow"):
+            # Jedna kompaktní lišta: přehledy vlevo, stav uprostřed, PDF/mail vpravo.
+            if hasattr(self, "new_daily_profile"):
+                ui.button("Nový přehled", icon="add", on_click=self.new_daily_profile).props("flat no-caps")
+                ui.button("Uložit přehled", icon="bookmark_border", on_click=self.save_daily_profile).props("flat no-caps")
+            with ui.column().classes("gap-0 min-w-0 flex-grow ds-action-status"):
                 self.pdf_status = ui.label("PDF zatím nebylo vytvořeno.").classes(
                     "inline-status truncate"
                 )

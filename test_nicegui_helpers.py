@@ -42,10 +42,10 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertEqual(appearance["popis"], "extra")
         self.assertEqual(appearance["schema"], "svestkova")
         self.assertTrue(appearance["zvyrazneni"])
-        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "neon"}), "horcicova")
+        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "neon"}), "kremova")
         # Dříve uložená schémata se bezpečně převedou na výchozí.
-        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "tmave"}), "horcicova")
-        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "svetle"}), "horcicova")
+        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "tmave"}), "kremova")
+        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "svetle"}), "kremova")
         self.assertEqual(set(gui.UI_THEMES), {"horcicova", "svestkova", "kremova"})
         self.assertFalse(gui.peek_ui_blocks({}))
         self.assertTrue(gui.peek_ui_blocks({"ui_zvyrazneni_bloku": "ano"}))

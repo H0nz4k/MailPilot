@@ -27,41 +27,36 @@ class DailyDesignMixin:
             self.initial_status = f"Přehledy se nepodařilo načíst: {exc}"
             self.set_status(self.initial_status)
         with ui.column().classes("ui-block ds-daily w-full"):
-            with ui.row().classes("ds-page-heading w-full items-center justify-between"):
-                with ui.column().classes("gap-1"):
-                    ui.label("Denní stav").classes("ds-page-title").props('role="heading" aria-level="1"')
+            # Název stránky je jen v horní navigaci (žádný duplicitní nadpis).
             self._build_daily_overview()
             with ui.element("div").classes("ds-daily-grid ds-daily-single"):
                 with w.card().classes("ds-editor"):
-                    with ui.row().classes("w-full items-center justify-between"):
-                        ui.label("Moje přehledy").classes("app-heading")
-                        self.daily_profile_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
-                    self.daily_profile_choices = ui.row().classes("ds-profile-choices w-full")
-                    self.daily_profile_name = ui.input("Název přehledu", value="Denní přehled").props("outlined dense maxlength=80").classes("w-full")
-                    self.daily_profile_name.on_value_change(lambda _e: self._mark_daily_dirty())
-                    with ui.element("div").classes("ds-daily-fields"):
+                    with ui.row().classes("ds-profile-row w-full items-center no-wrap"):
+                        ui.label("Moje přehledy").classes("app-heading shrink-0")
+                        self.daily_profile_choices = ui.row().classes("ds-profile-choices min-w-0")
+                        self.daily_profile_status = ui.label("").classes("ui-help shrink-0").props('role="status" aria-live="polite"')
+                    with ui.element("div").classes("ds-daily-fields ds-daily-fields-3"):
+                        self.daily_profile_name = ui.input("Název přehledu", value="Denní přehled").props("outlined dense maxlength=80").classes("w-full")
+                        self.daily_profile_name.on_value_change(lambda _e: self._mark_daily_dirty())
                         self._build_date_field()
                         self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
                         self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined dense options-dense").classes("w-full")
                         self.meal_type_select.on_value_change(lambda _e: self._daily_filters_changed())
                     self._build_category_panel()
-                    ui.label("Skupiny strávníků").classes("ds-section-title")
                     self.daily_category_grid = ui.element("div").classes("ds-category-grid")
                     with ui.row().classes("ds-total-line w-full items-center justify-between no-wrap"):
                         with ui.row().classes("items-baseline gap-2 no-wrap"):
                             ui.label("Celkem").classes("ds-total-caption")
                             self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem" aria-live="polite"')
                             ui.label("porcí").classes("ds-total-caption")
+                        # Stav souhrnu je ve stejném řádku jako celkový počet.
+                        self.daily_summary_status = ui.label("Souhrn se načte po úspěšném TESTu připojení.").classes("ui-help ds-total-status truncate min-w-0").props('role="status" aria-live="polite" aria-atomic="true"')
                         self._daily_show_counts = False
-                        self.daily_detail_toggle = ui.button("Zobrazit detail", on_click=self._toggle_daily_detail).props("flat no-caps dense").classes("ds-detail-toggle")
-                    self.daily_summary_status = ui.label("Souhrn se načte po úspěšném TESTu připojení.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
+                        self.daily_detail_toggle = ui.button("Zobrazit detail", on_click=self._toggle_daily_detail).props("flat no-caps dense").classes("ds-detail-toggle shrink-0")
                     with ui.expansion("Pokročilé nastavení PDF", icon="tune").classes("w-full app-note ds-advanced"):
                         self._build_pdf_settings_section()
                     for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list):
                         field.on_value_change(lambda _e: self._mark_daily_dirty())
-                    with ui.row().classes("ds-editor-actions w-full justify-between"):
-                        ui.button("Nový přehled", icon="add", on_click=self.new_daily_profile).props("flat no-caps")
-                        ui.button("Uložit přehled", icon="bookmark_border", on_click=self.save_daily_profile).props("outline no-caps")
                 # Souhrnná karta byla odstraněna; prvky zůstávají kvůli stávající logice.
                 with ui.column().classes("ds-summary-hidden") as summary_box:
                     self.daily_summary_name = ui.label("Denní přehled").classes("ds-summary-name")
