@@ -579,6 +579,7 @@ class NiceGuiApp:
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
             self.mail_tasks_tab = ui.tab("mail_tasks", label="E-mailové úlohy", icon="schedule_send")
+            self.mail_settings_tab = ui.tab("mail_settings", label="Nastavení odesílání", icon="outgoing_mail")
             self.admin_tab = ui.tab("admin", label="Administrace", icon="settings")
         self.admin_tab_elements = (self.admin_tab,)
         self._apply_admin_visibility()
@@ -598,6 +599,9 @@ class NiceGuiApp:
             with ui.tab_panel("mail_tasks"):
                 from services.web_mail_gui import build_mail_tasks_panel
                 build_mail_tasks_panel(self.config_path.parent)
+            with ui.tab_panel("mail_settings"):
+                from services.web_mail_settings_gui import build_web_settings_panel
+                build_web_settings_panel(self.config_path.parent)
             with ui.tab_panel("admin"):
                 self._build_admin_panel()
 
