@@ -300,7 +300,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("count-badge", daily_source)
         self.assertIn("Změnit výběr", admin_categories)
         self.assertIn("Jen vybrané kategorie", admin_categories)
-        self.assertIn("Kategorie denního stavu", inspect.getsource(gui.NiceGuiApp._build_admin_panel))
+        self.assertIn("_build_category_settings_panel", inspect.getsource(gui.NiceGuiApp._build_admin_panel))
         self.assertIn("Seznam strávníků", inspect.getsource(gui.NiceGuiApp._build_pdf_settings_section))
         self.assertIn("meal_type_select", inspect.getsource(gui.NiceGuiApp._build_daily_panel))
         self.assertIn("open_daily_category_dialog", daily_source)
