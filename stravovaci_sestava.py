@@ -1129,12 +1129,16 @@ def create_pdf(
 
     subject = report.subject_name or "Stravovací provoz"
     date_text = config.report_date.strftime(DATE_FORMAT)
+    document_title = (
+        "Seznam strávníků" if config.show_diner_list
+        else "Souhrn objednané stravy"
+    )
     total_portions = sum(item.portions for item in report.menus)
     temporary = target.with_name(f".{target.stem}.tmp.pdf")
 
     def page_header_footer(canvas: Any, doc: Any) -> None:
         canvas.saveState()
-        canvas.setTitle(f"Seznam strávníků - {date_text}")
+        canvas.setTitle(f"{document_title} - {date_text}")
         canvas.setAuthor(subject)
         footer_font_size = max(6, min(11, label_size * 0.95))
         canvas.setFont(data_font, footer_font_size)
@@ -1174,14 +1178,14 @@ def create_pdf(
         rightMargin=right_margin,
         topMargin=top_margin,
         bottomMargin=bottom_margin,
-        title=f"Seznam strávníků - {date_text}",
+        title=f"{document_title} - {date_text}",
         author=subject,
         subject="Objednaná strava",
     )
 
     story: list[Any] = [
         Paragraph(escape(subject), title_style),
-        Paragraph("Seznam objednané stravy", subtitle_style),
+        Paragraph(document_title, subtitle_style),
     ]
 
     info_data = [
