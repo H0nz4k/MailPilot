@@ -10,6 +10,8 @@ Původní Qt MailPilot na větvi `master` nebyl měněn.
 - Zápis `poctyemailem.vsechny_kategorie=true` znamená všechny; `false` znamená použití `poctyemailem.povolene_kategorie` (minimálně jedna kategorie). Chybějící volba = všechny.
 - **Běžný uživatel** v **Denní stav → Kategorie → Změnit výběr** zvolí podmnožinu kategorií povolených správcem; přednastavené jsou **všechny povolené**. Volba ovlivňuje jen aktuální ruční PDF či ruční e-mail, ne uložený administrátorský whitelist ani Worker.
 - Automatické denní sestavy používají uložený seznam **povolených kategorií**. Ruční sestavy používají uživatelův aktuální výběr.
+- Pro stejný den lze vyrobit více samostatných PDF: vybrat 2 kategorie, **Vytvořit PDF**, vybrat jiné 4, znovu **Vytvořit PDF**. **Odlišné výběry se nepřepíší**: pouze ruční filtrované sestavy dostanou deterministický suffix `_kat-2-...` / `_kat-4-...`. Výchozí soubor při výběru všech povolených zůstává kompatibilní; automatické úlohy používají původní cestu.
+- Vytvoření PDF nepřepíná výběr kategorií automaticky. Uživatel jej může změnit mezi jednotlivými exporty kdykoli přes **Změnit výběr**.
 - Při výchozím režimu se kategorie načítají v okamžiku sestavy z DB, takže nově přidaná kategorie nepřestane být započítávána.
 
 ## Typ stravy
