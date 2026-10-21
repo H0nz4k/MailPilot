@@ -35,6 +35,7 @@ VALID_CONFIG = {
         "user": "tester",
     },
     "povolene_kategorie": ["Z1", "Z2", "Z1"],
+    "poctyemailem": {"vsechny_kategorie": False},
     "datum": "05.08.2026",
 }
 
@@ -75,9 +76,35 @@ class ConfigTests(unittest.TestCase):
 
     def test_poctyemailem_categories_override_root_list(self):
         content = dict(VALID_CONFIG)
-        content["poctyemailem"] = {"povolene_kategorie": ["ZAM"]}
+        content["poctyemailem"] = {"vsechny_kategorie": False, "povolene_kategorie": ["ZAM"]}
         config = load_config(self.write_config(content))
         self.assertEqual(config.categories, ("ZAM",))
+
+    def test_legacy_config_defaults_to_all_categories(self):
+        content = dict(VALID_CONFIG)
+        content.pop("poctyemailem", None)
+        config = load_config(self.write_config(content))
+        self.assertEqual(config.categories, ())  # DB codes resolved on fetch
+
+    def test_meal_type_and_optional_diner_list(self):
+        content = dict(VALID_CONFIG)
+        content.update({"typ_stravy_denne": " Oběd ", "seznam_stravniku": False})
+        config = load_config(self.write_config(content))
+        self.assertEqual(config.meal_type, "oběd")
+        self.assertFalse(config.show_diner_list)
+
+    def test_diner_list_defaults_on_and_meal_type_to_all(self):
+        config = load_config(self.write_config(VALID_CONFIG))
+        self.assertTrue(config.show_diner_list)
+        self.assertIsNone(config.meal_type)
+
+    def test_rejects_invalid_optional_diner_list_and_meal_type(self):
+        for key, value in (("seznam_stravniku", "false"), ("typ_stravy_denne", 4)):
+            with self.subTest(key=key):
+                content = dict(VALID_CONFIG)
+                content[key] = value
+                with self.assertRaises(ConfigError):
+                    load_config(self.write_config(content))
 
     def test_loads_category_separation(self):
         content = dict(VALID_CONFIG)
@@ -257,7 +284,7 @@ class OutputTests(unittest.TestCase):
                 DinerOrder("Adam Alena", "Z1", "Žáci 7–10", "Oběd", 1, "A", "Hrachová kaše"),
             ],
         )
-        self.assertIn("Jmenný seznam strávníků", output)
+        self.assertIn("Seznam strávníků", output)
         self.assertIn("Jméno", output)
         self.assertIn("Objednané jídlo", output)
         self.assertIn("Menu 1", output)
@@ -314,7 +341,7 @@ class OutputTests(unittest.TestCase):
                 DinerOrder("Adam Alena", "Z1", "Žáci 7–10", "Oběd", 1, "A", "Kaše"),
             ],
         )
-        self.assertIn("Jmenný seznam strávníků podle kategorií", output)
+        self.assertIn("Seznam strávníků podle kategorií", output)
         self.assertIn("Žáci 11–14\n----------", output)
         self.assertIn("Žáci 7–10\n---------", output)
         self.assertNotIn("Z3\n--", output)
@@ -332,8 +359,8 @@ class OutputTests(unittest.TestCase):
                 DinerOrder("Novák Jan", "Z1", "Žáci", "Oběd", 1, "A", "Kaše"),
             ],
         )
-        self.assertIn("Jmenný seznam strávníků\nJméno", output)
-        self.assertNotIn("Jmenný seznam strávníků podle kategorií", output)
+        self.assertIn("Seznam strávníků\nJméno", output)
+        self.assertNotIn("Seznam strávníků podle kategorií", output)
 
     def test_renders_subject_name_at_top_of_header(self):
         config = AppConfig({}, date(2026, 8, 5), ("Z1",), "česky", 1)
@@ -405,7 +432,7 @@ class OutputTests(unittest.TestCase):
             )
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
             self.assertIn("ZŠ Kozinova", text)
-            self.assertIn("Jmenný seznam strávníků", text)
+            self.assertIn("Seznam strávníků", text)
             self.assertIn("Žáci první kategorie", text)
             self.assertIn("Strana 2", text)
 
@@ -458,6 +485,41 @@ class OutputTests(unittest.TestCase):
             self.assertIn("ZŠ Kozinova", text)
             self.assertIn("Žák 059", text)
 
+    def test_pdf_without_diner_list_contains_only_summary(self):
+        from pypdf import PdfReader
+
+        report = ReportData(
+            menus=(MenuSummary("Oběd", 1, 12, "Bramborová kaše"),),
+            categories=(CategorySummary("Z1", "Žáci", "B", 12),),
+            norms=(NormMenuSummary("Oběd", "B", 1, 12),),
+            diners=(
+                DinerOrder("Novák Jiří", "Z1", "Žáci", "Oběd", 1, "B", "Kaše"),
+            ),
+            subject_name="ZŠ Testovací",
+            active_categories=("Z1",),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = AppConfig(
+                database={},
+                report_date=date(2026, 10, 21),
+                categories=("Z1",),
+                language="česky",
+                menu_list_number=1,
+                show_diner_list=False,
+                pdf_output=Path(directory) / "souhrn.pdf",
+            )
+            result = create_pdf(cfg, report)
+            reader = PdfReader(str(result))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            self.assertIn("Souhrn objednané stravy", text)
+            self.assertIn("Jídelníček a počty porcí", text)
+            self.assertIn("Celkem porcí", text)
+            self.assertIn("12", text)
+            self.assertNotIn("Novák Jiří", text)
+            self.assertNotIn("Seznam strávníků", text)
+            self.assertNotIn("Jméno", text)
+            self.assertEqual(len(reader.pages), 1)
+
     def test_pdf_summary_tables_follow_both_visibility_switches(self):
         from pypdf import PdfReader
 
@@ -506,7 +568,7 @@ class OutputTests(unittest.TestCase):
                             show_norms,
                         )
                         self.assertIn("Jídelníček a počty porcí", text)
-                        self.assertIn("Jmenný seznam strávníků", text)
+                        self.assertIn("Seznam strávníků", text)
 
 
 class QueryRegressionTests(unittest.TestCase):
