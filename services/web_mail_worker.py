@@ -1,4 +1,4 @@
-"""Persistent central scheduler for independent MailPilot web tasks.
+"""Persistent central scheduler for independent DataShip web tasks.
 
 Usage: python -m services.web_mail_worker --config C:\\MailPilot\\config.json
 Run only one worker instance per installation (normally via NSSM).
@@ -117,7 +117,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
                     template_path=Path(web_settings["dashboard_path"]),
                 )
                 warning_error = show_jidelnasql_mail_warning(
-                    settings, message=f"MailPilot: neodeslána úloha {task.name}: {exc}"
+                    settings, message=f"DataShip: neodeslána úloha {task.name}: {exc}"
                 )
                 if warning_error:
                     LOG.error("Dashboard warning: %s", warning_error)
@@ -152,14 +152,14 @@ def main() -> int:
     )
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    LOG.info("MailPilot web scheduler started: %s", config_path)
+    LOG.info("DataShip scheduler started: %s", config_path)
     while not STOP:
         try:
             tick(config_path)
         except Exception:
             LOG.exception("Scheduler tick failed")
         time.sleep(args.interval)
-    LOG.info("MailPilot web scheduler stopped")
+    LOG.info("DataShip scheduler stopped")
     return 0
 
 
