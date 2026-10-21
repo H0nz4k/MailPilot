@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build browser-based MailPilot for Windows, using Git Bash (not PowerShell).
-# Produces dist-web/MailPilot-Web/MailPilot-Web.exe and MailPilot-Web-Worker.exe.
+# Build browser-based DataShip for Windows, using Git Bash (not PowerShell).
+# Produces dist-web/DataShip/DataShip.exe and DataShip-Worker.exe.
 set -Eeuo pipefail
 
 case "$(uname -s)" in
@@ -21,20 +21,27 @@ echo "[1/3] Instaluji zavislosti webove verze..."
 
 WIN_ROOT="$(cygpath -w "$ROOT")"
 DIST="$ROOT/dist-web"
-APP="$DIST/MailPilot-Web"
-# PyInstaller replaces the output folder. Preserve local settings first.
-PRESERVED_CONFIG="$ROOT/build/web-preserved-config.json"
-mkdir -p "$DIST" "$ROOT/build"
-if [[ -f "$APP/config.json" ]]; then
-  cp "$APP/config.json" "$PRESERVED_CONFIG"
-fi
+APP="$DIST/DataShip"
+LEGACY_APP="$DIST/MailPilot-Web"
+PRESERVE="$ROOT/build/dataship-preserved"
+mkdir -p "$DIST" "$ROOT/build" "$PRESERVE"
+# Keep config, scheduled tasks and mail preferences across upgrades. On the
+# first DataShip build, import from the former MailPilot-Web install without
+# deleting/moving it. Future builds prefer the existing DataShip files.
+for name in config.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
+  rm -f "$PRESERVE/$name"
+  if [[ -f "$APP/$name" ]]; then
+    cp "$APP/$name" "$PRESERVE/$name"
+  elif [[ -f "$LEGACY_APP/$name" ]]; then
+    cp "$LEGACY_APP/$name" "$PRESERVE/$name"
+  fi
+done
 echo "[2/3] Sestavuji webovou aplikaci pro prohlizec..."
 "$PY" -m PyInstaller --noconfirm --clean --onedir --console --noupx \
-  --name MailPilot-Web \
+  --name DataShip \
   --distpath "$DIST" \
   --workpath "$ROOT/build/web-gui" \
   --specpath "$ROOT/build/web-spec" \
-  --icon "$WIN_ROOT\\assets\\app_icon.ico" \
   --collect-all nicegui \
   --collect-submodules psycopg \
   --hidden-import services.web_mail_gui \
@@ -46,32 +53,37 @@ echo "[2/3] Sestavuji webovou aplikaci pro prohlizec..."
 
 echo "[3/3] Sestavuji bezobsluznou sluzbu pro NSSM..."
 "$PY" -m PyInstaller --noconfirm --clean --onefile --console --noupx \
-  --name MailPilot-Web-Worker \
+  --name DataShip-Worker \
   --distpath "$ROOT/dist-web-worker" \
   --workpath "$ROOT/build/web-worker" \
   --specpath "$ROOT/build/web-spec" \
   --collect-submodules psycopg \
   "$WIN_ROOT\\web_mail_worker_main.py"
 
-cp "$ROOT/dist-web-worker/MailPilot-Web-Worker.exe" "$APP/"
+cp "$ROOT/dist-web-worker/DataShip-Worker.exe" "$APP/"
 cp "$ROOT/config.example.json" "$APP/config.example.json"
-if [[ -f "$PRESERVED_CONFIG" ]]; then
-  cp "$PRESERVED_CONFIG" "$APP/config.json"
+if [[ -f "$PRESERVE/config.json" ]]; then
+  cp "$PRESERVE/config.json" "$APP/config.json"
 else
   cp "$APP/config.example.json" "$APP/config.json"
 fi
+for name in web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
+  if [[ -f "$PRESERVE/$name" ]]; then
+    cp "$PRESERVE/$name" "$APP/$name"
+  fi
+done
 cat > "$APP/START_WEB.cmd" <<'CMD'
 @echo off
 cd /d "%~dp0"
-"%~dp0MailPilot-Web.exe" --browser
+"%~dp0DataShip.exe" --browser
 if errorlevel 1 pause
 CMD
 cat > "$APP/START_WORKER_MANUAL.cmd" <<'CMD'
 @echo off
 cd /d "%~dp0"
-"%~dp0MailPilot-Web-Worker.exe" --config "%~dp0config.json"
+"%~dp0DataShip-Worker.exe" --config "%~dp0config.json"
 if errorlevel 1 pause
 CMD
-echo "HOTOVO: $APP/MailPilot-Web.exe"
-echo "OTEVRENI: v Git Bash spust ./dist-web/MailPilot-Web/MailPilot-Web.exe --browser"
-echo "NSSM instaluje sluzbu z MailPilot-Web-Worker.exe az po tvem kliknuti v nastaveni."
+echo "HOTOVO: $APP/DataShip.exe"
+echo "OTEVRENI: v Git Bash spust ./dist-web/DataShip/DataShip.exe --browser"
+echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."
