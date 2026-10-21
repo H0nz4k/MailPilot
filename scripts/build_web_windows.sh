@@ -21,7 +21,13 @@ echo "[1/3] Instaluji zavislosti webove verze..."
 
 WIN_ROOT="$(cygpath -w "$ROOT")"
 DIST="$ROOT/dist-web"
-mkdir -p "$DIST"
+APP="$DIST/MailPilot-Web"
+# PyInstaller replaces the output folder. Preserve local settings first.
+PRESERVED_CONFIG="$ROOT/build/web-preserved-config.json"
+mkdir -p "$DIST" "$ROOT/build"
+if [[ -f "$APP/config.json" ]]; then
+  cp "$APP/config.json" "$PRESERVED_CONFIG"
+fi
 echo "[2/3] Sestavuji webovou aplikaci pro prohlizec..."
 "$PY" -m PyInstaller --noconfirm --clean --onedir --console --noupx \
   --name MailPilot-Web \
@@ -47,10 +53,11 @@ echo "[3/3] Sestavuji bezobsluznou sluzbu pro NSSM..."
   --collect-submodules psycopg \
   "$WIN_ROOT\\web_mail_worker_main.py"
 
-APP="$DIST/MailPilot-Web"
 cp "$ROOT/dist-web-worker/MailPilot-Web-Worker.exe" "$APP/"
 cp "$ROOT/config.example.json" "$APP/config.example.json"
-if [[ ! -f "$APP/config.json" ]]; then
+if [[ -f "$PRESERVED_CONFIG" ]]; then
+  cp "$PRESERVED_CONFIG" "$APP/config.json"
+else
   cp "$APP/config.example.json" "$APP/config.json"
 fi
 cat > "$APP/START_WEB.cmd" <<'CMD'
