@@ -16,6 +16,11 @@ jobs:
       - name: Build Windows EXEs
         shell: bash
         run: bash scripts/build_web_windows.sh
+      - name: Check Python syntax and report regressions
+        shell: bash
+        run: |
+          .venv-web/Scripts/python.exe -m compileall -q stravovaci_nicegui.py stravovaci_sestava.py mail_service.py pocty_nastaveni.py
+          .venv-web/Scripts/python.exe -m unittest -q test_pocty_nastaveni test_stravovaci_sestava test_mail_service
       - name: Upload Windows distribution
         uses: actions/upload-artifact@v4
         with:
