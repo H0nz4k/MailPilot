@@ -7,6 +7,7 @@ from pathlib import Path
 DEFAULTS = {
     "nssm_path": "",
     "service_name": "MailPilotWebScheduler",
+    "cooking_meal_type": "Oběd",
     "dashboard_enabled": True,
     "dashboard_path": r"C:\Gastro\Programy\Templates\dashboard.template.html",
     "transport": "resend",
@@ -33,6 +34,10 @@ def load_settings(path: Path) -> dict:
 
 def save_settings(path: Path, data: dict) -> None:
     values = {key: data[key] for key in DEFAULTS if key in data}
+    cooking_meal_type = values.get("cooking_meal_type", "")
+    if not isinstance(cooking_meal_type, str) or not cooking_meal_type.strip():
+        raise ValueError("Typ služby pro varné dny musí být vyplněn.")
+    values["cooking_meal_type"] = cooking_meal_type.strip()
     if values.get("transport") not in ("resend", "smtp"):
         raise ValueError("Neznámý typ odesílání.")
     if values.get("smtp_security") not in ("starttls", "ssl", "none"):
