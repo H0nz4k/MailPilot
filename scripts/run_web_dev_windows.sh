@@ -19,7 +19,12 @@ fi
 
 # Run the current source files but use the existing bundled deployment's
 # configuration, so testing shows the same DB and mail-task settings.
-CONFIG="$ROOT/dist-web/MailPilot-Web/config.json"
+# Prefer DataShip config, but keep the old MailPilot-Web data usable while
+# the user tests source changes without creating a new standalone EXE.
+CONFIG="$ROOT/dist-web/DataShip/config.json"
+if [[ ! -f "$CONFIG" ]]; then
+  CONFIG="$ROOT/dist-web/MailPilot-Web/config.json"
+fi
 if [[ ! -f "$CONFIG" ]]; then
   CONFIG="$ROOT/config.json"
 fi
