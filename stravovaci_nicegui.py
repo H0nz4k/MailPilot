@@ -598,7 +598,7 @@ class NiceGuiApp:
                 self._build_bulk_panel()
             with ui.tab_panel("mail_tasks"):
                 from services.web_mail_gui import build_mail_tasks_panel
-                build_mail_tasks_panel(self.config_path.parent)
+                build_mail_tasks_panel(self.config_path.parent, config_path=self.config_path)
             with ui.tab_panel("mail_settings"):
                 from services.web_mail_settings_gui import build_web_settings_panel
                 build_web_settings_panel(self.config_path.parent)
