@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -872,6 +873,11 @@ class NiceGuiApp:
             ui.notify("Nejprve odemkněte Administraci.", type="warning")
             return
         all_categories = str(self.category_mode.value) == "all"
+        if not all_categories and not self.categories:
+            self.category_settings_status.set_text(
+                "Nejprve proveďte TEST připojení k databázi."
+            )
+            return
         chosen = self._selected_category_order()
         if not all_categories and not chosen:
             self.category_settings_status.set_text(
@@ -910,6 +916,12 @@ class NiceGuiApp:
                 with w.toolbar():
                     self._build_date_field()
                     self._build_category_panel()
+                    self.meal_type_select = ui.select(
+                        {"__all__": "Všechny typy stravy"},
+                        value="__all__",
+                        label="Typ stravy",
+                    ).props("dense options-dense").classes("w-48")
+                    self.meal_type_select.set_visibility(False)
                 with ui.expansion(
                     "Pokročilé nastavení PDF", icon="tune"
                 ).props("dense dense-toggle").classes("w-full app-note"):
@@ -966,7 +978,40 @@ class NiceGuiApp:
                 ui.icon("event").classes("cursor-pointer").on(
                     "click", self.date_menu.open
                 )
-        self.date_input.on("change", self.update_mail_subject)
+        self.date_input.on("change", self._on_date_changed)
+
+    async def _on_date_changed(self) -> None:
+        self.update_mail_subject()
+        await self._reload_meal_types()
+
+    async def _reload_meal_types(self) -> None:
+        """Po TESTu nabídne typy stravy objednané na zvolený den."""
+        if not self.connection_ok or not self._connection_password:
+            return
+        try:
+            day = self._selected_date()
+            database = self._collect_database()
+            meal_types = await run.io_bound(
+                available_meal_types,
+                dict(database, password=self._connection_password),
+                day,
+            )
+        except Exception as exc:
+            ui.notify(f"Typy stravy nebylo možné načíst: {exc}", type="warning")
+            return
+        normalized: dict[str, str] = {}
+        for name in meal_types:
+            label = str(name).strip()
+            if label:
+                normalized.setdefault(label.casefold(), label)
+        options = {"__all__": "Všechny typy stravy", **normalized}
+        selected = str(self.meal_type_select.value or "__all__")
+        self.meal_type_select.options = options
+        self.meal_type_select.value = (
+            selected if selected in normalized else "__all__"
+        )
+        self.meal_type_select.set_visibility(len(normalized) > 1)
+        self.meal_type_select.update()
 
     def _build_closing_panel(self) -> None:
         closing = peek_closing_ui(self.raw)
@@ -1322,13 +1367,19 @@ class NiceGuiApp:
     def _daily_category_caption(self) -> str:
         total = len(self.categories)
         selected = len(self.selected_categories)
+        if self.all_categories:
+            return f"všechny · {total}" if total else "všechny · po TESTu"
         if total:
-            return f"{selected} / {total}"
-        return f"{selected} · po TESTu"
+            return f"vybrané · {selected} / {total}"
+        return f"vybrané · {selected} · po TESTu"
 
     def _render_daily_selection(self) -> None:
         if hasattr(self, "daily_expansion_label"):
             self.daily_expansion_label.set_text(self._daily_category_caption())
+        if hasattr(self, "admin_category_count"):
+            self.admin_category_count.set_text(
+                f"{len(self.selected_categories)} / {len(self.categories)}"
+            )
         ordered = [
             code for code, _name in self.categories if code in self.selected_categories
         ]
@@ -1370,6 +1421,9 @@ class NiceGuiApp:
         )
 
     def open_daily_category_dialog(self) -> None:
+        if not self.admin_unlocked:
+            ui.notify("Výběr kategorií je pouze v Administraci.", type="warning")
+            return
         if not self.categories:
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
             return
@@ -1575,6 +1629,11 @@ class NiceGuiApp:
                 "Souhrn dle norem",
                 bool(self.raw.get("dle_norem", True)),
                 "Zobrazí rozpad Menu 1–9 podle norem A–D.",
+            )
+            self.show_diner_list = w.setting_switch(
+                "Seznam strávníků",
+                bool(self.raw.get("seznam_stravniku", True)),
+                "Zapnuto: PDF obsahuje seznam jmen. Vypnuto: pouze souhrny a počty.",
             )
             self.pdf_bold = w.setting_switch(
                 "Tučná data",
@@ -2380,6 +2439,10 @@ class NiceGuiApp:
             details="Údaje se změnily – spojení je potřeba ověřit znovu.",
         )
         self.send_button.disable()
+        self._connection_password = None
+        if hasattr(self, "meal_type_select"):
+            self.meal_type_select.value = "__all__"
+            self.meal_type_select.set_visibility(False)
         if hasattr(self, "z17_generate_button"):
             self.z17_generate_button.disable()
         if hasattr(self, "bulk_send_button"):
@@ -2434,11 +2497,14 @@ class NiceGuiApp:
         self.date_input.value = selected.strftime(CZECH_DATE_FORMAT)
         self.date_menu.close()
         self.update_mail_subject()
+        asyncio.create_task(self._reload_meal_types())
 
     def _collect_config(self) -> dict[str, Any]:
         categories = self._selected_category_order()
-        if not categories:
-            raise ConfigError("Vyberte alespoň jednu kategorii pro export.")
+        if not self.all_categories and not categories:
+            raise ConfigError(
+                "V Administraci vyberte kategorie nebo zapněte režim Všechny."
+            )
         selected_date = self._selected_date()
         language = str(self.language_input.value or "").strip()
         output = str(self.pdf_output.value or "").strip()
@@ -2460,6 +2526,7 @@ class NiceGuiApp:
         if not isinstance(pocty_block, dict):
             pocty_block = {}
         pocty_block = dict(pocty_block)
+        pocty_block["vsechny_kategorie"] = self.all_categories
         pocty_block["povolene_kategorie"] = categories
         try:
             closing_block = self._collect_closing_block()
@@ -2496,6 +2563,11 @@ class NiceGuiApp:
                 "pdf_velikost_dat": data_size,
                 "pdf_velikost_popisku": label_size,
                 "pdf_tucne": bool(self.pdf_bold.value),
+                "seznam_stravniku": bool(self.show_diner_list.value),
+                "typ_stravy_denne": (
+                    None if str(self.meal_type_select.value or "") in ("", "__all__")
+                    else str(self.meal_type_select.value)
+                ),
             }
         )
         return raw
@@ -2544,6 +2616,7 @@ class NiceGuiApp:
         else:
             self.raw["databaze"] = database
             write_config(self.config_path, self.raw)
+            self._connection_password = password
             self.populate_categories(categories)
             try:
                 classes, _unused, diners = await run.io_bound(
@@ -2565,6 +2638,7 @@ class NiceGuiApp:
                 name=connection_name,
                 details=connection_details,
             )
+            await self._reload_meal_types()
             # Až po nastavení stavu, jinak by hlášky v Hromadné zprávě zůstaly
             # ve variantě „bez připojení“.
             self._sync_bulk_filter_options()
