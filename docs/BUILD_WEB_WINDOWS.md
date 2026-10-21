@@ -49,6 +49,25 @@ Alternativa: dvojklik na `dist-web\\MailPilot-Web\\START_WEB.cmd`. Otevře se lo
 
 Po otevření zkontroluj databázové připojení přes TEST a záložky **E-mailové úlohy** a **Nastavení odesílání**. Typ služby pro tabulku `public.varnedny` je standardně **Oběd**.
 
+## Rychlé vyzkoušení změn GUI BEZ buildu
+
+Zavři předchozí okno programu. V Git Bash v kořeni repozitáře:
+
+```bash
+git pull --ff-only
+bash scripts/run_web_dev_windows.sh
+```
+
+Spustí se aktuální `stravovaci_nicegui.py` z GitHubem aktualizovaných zdrojů, s Pythonem z `.venv-web` a se stejným `dist-web/MailPilot-Web/config.json` jako ve vytvořeném EXE. Skript neinstaluje ani nespouští NSSM službu. Okno Git Bash ponech otevřené, dokud testuješ; ukončíš jej klávesami Ctrl+C. Po změně Python kódu postup zopakuj. Při změně samotných závislostí může být potřeba znovu spustit build.
+
+Až chceš znovu vyrobit samostatné EXE pro zákazníka, spusť:
+
+```bash
+bash scripts/build_web_windows.sh
+```
+
+Po buildu otevři `dist-web/MailPilot-Web/START_WEB.cmd`. Současné sestavené EXE **se aktualizací Gitu samo nezmění**.
+
 ## Aktualizace GUI po změnách (21. 10. 2026)
 
 Nové vývojové verze:
