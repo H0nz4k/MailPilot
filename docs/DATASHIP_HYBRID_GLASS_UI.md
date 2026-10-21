@@ -1,8 +1,8 @@
-# DataShip — Hybrid Glass compact UI (návrh v0.1)
+# DataShip — Hybrid Glass compact UI (návrh v0.2)
 
 **Stav:** čeká na schválení interaktivního náhledu, zatím **bez zásahu do běžící aplikace**.
 
-**Náhled (Grafika):** [DataShip_Hybrid_Glass_v0.1_Preview.html](https://github.com/H0nz4k/Grafika/blob/main/demos/DataShip_Hybrid_Glass_v0.1_Preview.html)
+**Náhled (Grafika):** [DataShip_Hybrid_Glass_v0.2_Preview.html](https://github.com/H0nz4k/Grafika/blob/main/demos/DataShip_Hybrid_Glass_v0.2_Preview.html)
 
 ## Cíl
 
