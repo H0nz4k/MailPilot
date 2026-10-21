@@ -1,4 +1,4 @@
-"""Settings for MailPilot web scheduler and optional SMTP delivery."""
+"""Settings for DataShip web scheduler and optional SMTP delivery."""
 from __future__ import annotations
 import json
 import os
@@ -6,7 +6,7 @@ from pathlib import Path
 
 DEFAULTS = {
     "nssm_path": "",
-    "service_name": "MailPilotWebScheduler",
+    "service_name": "DataShipScheduler",
     "cooking_meal_type": "Oběd",
     "dashboard_enabled": True,
     "dashboard_path": r"C:\Gastro\Programy\Templates\dashboard.template.html",
