@@ -49,6 +49,26 @@ Alternativa: dvojklik na `dist-web\\MailPilot-Web\\START_WEB.cmd`. Otevře se lo
 
 Po otevření zkontroluj databázové připojení přes TEST a záložky **E-mailové úlohy** a **Nastavení odesílání**. Typ služby pro tabulku `public.varnedny` je standardně **Oběd**.
 
+## Aktualizace GUI po změnách (21. 10. 2026)
+
+Nové vývojové verze:
+- **Denní stav**: pole **Datum exportu** se při každém otevření GUI předvyplní dnešním datem z počítače (nikoli zastaralým datem z `config.json`).
+- **Český kalendář**: názvy dnů a měsíců jsou česky, týden začíná pondělím.
+- **Horní nabídka**: výchozí položky Denní stav, Uzávěrka, E-mailové úlohy a Administrace; Speciál a Hromadná zpráva jsou skryté.
+- **Administrace → Hlavní nabídka**: správce může zaškrtávat Uzávěrku, Speciál, Hromadnou zprávu a E-mailové úlohy, změny se uloží do `config.json`.
+- **Administrace → Nastavení odesílání**: původně samostatná záložka je přesunutá do administrace.
+
+Pro získání těchto změn v již sestavené instalaci spusť v Git Bash v kořeni zdrojového repozitáře:
+
+```bash
+git fetch origin
+git switch feat/web-mail-scheduler
+git pull --ff-only
+bash scripts/build_web_windows.sh
+```
+
+Poté spusť nové `dist-web/MailPilot-Web/START_WEB.cmd`. Build zachovává `config.json` z tohoto výstupního adresáře, ale při kopírování na jiný počítač přenes také jeho provozní nastavení a znovu zkontroluj přístupové údaje. Worker a NSSM neměň během kontroly vzhledu.
+
 ## 4. Windows služba NSSM (až po otestování GUI)
 V Nastavení odesílání vyplň cestu k `nssm.exe`. Po kliknutí na **Instalovat** se služba nastaví na samostatný `MailPilot-Web-Worker.exe`, nikoliv na webové GUI. Instalace a spuštění vyžaduje administrátorská práva. Nezapínej službu dřív, než ověříš cílové e-mailové adresy a nastavení odesílání; může odeslat skutečné zprávy.
 
