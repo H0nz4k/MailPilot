@@ -3,20 +3,14 @@
 ## Stav
 Vývojová větev `feat/web-mail-scheduler` obsahuje NiceGUI správu nezávislých e-mailových úloh, plánovač, SMTP/Resend, nastavení NSSM a upozornění do HTML dashboardu Jídelny. Původní Qt verzi neměnit.
 
-## Priorita 1: následující varný den – NEDOKONČENO
-- Zdroj pravdy je **PostgreSQL `public.varnedny`**, označení varného dne **`A`**.
-- **Nefiltrovat automaticky soboty, neděle ani svátky**. Varný den může být kterýkoliv kalendářní den; pracovní den naopak nemusí být varný.
-- Ověřit skutečné názvy a typy sloupců tabulky (v dostupném kódu nebyly doloženy), např.:
-  ```sql
-  SELECT column_name, data_type
-  FROM information_schema.columns
-  WHERE table_schema = 'public' AND table_name = 'varnedny'
-  ORDER BY ordinal_position;
-  ```
-- V `services/web_mail_worker.py` nyní `dispatch()` pro `next_cooking_day` vyhazuje chybu „Čeká na propojení kalendáře varnedny z JídelnaSQL.“; propojit s existujícím DB připojením MailPilotu (konfigurace přes `stravovaci_sestava.load_config`, heslo ze systémového úložiště).
-- `services/web_mail_tasks.py` už má `target_date(..., is_cooking_day=...)`; lze předat DB callback nebo bezpečnou funkci vracející nejbližší datum. Úpravu promítnout také do náhledu data v `services/web_mail_gui.py`.
-- Při nedostupné DB/neznámém schématu **neodeslat sestavu pro nesprávné datum**; bezpečně zahlásit chybu.
-- Otestovat případ: sobota = A; neděle = A; svátek = A; všední den bez A; žádný další dostupný den.
+## Priorita 1: následující varný den – IMPLEMENTOVÁNO (čeká integrační ověření na Windows)
+- Potvrzené schema: `public.varnedny` má `rok` (smallint), `mesic` (smallint), `typsluzby` (varchar), `d01` až `d31` (varchar), `updated_dt` (timestamptz).
+- `A` znamená vaří, `N` nevaří; soboty, neděle ani svátky se nijak automaticky nevyřazují.
+- `services/web_mail_cooking_days.py` čte výhradně DB a používá existující připojení `stravovaci_sestava.load_config` (heslo ze systémového úložiště). Výběr podle roku, měsíce a typu služby; měsíční cache.
+- Nastavení typu služby v `web_mail_settings.json` přes WebGUI (výchozí `Oběd`). Worker i náhled termínu ve WebGUI používají společné `resolve_task_date`.
+- Pokud chybí měsíc/typ, existuje duplicitní záznam nebo stav není `A/N`, výpočet končí chybou; datum se neodhaduje a PDF se neodešle.
+- `test_web_mail_cooking_days.py`: 14 scénářů včetně soboty, neděle, svátku 28. 10. 2026, všedního dne `N`, přechodu mezi měsíci, chybějící/duplicitní řádky, neplatných hodnot a typu služby.
+- **Lokální izolovaný běh: 14/14 úspěšných** s mockovaným PostgreSQL; nutno ještě otestovat proti skutečné DB, celou aplikaci a službu NSSM na Windows. Žádné skutečné e-maily nebyly odeslány.
 
 ## Následující práce
 - Dokončit sestavu „souhrn počtu jídel“ (`meal_summary`).
