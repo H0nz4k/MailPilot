@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from datetime import date, datetime
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -2570,10 +2571,8 @@ class NiceGuiApp:
                 "pdf_velikost_popisku": label_size,
                 "pdf_tucne": bool(self.pdf_bold.value),
                 "seznam_stravniku": bool(self.show_diner_list.value),
-                "typ_stravy_denne": (
-                    None if str(self.meal_type_select.value or "") in ("", "__all__")
-                    else str(self.meal_type_select.value)
-                ),
+                # Typ stravy je volba pro jeden ruční export, ne pro worker.
+                "typ_stravy_denne": None,
             }
         )
         return raw
@@ -2775,6 +2774,10 @@ class NiceGuiApp:
         self.raw = raw
         return api_key
 
+    def _selected_daily_meal_type(self) -> str | None:
+        value = str(self.meal_type_select.value or "__all__")
+        return None if value == "__all__" else value
+
     async def generate_pdf(self) -> None:
         if not self.connection_ok:
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
@@ -2789,7 +2792,9 @@ class NiceGuiApp:
         self.pdf_status.set_text("Načítám data a vytvářím PDF…")
         self.set_status("Probíhá tvorba PDF.")
         try:
-            path = await run.io_bound(self._create_pdf)
+            path = await run.io_bound(
+                self._create_pdf, self._selected_daily_meal_type()
+            )
         except Exception as exc:
             self.pdf_status.set_text(f"Vytvoření PDF selhalo: {exc}")
             self.set_status("PDF se nepodařilo vytvořit.")
@@ -2811,8 +2816,8 @@ class NiceGuiApp:
         finally:
             self.generate_button.enable()
 
-    def _create_pdf(self) -> Path:
-        config = load_config(self.config_path)
+    def _create_pdf(self, meal_type: str | None = None) -> Path:
+        config = replace(load_config(self.config_path), meal_type=meal_type)
         report = fetch_report(config)
         return create_pdf(config, report)
 
@@ -2919,6 +2924,7 @@ class NiceGuiApp:
                 sender,
                 str(daily["text"] or ""),
                 bool(daily["jen_varne_dny"]),
+                self._selected_daily_meal_type(),
             )
         except Exception as exc:
             self.mail_status.set_text(f"Odeslání selhalo: {exc}")
@@ -2957,8 +2963,9 @@ class NiceGuiApp:
         sender: str,
         body: str,
         only_cooking_days: bool,
+        meal_type: str | None = None,
     ) -> dict[str, Any]:
-        config = load_config(self.config_path)
+        config = replace(load_config(self.config_path), meal_type=meal_type)
         statuses = fetch_cooking_status(config) if only_cooking_days else ()
         if only_cooking_days and not should_send_on_cooking_day(statuses):
             return {"skipped": True, "message": cooking_status_message(statuses)}
