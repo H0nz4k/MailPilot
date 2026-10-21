@@ -39,7 +39,47 @@ SUMMARY_QUERY = """
               AND p.mesic = %s
               AND BTRIM(s.kategorie) = ANY(%s::varchar[])
               AND COALESCE(s.deleted, false) = false
-              AND p.{day_column} ~ '^[1-9]$'
+              AND p.{day_column} ~ '^[1-9]
+            GROUP BY p.typsluzby, p.{day_column}
+        ),
+        jidla AS (
+            SELECT
+                j.typstravy,
+                t.oznaceni::integer AS menu,
+                string_agg(
+                    NULLIF(BTRIM(j.nazev), ''),
+                    ', ' ORDER BY m.caststravy, m.id
+                ) AS nazev
+            FROM public.jidelnicek AS j
+            JOIN public.menustravy AS m
+              ON m.id = j.idmenustravy
+            JOIN public.typstrj AS t
+              ON t.id = m.idtypstrj
+            WHERE j.datum = %s
+              -- V DB se vyskytuje např. "česky", zatímco starší configy
+              -- používaly "Česky". Velikost písmen nesmí zrušit celý jídelníček.
+              AND LOWER(BTRIM(j.jazyk)) = LOWER(BTRIM(%s))
+              AND j.cislojidelnicku = %s
+              -- Přihláška obsahuje označení menu 1–9. idtypstrj je interní
+              -- ID skupiny (např. 1 = Polévka, 2 = Menu 1), nikoli číslo menu.
+              AND BTRIM(t.oznaceni) ~ '^[1-9]$'
+            GROUP BY j.typstravy, t.oznaceni
+        )
+        SELECT
+            o.typsluzby AS typ_stravy,
+            o.menu,
+            o.pocet,
+            NULLIF(j.nazev, '') AS nazev
+        FROM objednavky AS o
+        LEFT JOIN jidla AS j
+          ON LOWER(BTRIM(o.typsluzby)) = LOWER(BTRIM(j.typstravy))
+         AND o.menu = j.menu
+        ORDER BY typ_stravy, menu
+"""
+
+
+
+              AND (%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text)
             GROUP BY p.typsluzby, p.{day_column}
         ),
         jidla AS (
@@ -99,7 +139,14 @@ CATEGORY_SUMMARY_QUERY = """
           ON p.stravnik = s.evidcislo
          AND p.rok = %s
          AND p.mesic = %s
-         AND p.{day_column} ~ '^[1-9]$'
+         AND p.{day_column} ~ '^[1-9]
+        GROUP BY v.poradi, k.oznaceni, k.nazev, k.norma
+        ORDER BY v.poradi
+"""
+
+
+
+         AND (%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text)
         GROUP BY v.poradi, k.oznaceni, k.nazev, k.norma
         ORDER BY v.poradi
 """
@@ -120,7 +167,14 @@ NORM_MENU_QUERY = """
           AND p.mesic = %s
           AND BTRIM(s.kategorie) = ANY(%s::varchar[])
           AND COALESCE(s.deleted, false) = false
-          AND p.{day_column} ~ '^[1-9]$'
+          AND p.{day_column} ~ '^[1-9]
+        GROUP BY p.typsluzby, k.norma, p.{day_column}
+        ORDER BY typ_stravy, norma NULLS LAST, menu
+"""
+
+
+
+          AND (%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text)
         GROUP BY p.typsluzby, k.norma, p.{day_column}
         ORDER BY typ_stravy, norma NULLS LAST, menu
 """
@@ -183,7 +237,18 @@ DINER_LIST_QUERY = """
           AND p.mesic = %s
           AND BTRIM(s.kategorie) = ANY(%s::varchar[])
           AND COALESCE(s.deleted, false) = false
-          AND p.{day_column} ~ '^[1-9]$'
+          AND p.{day_column} ~ '^[1-9]
+        ORDER BY
+            LOWER(BTRIM(s.jmeno)) NULLS LAST,
+            BTRIM(s.jmeno) NULLS LAST,
+            LOWER(BTRIM(p.typsluzby)),
+            p.{day_column}::integer,
+            p.id
+"""
+
+
+
+          AND (%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text)
         ORDER BY
             LOWER(BTRIM(s.jmeno)) NULLS LAST,
             BTRIM(s.jmeno) NULLS LAST,
@@ -212,6 +277,7 @@ class AppConfig:
     pdf_data_font_size: float = 7.4
     pdf_label_font_size: float = 7.4
     pdf_bold: bool = False
+    meal_type: str | None = None  # None = všechny typy stravy
 
 
 @dataclass(frozen=True)
@@ -424,6 +490,13 @@ def load_config(
     from pocty_nastaveni import parse_client_categories
 
     normalized_categories = parse_client_categories(raw)
+    meal_type = raw.get("typ_stravy_denne")
+    if meal_type in (None, ""):
+        meal_type = None
+    elif not isinstance(meal_type, str):
+        raise ConfigError("'typ_stravy_denne' musí být text nebo null.")
+    else:
+        meal_type = meal_type.strip().lower() or None
 
     language = raw.get("jazyk_jidelnicku", "česky")
     if not isinstance(language, str) or not language.strip():
@@ -535,6 +608,7 @@ def load_config(
         pdf_data_font_size=pdf_data_font_size,
         pdf_label_font_size=pdf_label_font_size,
         pdf_bold=pdf_bold,
+        meal_type=meal_type,
     )
 
 
@@ -556,21 +630,31 @@ def fetch_report(config: AppConfig) -> ReportData:
 
     with psycopg.connect(**config.database) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT BTRIM(oznaceni)
-                FROM public.kategor
-                WHERE BTRIM(oznaceni) = ANY(%s::varchar[])
-                """,
-                (list(config.categories),),
-            )
-            active_categories = existing_categories(
-                config.categories, [row[0] for row in cursor.fetchall()]
-            )
+            if config.categories:
+                cursor.execute(
+                    """
+                    SELECT BTRIM(oznaceni)
+                    FROM public.kategor
+                    WHERE BTRIM(oznaceni) = ANY(%s::varchar[])
+                    """,
+                    (list(config.categories),),
+                )
+                active_categories = existing_categories(
+                    config.categories, [row[0] for row in cursor.fetchall()]
+                )
+            else:
+                # ALL mode: use current categories from DB, not the old config list.
+                cursor.execute(
+                    "SELECT BTRIM(oznaceni) FROM public.kategor ORDER BY BTRIM(oznaceni)"
+                )
+                active_categories = tuple(
+                    str(row[0]).strip() for row in cursor.fetchall()
+                    if row[0] is not None and str(row[0]).strip()
+                )
             if not active_categories:
                 raise ConfigError(
-                    "Žádná z vybraných kategorií už v public.kategor neexistuje. "
-                    "Proveďte znovu TEST připojení a vyberte kategorii."
+                    "V public.kategor nebyly nalezeny žádné použitelné kategorie. "
+                    "Ověřte připojení a nastavení kategorií v Administraci."
                 )
 
             cursor.execute(SUBJECT_NAME_QUERY)
@@ -583,6 +667,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     config.report_date.year,
                     config.report_date.month,
                     list(active_categories),
+                    config.meal_type,
+                    config.meal_type,
                     config.report_date,
                     config.language,
                     config.menu_list_number,
@@ -604,6 +690,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     list(active_categories),
                     config.report_date.year,
                     config.report_date.month,
+                    config.meal_type,
+                    config.meal_type,
                 ),
             )
             categories = tuple(
@@ -622,6 +710,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     config.report_date.year,
                     config.report_date.month,
                     list(active_categories),
+                    config.meal_type,
+                    config.meal_type,
                 ),
             )
             norms = tuple(
@@ -643,6 +733,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     config.report_date.year,
                     config.report_date.month,
                     list(active_categories),
+                    config.meal_type,
+                    config.meal_type,
                 ),
             )
             diners = tuple(
@@ -666,6 +758,784 @@ def fetch_report(config: AppConfig) -> ReportData:
                 subject_name=subject_name,
                 active_categories=active_categories,
             )
+
+
+
+def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[str, ...]:
+    """Typy stravy s objednávkami pro vybrané datum; čtení pouze z DB."""
+    try:
+        import psycopg
+        from psycopg import sql
+    except ImportError as exc:
+        raise RuntimeError("Chybí balíček psycopg.") from exc
+    day_column = sql.Identifier(f"d{report_date.day:02d}")
+    query = sql.SQL("""
+        SELECT DISTINCT BTRIM(p.typsluzby) AS typ
+        FROM public.prihlas AS p
+        JOIN public.stravnik AS s ON s.evidcislo = p.stravnik
+        JOIN public.kategor AS k ON BTRIM(k.oznaceni) = BTRIM(s.kategorie)
+        WHERE p.rok = %s
+          AND p.mesic = %s
+          AND p.{day_column} ~ '^[1-9]
+    """Zpětně kompatibilní pomocná funkce vracející původní souhrn menu."""
+    return list(fetch_report(config).menus)
+
+
+def format_table(headers: Sequence[str], values: Sequence[Sequence[str]]) -> str:
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in values))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return " | ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    separator = "-+-".join("-" * width for width in widths)
+    return "\n".join(
+        [format_row(headers), separator, *(format_row(row) for row in values)]
+    )
+
+
+def render_norm_tables(rows: Sequence[NormMenuSummary]) -> list[str]:
+    sections: list[str] = []
+    meal_types = sorted({row.meal_type for row in rows}, key=str.casefold)
+
+    for meal_type in meal_types:
+        meal_rows = [row for row in rows if row.meal_type == meal_type]
+        menus = sorted({row.menu for row in meal_rows})
+        extra_norms = sorted(
+            {
+                row.norm or "[bez normy]"
+                for row in meal_rows
+                if (row.norm or "[bez normy]") not in DEFAULT_NORMS
+            },
+            key=str.casefold,
+        )
+        norms = [*DEFAULT_NORMS, *extra_norms]
+        counts = {
+            (row.norm or "[bez normy]", row.menu): row.portions
+            for row in meal_rows
+        }
+        values: list[tuple[str, ...]] = []
+        for norm in norms:
+            menu_counts = [counts.get((norm, menu), 0) for menu in menus]
+            values.append(
+                (
+                    norm,
+                    *(str(count) for count in menu_counts),
+                    str(sum(menu_counts)),
+                )
+            )
+
+        headers = ("Norma", *(f"Menu {menu}" for menu in menus), "Celkem")
+        sections.append(
+            f"Typ stravy: {meal_type}\n" + format_table(headers, values)
+        )
+
+    return sections
+
+
+def render_table(
+    config: AppConfig,
+    rows: Sequence[MenuSummary],
+    category_rows: Sequence[CategorySummary] = (),
+    norm_rows: Sequence[NormMenuSummary] = (),
+    diner_rows: Sequence[DinerOrder] = (),
+    subject_name: str | None = None,
+    active_categories: Sequence[str] = (),
+) -> str:
+    category_codes = tuple(active_categories) or config.categories
+    title = f"Objednaná strava pro {config.report_date.strftime(DATE_FORMAT)}"
+    categories = "Kategorie: " + ", ".join(category_codes)
+    heading = f"{title}\n{categories}"
+    if subject_name:
+        heading = f"{subject_name}\n{heading}"
+    sections = [heading]
+
+    if config.show_by_categories and category_rows:
+        category_values = [
+            (
+                row.code,
+                row.name or "[bez názvu]",
+                row.norm or "[bez normy]",
+                str(row.applications),
+            )
+            for row in category_rows
+        ]
+        sections.append(
+            "Přihlášky podle kategorií\n"
+            + format_table(
+                ("Označení", "Název kategorie", "Norma", "Přihlášek"),
+                category_values,
+            )
+            + f"\nCelkem přihlášek: "
+            + str(sum(row.applications for row in category_rows))
+        )
+
+    if rows:
+        menu_values = [
+            (
+                row.meal_type,
+                str(row.menu),
+                str(row.portions),
+                row.meal_name or "[název v jídelníčku nenalezen]",
+            )
+            for row in rows
+        ]
+        sections.append(
+            "Objednaná menu\n"
+            + format_table(
+                ("Typ stravy", "Menu", "Počet", "Název jídla"),
+                menu_values,
+            )
+            + f"\nCelkem porcí: {sum(row.portions for row in rows)}"
+        )
+    else:
+        sections.append("Objednaná menu\nNenalezeny žádné objednávky.")
+
+    if config.show_by_norms and norm_rows:
+        sections.append(
+            "Objednaná menu podle norem\n"
+            + "\n\n".join(render_norm_tables(norm_rows))
+        )
+
+    if diner_rows:
+        def diner_sort_key(row: DinerOrder) -> tuple[str, str, int]:
+            return (
+                (row.name or "").casefold(),
+                row.meal_type.casefold(),
+                row.menu,
+            )
+
+        def diner_values(rows: Sequence[DinerOrder]) -> list[tuple[str, ...]]:
+            return [
+                (
+                    row.name or "[bez jména]",
+                    row.category_name or row.category_code,
+                    f"Menu {row.menu}",
+                    row.norm or "[bez normy]",
+                    row.meal_name or "[název v jídelníčku nenalezen]",
+                )
+                for row in rows
+            ]
+
+        diner_headers = (
+            "Jméno",
+            "Kategorie",
+            "Přihláška",
+            "Norma",
+            "Objednané jídlo",
+        )
+
+        if config.category_separation:
+            category_sections: list[str] = []
+            for category_code in category_codes:
+                category_diners = sorted(
+                    (
+                        row
+                        for row in diner_rows
+                        if row.category_code == category_code
+                    ),
+                    key=diner_sort_key,
+                )
+                if not category_diners:
+                    continue
+
+                category_name = next(
+                    (
+                        row.category_name
+                        for row in category_diners
+                        if row.category_name
+                    ),
+                    None,
+                )
+                heading = category_name or category_code
+                category_sections.append(
+                    f"{heading}\n{'-' * len(heading)}\n"
+                    + format_table(diner_headers, diner_values(category_diners))
+                )
+
+            sections.append(
+                "Jmenný seznam strávníků podle kategorií\n\n"
+                + "\n\n".join(category_sections)
+                + f"\nCelkem strávníků / objednávek: {len(diner_rows)}"
+            )
+        else:
+            sorted_diners = sorted(diner_rows, key=diner_sort_key)
+            sections.append(
+                "Jmenný seznam strávníků\n"
+                + format_table(diner_headers, diner_values(sorted_diners))
+                + f"\nCelkem strávníků / objednávek: {len(sorted_diners)}"
+            )
+
+    return "\n\n".join(sections)
+
+
+def create_pdf(
+    config: AppConfig,
+    report: ReportData,
+    output_path: Path | None = None,
+) -> Path:
+    """Vytvoří tiskovou PDF sestavu a vrátí její absolutní cestu."""
+    try:
+        from pypdf import PdfReader
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.pagesizes import A4, landscape, portrait
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.platypus import (
+            CondPageBreak,
+            LongTable,
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+    except ImportError as exc:
+        raise RuntimeError(
+            "Chybí knihovna pro PDF. Nainstalujte závislosti příkazem "
+            "'python -m pip install -r requirements.txt'."
+        ) from exc
+
+    target = (output_path or config.pdf_output).resolve()
+    active_categories = report.active_categories or config.categories
+    if target.suffix.lower() != ".pdf":
+        raise ConfigError("Výstupní soubor musí mít příponu .pdf.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    assets = bundled_path("assets")
+    regular_font = assets / "DejaVuSans.ttf"
+    bold_font = assets / "DejaVuSans-Bold.ttf"
+    if not regular_font.is_file() or not bold_font.is_file():
+        raise RuntimeError(
+            "Chybí přibalené fonty assets/DejaVuSans.ttf a "
+            "assets/DejaVuSans-Bold.ttf."
+        )
+
+    if "StravovaciSans" not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont("StravovaciSans", str(regular_font)))
+    if "StravovaciSans-Bold" not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont("StravovaciSans-Bold", str(bold_font)))
+
+    page_size = (
+        portrait(A4)
+        if config.pdf_orientation == "na_vysku"
+        else landscape(A4)
+    )
+    page_width, page_height = page_size
+    left_margin = 13 * mm
+    right_margin = 13 * mm
+    top_margin = 20 * mm
+    bottom_margin = 15 * mm
+    usable_width = page_width - left_margin - right_margin
+
+    navy = colors.HexColor("#213B57")
+    blue = colors.HexColor("#2F6F9F")
+    pale_blue = colors.HexColor("#EAF2F8")
+    pale_gray = colors.HexColor("#F5F7F9")
+    medium_gray = colors.HexColor("#D3DBE2")
+    text_color = colors.HexColor("#1F2933")
+    muted = colors.HexColor("#5D6B78")
+
+    data_font = "StravovaciSans-Bold" if config.pdf_bold else "StravovaciSans"
+    label_font = "StravovaciSans-Bold"
+    data_size = config.pdf_data_font_size
+    label_size = config.pdf_label_font_size
+
+    body_style = ParagraphStyle(
+        "Body",
+        fontName=data_font,
+        fontSize=data_size,
+        leading=max(data_size + 2.1, data_size * 1.24),
+        textColor=text_color,
+        alignment=TA_LEFT,
+    )
+    cell_style = ParagraphStyle(
+        "Cell",
+        parent=body_style,
+        fontSize=data_size,
+        leading=max(data_size + 1.7, data_size * 1.2),
+    )
+    cell_center_style = ParagraphStyle(
+        "CellCenter",
+        parent=cell_style,
+        alignment=TA_CENTER,
+    )
+    header_cell_style = ParagraphStyle(
+        "HeaderCell",
+        parent=cell_style,
+        fontName=label_font,
+        fontSize=label_size,
+        leading=max(label_size + 1.7, label_size * 1.2),
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    title_style = ParagraphStyle(
+        "Title",
+        parent=body_style,
+        fontName=label_font,
+        fontSize=max(14, min(28, label_size * 2.4)),
+        leading=max(18, min(34, label_size * 2.9)),
+        textColor=navy,
+        spaceAfter=2 * mm,
+    )
+    subtitle_style = ParagraphStyle(
+        "Subtitle",
+        parent=body_style,
+        fontSize=max(data_size, min(18, label_size * 1.25)),
+        leading=max(data_size + 3, min(22, label_size * 1.6)),
+        textColor=muted,
+        spaceAfter=4 * mm,
+    )
+    section_style = ParagraphStyle(
+        "Section",
+        parent=body_style,
+        fontName=label_font,
+        fontSize=max(9, min(22, label_size * 1.55)),
+        leading=max(12, min(27, label_size * 1.9)),
+        textColor=navy,
+        spaceBefore=3 * mm,
+        spaceAfter=1.5 * mm,
+        keepWithNext=True,
+    )
+    small_style = ParagraphStyle(
+        "Small",
+        parent=body_style,
+        fontSize=max(5, data_size * 0.95),
+        leading=max(data_size + 1.5, data_size * 1.18),
+        textColor=muted,
+    )
+
+    def para(value: object, style: ParagraphStyle = cell_style) -> Paragraph:
+        return Paragraph(escape(str(value)), style)
+
+    def make_table(
+        headers: Sequence[str],
+        rows: Sequence[Sequence[object]],
+        widths: Sequence[float],
+        *,
+        centered_columns: set[int] | None = None,
+        total_row: bool = False,
+        repeat_header: bool = True,
+    ) -> Table:
+        centered_columns = centered_columns or set()
+        data: list[list[object]] = [
+            [para(header, header_cell_style) for header in headers]
+        ]
+        for row in rows:
+            rendered_row = []
+            for index, value in enumerate(row):
+                style = cell_center_style if index in centered_columns else cell_style
+                rendered_row.append(para(value, style))
+            data.append(rendered_row)
+
+        style_commands: list[tuple[Any, ...]] = [
+            ("BACKGROUND", (0, 0), (-1, 0), navy),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), label_font),
+            ("FONTNAME", (0, 1), (-1, -1), data_font),
+            ("FONTSIZE", (0, 0), (-1, 0), label_size),
+            ("FONTSIZE", (0, 1), (-1, -1), data_size),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.35, medium_gray),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, pale_gray]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2.2 * mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2.2 * mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 1.3 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.3 * mm),
+        ]
+        for column in centered_columns:
+            style_commands.append(("ALIGN", (column, 1), (column, -1), "CENTER"))
+        if total_row and rows:
+            style_commands.extend(
+                [
+                    ("BACKGROUND", (0, -1), (-1, -1), pale_blue),
+                    ("FONTNAME", (0, -1), (-1, -1), label_font),
+                ]
+            )
+        return LongTable(
+            data,
+            colWidths=list(widths),
+            repeatRows=1 if repeat_header else 0,
+            hAlign="LEFT",
+            splitByRow=1,
+            style=TableStyle(style_commands),
+        )
+
+    subject = report.subject_name or "Stravovací provoz"
+    date_text = config.report_date.strftime(DATE_FORMAT)
+    total_portions = sum(item.portions for item in report.menus)
+    temporary = target.with_name(f".{target.stem}.tmp.pdf")
+
+    def page_header_footer(canvas: Any, doc: Any) -> None:
+        canvas.saveState()
+        canvas.setTitle(f"Jmenný seznam strávníků - {date_text}")
+        canvas.setAuthor(subject)
+        footer_font_size = max(6, min(11, label_size * 0.95))
+        canvas.setFont(data_font, footer_font_size)
+        canvas.setFillColor(muted)
+        canvas.drawString(left_margin, page_height - 10 * mm, subject)
+        canvas.drawRightString(
+            page_width - right_margin,
+            page_height - 10 * mm,
+            f"Objednaná strava - {date_text}",
+        )
+        canvas.setStrokeColor(medium_gray)
+        canvas.setLineWidth(0.4)
+        canvas.line(
+            left_margin,
+            page_height - 12 * mm,
+            page_width - right_margin,
+            page_height - 12 * mm,
+        )
+        canvas.line(
+            left_margin,
+            10 * mm,
+            page_width - right_margin,
+            10 * mm,
+        )
+        canvas.setFont(data_font, max(6, min(10, data_size * 0.95)))
+        canvas.drawCentredString(
+            page_width / 2,
+            6.2 * mm,
+            f"Strana {doc.page}",
+        )
+        canvas.restoreState()
+
+    document = SimpleDocTemplate(
+        str(temporary),
+        pagesize=page_size,
+        leftMargin=left_margin,
+        rightMargin=right_margin,
+        topMargin=top_margin,
+        bottomMargin=bottom_margin,
+        title=f"Jmenný seznam strávníků - {date_text}",
+        author=subject,
+        subject="Objednaná strava",
+    )
+
+    story: list[Any] = [
+        Paragraph(escape(subject), title_style),
+        Paragraph("Jmenný seznam objednané stravy", subtitle_style),
+    ]
+
+    info_data = [
+        [
+            para("Datum", header_cell_style),
+            para(date_text, cell_center_style),
+            para("Celkem porcí", header_cell_style),
+            para(total_portions, cell_center_style),
+            para("Vybraných kategorií", header_cell_style),
+            para(len(active_categories), cell_center_style),
+        ]
+    ]
+    info_base_widths = [28 * mm, 29 * mm, 34 * mm, 22 * mm, 43 * mm, 22 * mm]
+    info_scale = min(1.0, usable_width / sum(info_base_widths))
+    info_widths = [width * info_scale for width in info_base_widths]
+    info_table = Table(
+        info_data,
+        colWidths=info_widths,
+        hAlign="LEFT",
+        style=TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, 0), navy),
+                ("BACKGROUND", (2, 0), (2, 0), navy),
+                ("BACKGROUND", (4, 0), (4, 0), navy),
+                ("BACKGROUND", (1, 0), (1, 0), pale_blue),
+                ("BACKGROUND", (3, 0), (3, 0), pale_blue),
+                ("BACKGROUND", (5, 0), (5, 0), pale_blue),
+                ("GRID", (0, 0), (-1, -1), 0.35, medium_gray),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.6 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.6 * mm),
+            ]
+        ),
+    )
+    story.extend([info_table, Spacer(1, 2 * mm)])
+
+    story.append(Paragraph("Jídelníček a počty porcí", section_style))
+    if report.menus:
+        menu_rows: list[tuple[object, ...]] = [
+            (
+                item.meal_type,
+                f"Menu {item.menu}",
+                item.portions,
+                item.meal_name or "[název v jídelníčku nenalezen]",
+            )
+            for item in report.menus
+        ]
+        menu_rows.append(("Celkem", "", total_portions, ""))
+        story.append(
+            make_table(
+                ("Typ stravy", "Přihláška", "Počet", "Název jídla"),
+                menu_rows,
+                (36 * mm, 24 * mm, 20 * mm, usable_width - 80 * mm),
+                centered_columns={1, 2},
+                total_row=True,
+            )
+        )
+    else:
+        story.append(Paragraph("Nenalezeny žádné objednávky.", body_style))
+
+    if config.show_by_categories and report.categories:
+        story.append(Paragraph("Přihlášky podle kategorií", section_style))
+        category_rows: list[tuple[object, ...]] = [
+            (
+                item.code,
+                item.name or "[bez názvu]",
+                item.norm or "[bez normy]",
+                item.applications,
+            )
+            for item in report.categories
+        ]
+        category_rows.append(
+            (
+                "",
+                "Celkem",
+                "",
+                sum(item.applications for item in report.categories),
+            )
+        )
+        story.append(
+            make_table(
+                ("Označení", "Název kategorie", "Norma", "Přihlášek"),
+                category_rows,
+                (
+                    usable_width * 0.16,
+                    usable_width * 0.55,
+                    usable_width * 0.13,
+                    usable_width * 0.16,
+                ),
+                centered_columns={0, 2, 3},
+                total_row=True,
+            )
+        )
+
+    if config.show_by_norms and report.norms:
+        story.append(Paragraph("Objednaná menu podle norem", section_style))
+        norm_meal_types = sorted(
+            {row.meal_type for row in report.norms}, key=str.casefold
+        )
+        for meal_index, meal_type in enumerate(norm_meal_types):
+            meal_rows = [row for row in report.norms if row.meal_type == meal_type]
+            menus = sorted({row.menu for row in meal_rows})
+            extra_norms = sorted(
+                {
+                    row.norm or "[bez normy]"
+                    for row in meal_rows
+                    if (row.norm or "[bez normy]") not in DEFAULT_NORMS
+                },
+                key=str.casefold,
+            )
+            norms = [*DEFAULT_NORMS, *extra_norms]
+            counts = {
+                (row.norm or "[bez normy]", row.menu): row.portions
+                for row in meal_rows
+            }
+            norm_rows: list[tuple[object, ...]] = []
+            for norm in norms:
+                values = [counts.get((norm, menu), 0) for menu in menus]
+                norm_rows.append((norm, *values, sum(values)))
+
+            if meal_index:
+                story.append(Spacer(1, 1.5 * mm))
+            story.append(Paragraph(f"Typ stravy: {escape(meal_type)}", small_style))
+            norm_width = 28 * mm
+            total_width = 24 * mm
+            menu_width = min(
+                26 * mm,
+                (usable_width - norm_width - total_width) / max(1, len(menus)),
+            )
+            widths = [norm_width, *([menu_width] * len(menus)), total_width]
+            story.append(
+                make_table(
+                    ("Norma", *(f"Menu {menu}" for menu in menus), "Celkem"),
+                    norm_rows,
+                    widths,
+                    centered_columns=set(range(len(widths))),
+                )
+            )
+
+    story.extend(
+        [
+            PageBreak(),
+            Paragraph("Jmenný seznam strávníků", section_style),
+        ]
+    )
+
+    diner_headers = (
+        "Jméno",
+        "Kategorie",
+        "Přihláška",
+        "Norma",
+        "Objednané jídlo",
+    )
+    diner_widths = (
+        usable_width * 0.19,
+        usable_width * 0.18,
+        usable_width * 0.11,
+        usable_width * 0.08,
+        usable_width * 0.44,
+    )
+
+    def diner_sort_key(row: DinerOrder) -> tuple[str, str, int]:
+        return (
+            (row.name or "").casefold(),
+            row.meal_type.casefold(),
+            row.menu,
+        )
+
+    def diner_pdf_rows(rows: Sequence[DinerOrder]) -> list[tuple[object, ...]]:
+        return [
+            (
+                row.name or "[bez jména]",
+                row.category_name or row.category_code,
+                f"Menu {row.menu}",
+                row.norm or "[bez normy]",
+                row.meal_name or "[název v jídelníčku nenalezen]",
+            )
+            for row in rows
+        ]
+
+    if not report.diners:
+        story.append(Paragraph("Nenalezeni žádní strávníci s objednávkou.", body_style))
+    elif config.category_separation:
+        grouped: dict[str, list[DinerOrder]] = defaultdict(list)
+        for diner in report.diners:
+            grouped[diner.category_code].append(diner)
+
+        for category_code in active_categories:
+            category_diners = sorted(grouped.get(category_code, []), key=diner_sort_key)
+            if not category_diners:
+                continue
+            category_name = next(
+                (row.category_name for row in category_diners if row.category_name),
+                category_code,
+            )
+            story.append(CondPageBreak(35 * mm))
+            category_heading = Table(
+                [[para(category_name, ParagraphStyle(
+                    f"Category-{category_code}",
+                    parent=body_style,
+                    fontName=label_font,
+                    fontSize=max(8, min(18, label_size * 1.38)),
+                    leading=max(10.5, min(22, label_size * 1.7)),
+                    textColor=navy,
+                ))]],
+                colWidths=[usable_width],
+                hAlign="LEFT",
+                style=TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), pale_blue),
+                        ("BOX", (0, 0), (-1, -1), 0.45, blue),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 2.5 * mm),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 2.5 * mm),
+                        ("TOPPADDING", (0, 0), (-1, -1), 1.7 * mm),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.7 * mm),
+                    ]
+                ),
+            )
+            story.extend(
+                [
+                    category_heading,
+                    Spacer(1, 1.2 * mm),
+                    make_table(
+                        diner_headers,
+                        diner_pdf_rows(category_diners),
+                        diner_widths,
+                        centered_columns={2, 3},
+                    ),
+                    Spacer(1, 2.5 * mm),
+                ]
+            )
+    else:
+        sorted_diners = sorted(report.diners, key=diner_sort_key)
+        story.append(
+            make_table(
+                diner_headers,
+                diner_pdf_rows(sorted_diners),
+                diner_widths,
+                centered_columns={2, 3},
+            )
+        )
+
+    story.extend(
+        [
+            Spacer(1, 2 * mm),
+            Paragraph(
+                f"Celkem strávníků / objednávek: {len(report.diners)}",
+                small_style,
+            ),
+        ]
+    )
+
+    try:
+        document.build(
+            story,
+            onFirstPage=page_header_footer,
+            onLaterPages=page_header_footer,
+        )
+        reader = PdfReader(str(temporary))
+        if not reader.pages:
+            raise RuntimeError("Vytvořené PDF nemá žádnou stránku.")
+        temporary.replace(target)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+    return target
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    try:
+        config = load_config(args.config, args.date_override, args.pdf_override)
+        report = fetch_report(config)
+        if not args.no_console:
+            print(
+                render_table(
+                    config,
+                    report.menus,
+                    report.categories,
+                    report.norms,
+                    report.diners,
+                    report.subject_name,
+                    report.active_categories,
+                )
+            )
+        pdf_path = create_pdf(config, report)
+        print(f"\nPDF vytvořeno: {pdf_path}")
+        return 0
+    except (ConfigError, RuntimeError) as exc:
+        print(f"CHYBA: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("\nPřerušeno uživatelem.", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        print(f"CHYBA DB: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+          AND COALESCE(s.deleted, false) = false
+          AND NULLIF(BTRIM(p.typsluzby), '') IS NOT NULL
+        ORDER BY typ
+    """).format(day_column=day_column)
+    with psycopg.connect(**database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query, (report_date.year, report_date.month))
+            return tuple(row[0] for row in cursor.fetchall())
 
 
 def fetch_summary(config: AppConfig) -> list[MenuSummary]:
