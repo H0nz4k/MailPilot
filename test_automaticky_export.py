@@ -15,6 +15,7 @@ def write_config(path: Path, *, only_cooking_days: bool = True) -> None:
         json.dumps(
             {
                 "povolene_kategorie": ["1STD", "ZAM"],
+                "poctyemailem": {"vsechny_kategorie": False},
                 "mail_prijemci": ["a@example.cz", "B@example.cz"],
                 "mail_odesilatel": "podpora@altisima.cz",
                 "mail_text": "Dobrý den",
