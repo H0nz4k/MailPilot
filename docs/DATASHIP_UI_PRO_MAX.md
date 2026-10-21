@@ -8,7 +8,9 @@ Pracovní plocha má nejvýše 1240 px, kompaktnější hlavičku, menší mezer
 
 Referenční tisk pro 21. 10. 2026 ukazuje 627 obědů, 36 snídaní a 32 večeří, celkem 695 porcí. Zachycený DataShip souhrn obsahuje 525 porcí a nulu u Integrované školy. Rozdíl 170 odpovídá právě jejím 102 obědům, 36 snídaním a 32 večeřím.
 
-Denní SQL zatím používá `prihlas`; uzávěrkové SQL pracuje i s hromadnými objednávkami `prihlasn`. Než lze bezpečně doplnit rozpad hromadných objednávek do menu 1–9, je potřeba ověřit jejich skutečnou strukturu. Tato úprava UI proto sama neprohlašuje chybu počtů za vyřešenou.
+Denní sestava nyní přičítá k jednotlivým přihláškám `prihlas` také hromadné objednávky `prihlasn`. Diagnostika potvrdila, že `varianta` obsahuje číslo menu a denní číselný sloupec `dNN` počet porcí. Sčítá se tedy například 62 porcí menu 1, nikoliv jeden záznam. Stejný výpočet používá souhrn na obrazovce, PDF i denní sestavy e-mailových úloh.
+
+Hromadné objednávky respektují datum, povolené kategorie a typ stravy. Kategorie se bere z měsíční přihlášky, při prázdné hodnotě ze strávníka, stejně jako v podkladech uzávěrky. Nulové a záporné denní hodnoty se nezapočítávají. Kladný počet s neplatnou variantou vyvolá srozumitelnou chybu namísto tichého podhodnocení. V seznamu strávníků zůstává hromadná objednávka jedním řádkem s množstvím, například `Menu 1 × 62`. Nabídka typů stravy zahrnuje i typy vedené pouze v `prihlasn`.
 
 Z kořene repozitáře v Git Bash spusťte čtecí diagnostiku:
 
@@ -16,7 +18,7 @@ Z kořene repozitáře v Git Bash spusťte čtecí diagnostiku:
 ./.venv-web/Scripts/python.exe scripts/inspect_daily_counts.py --date 21.10.2026
 ```
 
-Použije stejnou přednost provozních konfigurací jako vývojový spouštěč, nastaví SQL transakci pouze pro čtení a vypíše strukturu `prihlasn`, denní počty přes existující databázovou funkci a případná pole obsahující `menu`. Nevypisuje heslo ani jména strávníků. Výstup slouží k ověření formátu hromadných přihlášek, nikoliv ke změně databáze.
+Použije stejnou přednost provozních konfigurací jako vývojový spouštěč, nastaví SQL transakci pouze pro čtení a vypíše strukturu `prihlasn`, denní počty přes existující databázovou funkci a případná pole obsahující `menu`. Nevypisuje heslo ani jména strávníků. Diagnostiku po aktualizaci není nutné opakovat; slouží jen pro případ dalšího rozporu.
 
 ## Co se změnilo
 
@@ -73,5 +75,6 @@ Build zachovává i `daily_reports.json`, vedle dosavadní konfigurace a e-mailo
 - Regresní testy hlavní navigace, data, značky, kategorií, názvů výstupů a původních e-mailových úloh.
 - Výsledek cílené sady: **65 testů a 2 podtesty prošly**. Rozhraní bylo ověřeno v Chromium na 320, 375, 768, 1024 a 1440 px bez přetečení dokumentu a bez chyb JavaScriptu; kontrolovány byly snímky světlého, tmavého a mobilního zobrazení. Pro tuto vizuální kontrolu byly použity izolované testovací počty, nikoliv zákaznická DB.
 - Windows build, skutečná zákaznická DB, přihlašovací údaje a NSSM vyžadují ověření na cílovém počítači. V rámci implementace neproběhlo skutečné odeslání e-mailu.
+- Regrese hromadných denních objednávek ověřuje referenční součet 695, shodu menu/kategorií/norem, filtr dne a kategorií předávaný SQL, typ stravy, neplatnou variantu, zachování individuálních počtů i množství v textu a PDF. Používá přepsané referenční hodnoty a nahrazené DB připojení, nikoliv přístup k zákaznické DB. Související sada denních sestav, PDF, uložených přehledů a e-mailových úloh: **83 testů a 14 podtestů prošlo**.
 
-Původní Qt MailPilot, CLI přepínače, výpočty PDF a kalendář varných dnů zůstávají na dosavadní implementaci.
+CLI přepínače a kalendář varných dnů zůstávají na dosavadní implementaci. Opravu společného denního výpočtu využije také původní Qt MailPilot při spuštění s aktualizovanými zdroji.
