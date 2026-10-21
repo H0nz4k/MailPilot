@@ -1,4 +1,4 @@
-name: Build MailPilot Web (Windows)
+name: Build DataShip Web (Windows)
 on:
   push:
     branches: [feat/web-mail-scheduler]
@@ -19,7 +19,7 @@ jobs:
       - name: Upload Windows distribution
         uses: actions/upload-artifact@v4
         with:
-          name: MailPilot-Web-Windows
-          path: dist-web/MailPilot-Web/
+          name: DataShip-Windows
+          path: dist-web/DataShip/
           if-no-files-found: error
           retention-days: 7
