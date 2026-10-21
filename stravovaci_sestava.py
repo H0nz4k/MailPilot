@@ -711,11 +711,10 @@ def fetch_report(config: AppConfig) -> ReportData:
 
 
 def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[str, ...]:
-    """Read meal types for the month from JídelnaSQL, not only that day's orders.
+    """Typy služby evidované v JídelnaSQL pro daný rok.
 
-    Even when only one type was ordered today, an operator must still be
-    able to select a different configured service type. Missing orders
-    yield a valid zero-portion report.
+    Výběr nesmí zmizet jen proto, že vybraný den/kalendářní měsíc
+    nemá objednávky jiného typu. Nevrací vymyšlené typy stravy.
     """
     try:
         import psycopg
@@ -727,11 +726,11 @@ def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[s
         FROM (
             SELECT BTRIM(p.typsluzby) AS typ
             FROM public.prihlas AS p
-            WHERE p.rok = %s AND p.mesic = %s
+            WHERE p.rok = %s
             UNION
             SELECT BTRIM(v.typsluzby) AS typ
             FROM public.varnedny AS v
-            WHERE v.rok = %s AND v.mesic = %s
+            WHERE v.rok = %s
             UNION
             SELECT BTRIM(j.typstravy) AS typ
             FROM public.jidelnicek AS j
@@ -740,21 +739,15 @@ def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[s
         WHERE NULLIF(typ, '') IS NOT NULL
         ORDER BY typ
     """
-    month_start = report_date.replace(day=1)
-    next_month = (
-        date(month_start.year + 1, 1, 1) if month_start.month == 12
-        else date(month_start.year, month_start.month + 1, 1)
-    )
+    year_begin = date(report_date.year, 1, 1)
+    year_end = date(report_date.year + 1, 1, 1)
     with psycopg.connect(**database) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(
-                query,
-                (
-                    report_date.year, report_date.month,
-                    report_date.year, report_date.month,
-                    month_start, next_month,
-                ),
-            )
+            cursor.execute(query, (
+                report_date.year,
+                report_date.year,
+                year_begin, year_end,
+            ))
             return tuple(row[0] for row in cursor.fetchall())
 
 
