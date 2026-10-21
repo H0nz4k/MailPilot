@@ -24,7 +24,7 @@ from services.web_mail_task_store import load_tasks, task_file
 from services.web_mail_settings import load_settings, settings_path
 from services.web_mail_smtp import smtp_send
 from services.jidelnasql_warning import JidelnaWarningSettings
-from services.web_mail_tasks import target_date
+from services.web_mail_cooking_days import resolve_task_date
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
 LOG = logging.getLogger("mailpilot.web_worker")
@@ -61,12 +61,10 @@ def deliver_daily(config_path: Path, task, report_date: date) -> None:
     LOG.info("Sent task=%s date=%s recipients=%s", task.id, report_date, result)
 
 def dispatch(config_path: Path, task, sent_on: date) -> None:
-    # Never silently send the wrong report or assume calendar days are cooking days.
-    if task.date_mode == "next_cooking_day":
-        raise ValueError("Čeká na propojení kalendáře varnedny z JídelnaSQL.")
-    report_date = target_date(task, sent_on)
     if task.report != "daily":
         raise ValueError("Souhrn počtu jídel zatím není propojen se sestavou.")
+    # Resolve from real public.varnedny data (A/N), never from weekdays.
+    report_date = resolve_task_date(config_path, task, sent_on)
     deliver_daily(config_path, task, report_date)
 
 
