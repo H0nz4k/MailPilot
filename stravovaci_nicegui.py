@@ -2297,9 +2297,17 @@ class NiceGuiApp(DailyDesignMixin):
         """Sticky lišta hlavních akcí denního stavu."""
         with w.action_bar():
             # Jedna kompaktní lišta: přehledy vlevo, stav uprostřed, PDF/mail vpravo.
-            if hasattr(self, "new_daily_profile"):
-                ui.button("Nový přehled", icon="add", on_click=self.new_daily_profile).props("flat no-caps")
-                ui.button("Uložit přehled", icon="bookmark_border", on_click=self.save_daily_profile).props("flat no-caps")
+            # Viditelné jen hlavní akce; méně časté jsou v menu „⋯“.
+            with ui.button(icon="more_horiz").props(
+                'flat round aria-label="Další akce"'
+            ).classes("ds-more-btn shrink-0"):
+                with ui.menu().classes("ds-more-menu"):
+                    if hasattr(self, "new_daily_profile"):
+                        ui.menu_item("Nový přehled", on_click=self.new_daily_profile)
+                    self.open_pdf_button = ui.menu_item(
+                        "Otevřít poslední PDF", on_click=self.open_last_pdf
+                    )
+                    self.open_pdf_button.disable()
             with ui.column().classes("gap-0 min-w-0 flex-grow ds-action-status"):
                 self.pdf_status = ui.label("PDF zatím nebylo vytvořeno.").classes(
                     "inline-status truncate"
@@ -2314,10 +2322,10 @@ class NiceGuiApp(DailyDesignMixin):
                     ui.tooltip(
                         "Příjemce denního stavu přiřadíte v Administraci → E-maily."
                     )
-            self.open_pdf_button = ui.button(
-                "Otevřít poslední", icon="open_in_new", on_click=self.open_last_pdf
-            ).props("flat no-caps")
-            self.open_pdf_button.disable()
+            if hasattr(self, "save_daily_profile"):
+                ui.button(
+                    "Uložit", icon="bookmark_border", on_click=self.save_daily_profile
+                ).props("flat no-caps").classes("shrink-0")
             self.send_button = ui.button(
                 "Vytvořit a odeslat", icon="send", on_click=self.send_mail
             ).props("outline no-caps")

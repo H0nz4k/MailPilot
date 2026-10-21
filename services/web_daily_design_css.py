@@ -251,4 +251,8 @@ html.blocks-emphasized .dataship-ui .section-header, .dataship-ui .section-heade
 .dataship-ui .section-help, .dataship-ui .section-header .ui-help { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
 .dataship-ui .action-bar .q-btn .q-btn__content, .dataship-ui .action-bar .q-btn .block { white-space: nowrap !important; }
 .dataship-ui .action-bar .q-btn--flat { padding: 0 10px !important; }
+.dataship-ui .action-bar .q-btn { flex: 0 0 auto !important; white-space: nowrap !important; }
+.dataship-ui .action-bar .q-btn .q-btn__content { flex-direction: row !important; flex-wrap: nowrap !important; white-space: nowrap !important; }
+.dataship-ui .action-bar .ds-action-status { flex: 1 1 auto; min-width: 0; }
+.ds-more-menu .q-item { white-space: nowrap; min-height: 40px; }
 """
