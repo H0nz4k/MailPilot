@@ -1,5 +1,8 @@
 # MailPilot v12.8
 
+> **Webová vývojová verze (NiceGUI, Windows):** postup stažení, sestavení a spuštění je v `docs/BUILD_WEB_WINDOWS.md`. Použij `bash scripts/build_web_windows.sh` v Git Bash. Níže popsaný `build_windows.bat` vytváří pouze původní Qt 12.8.
+
+
 Production-readiness release zamereny na spolehlivost scheduleru, retry chovani,
 warning integraci do JidelnaSQL a kompatibilitu cenove logiky (`PouzivatCenik=0/1`).
 
