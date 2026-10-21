@@ -109,6 +109,8 @@ from services.config_io import (
 )
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
+from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
+from services.web_navigation import EDITABLE_TABS, visible_tabs
 from ui_theme import (
     DEFAULT_UI_LAYOUT,
     DEFAULT_UI_TEMPLATE,
@@ -579,8 +581,12 @@ class NiceGuiApp:
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
             self.mail_tasks_tab = ui.tab("mail_tasks", label="E-mailové úlohy", icon="schedule_send")
-            self.mail_settings_tab = ui.tab("mail_settings", label="Nastavení odesílání", icon="outgoing_mail")
             self.admin_tab = ui.tab("admin", label="Administrace", icon="settings")
+        self.nav_tab_elements = {
+            "daily": self.daily_tab, "closing": self.closing_tab,
+            "special": self.special_tab, "bulk": self.bulk_tab,
+            "mail_tasks": self.mail_tasks_tab,
+        }
         self.admin_tab_elements = (self.admin_tab,)
         self._apply_admin_visibility()
 
@@ -599,9 +605,6 @@ class NiceGuiApp:
             with ui.tab_panel("mail_tasks"):
                 from services.web_mail_gui import build_mail_tasks_panel
                 build_mail_tasks_panel(self.config_path.parent, config_path=self.config_path)
-            with ui.tab_panel("mail_settings"):
-                from services.web_mail_settings_gui import build_web_settings_panel
-                build_web_settings_panel(self.config_path.parent)
             with ui.tab_panel("admin"):
                 self._build_admin_panel()
 
@@ -713,6 +716,17 @@ class NiceGuiApp:
             self.admin_button.set_visibility(not self.admin_unlocked)
         if hasattr(self, "lock_admin_button"):
             self.lock_admin_button.set_visibility(self.admin_unlocked)
+        self._apply_navigation_visibility()
+
+    def _apply_navigation_visibility(self) -> None:
+        """Apply persisted top-tab visibility immediately; admin remains protected."""
+        settings = visible_tabs(self.raw)
+        for key, tab in getattr(self, "nav_tab_elements", {}).items():
+            tab.set_visibility(settings[key])
+        if getattr(self, "tabs", None) is not None:
+            active = str(self.tabs.value or "")
+            if active in settings and not settings[active]:
+                self.tabs.value = "daily"
 
     def _section_header(self, title: str, help_text: str, icon: str) -> None:
         w.section_header(title, help_text, icon)
@@ -857,7 +871,8 @@ class NiceGuiApp:
             self.tile_mail.set_text(self.last_mail_note)
 
     def _build_date_field(self) -> None:
-        selected = configured_date(self.raw)
+        # A new GUI session starts today; config.json may contain an old report date.
+        selected = initial_report_date()
         with ui.input(
             "Datum exportu", value=selected.strftime(CZECH_DATE_FORMAT)
         ).props(
@@ -870,6 +885,10 @@ class NiceGuiApp:
                     value=selected.isoformat(),
                     on_change=self._calendar_date_changed,
                 ).props("first-day-of-week=1")
+                # QDate needs its own Quasar locale object, not just ui.run(language=...).
+                self.date_picker.props[":locale"] = json.dumps(
+                    CZECH_DATE_LOCALE, ensure_ascii=False,
+                )
             with self.date_input.add_slot("append"):
                 ui.icon("event").classes("cursor-pointer").on(
                     "click", self.date_menu.open
@@ -1539,6 +1558,8 @@ class NiceGuiApp:
         ("db", "Databáze", "storage"),
         ("mail", "E-maily", "mail"),
         ("scheduler", "Plánovač", "schedule"),
+        ("mail_settings", "Nastavení odesílání", "outgoing_mail"),
+        ("navigation", "Hlavní nabídka", "view_list"),
         ("appearance", "Vzhled", "palette"),
         ("cli", "Bez GUI", "terminal"),
     )
@@ -1560,10 +1581,56 @@ class NiceGuiApp:
                     self._build_mail_panel()
                 with ui.tab_panel("scheduler"):
                     self._build_scheduler_panel()
+                with ui.tab_panel("mail_settings"):
+                    from services.web_mail_settings_gui import build_web_settings_panel
+                    build_web_settings_panel(self.config_path.parent)
+                with ui.tab_panel("navigation"):
+                    self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
                     self._build_appearance_panel()
                 with ui.tab_panel("cli"):
                     self._build_cli_help_panel()
+
+    def _build_navigation_settings_panel(self) -> None:
+        """Choose which sections ordinary users see in the top navigation."""
+        w.section_header(
+            "Hlavní nabídka",
+            "Zvolte záložky viditelné pro běžného uživatele. "
+            "Denní stav a přístup k Administraci jsou vždy dostupné.",
+            "view_list",
+        )
+        saved = visible_tabs(self.raw)
+        with w.card():
+            ui.label("Denní stav – vždy zobrazen").classes("ui-help")
+            self.navigation_switches = {
+                key: ui.checkbox(label, value=saved[key]).props("dense")
+                for key, label in EDITABLE_TABS.items()
+            }
+            ui.label(
+                "Skrytí záložky mění nabídku, nikoli oprávnění k datům. "
+                "Nastavení odesílání je dostupné pouze přes Administraci."
+            ).classes("ui-help")
+            ui.button(
+                "Uložit hlavní nabídku", icon="save",
+                on_click=self.save_navigation_settings,
+            ).props("no-caps unelevated")
+            self.navigation_status = ui.label("").classes("inline-status")
+
+    def save_navigation_settings(self) -> None:
+        raw = sanitize_config(self.raw)
+        raw["ui_visible_tabs"] = {
+            "daily": True,
+            **{key: bool(field.value)
+               for key, field in self.navigation_switches.items()},
+        }
+        try:
+            write_config(self.config_path, raw)
+        except OSError as exc:
+            self.navigation_status.set_text(f"Uložení nabídky selhalo: {exc}")
+            return
+        self.raw = raw
+        self._apply_navigation_visibility()
+        self.navigation_status.set_text("Hlavní nabídka uložena a aktualizována.")
 
     def _build_cli_help_panel(self) -> None:
         w.section_header(
@@ -2042,7 +2109,7 @@ class NiceGuiApp:
                         "inline-status shrink-0"
                     )
                     self.mail_subject_label = ui.label(
-                        mail_subject(configured_date(self.raw))
+                        mail_subject(self._selected_date())
                     ).classes("inline-status truncate")
                     ui.tooltip(
                         "Příjemce denního stavu přiřadíte v Administraci → E-maily."
