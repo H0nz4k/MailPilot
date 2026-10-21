@@ -118,7 +118,11 @@ def fetch_cooking_status(config: AppConfig) -> tuple[CookingStatus, ...]:
               ON s.evidcislo = p.stravnik
             WHERE p.rok = %s
               AND p.mesic = %s
-              AND BTRIM(s.kategorie) = ANY(%s::varchar[])
+              AND (
+                  CARDINALITY(%s::varchar[]) = 0
+                  OR BTRIM(s.kategorie) = ANY(%s::varchar[])
+              )
+              AND (%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text)
               AND COALESCE(s.deleted, false) = false
               AND p.{day_column} ~ '^[1-9]$'
               AND NULLIF(BTRIM(p.typsluzby), '') IS NOT NULL
@@ -143,6 +147,9 @@ def fetch_cooking_status(config: AppConfig) -> tuple[CookingStatus, ...]:
                     config.report_date.year,
                     config.report_date.month,
                     list(config.categories),
+                    list(config.categories),
+                    config.meal_type,
+                    config.meal_type,
                     config.report_date.year,
                     config.report_date.month,
                 ),
