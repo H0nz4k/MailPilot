@@ -21,7 +21,7 @@ def month_row(**day_values):
     """Postgres returns d01..d31 ordered, rather than a separate date column."""
     statuses = ["N"] * 31
     for number, status in day_values.items():
-        statuses[int(number[1:])] = status
+        statuses[int(number[1:]) - 1] = status
     return tuple(statuses)
 
 
