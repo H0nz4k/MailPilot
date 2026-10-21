@@ -28,7 +28,7 @@ mkdir -p "$DIST" "$ROOT/build" "$PRESERVE"
 # Keep config, scheduled tasks and mail preferences across upgrades. On the
 # first DataShip build, import from the former MailPilot-Web install without
 # deleting/moving it. Future builds prefer the existing DataShip files.
-for name in config.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
+for name in config.json daily_reports.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
   rm -f "$PRESERVE/$name"
   if [[ -f "$APP/$name" ]]; then
     cp "$APP/$name" "$PRESERVE/$name"
@@ -67,7 +67,7 @@ if [[ -f "$PRESERVE/config.json" ]]; then
 else
   cp "$APP/config.example.json" "$APP/config.json"
 fi
-for name in web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
+for name in daily_reports.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
   if [[ -f "$PRESERVE/$name" ]]; then
     cp "$PRESERVE/$name" "$APP/$name"
   fi
@@ -87,3 +87,4 @@ CMD
 echo "HOTOVO: $APP/DataShip.exe"
 echo "OTEVRENI: v Git Bash spust ./dist-web/DataShip/DataShip.exe --browser"
 echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."
+

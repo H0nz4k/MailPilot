@@ -26,6 +26,7 @@ class MailTask:
     day_offset: int = 0
     fixed_date: str | None = None
     enabled: bool = True
+    profile_id: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "MailTask":
@@ -70,11 +71,16 @@ class MailTask:
         enabled = raw.get("enabled", True)
         if not isinstance(enabled, bool):
             raise ValueError("enabled musí být true nebo false.")
+        profile_id = raw.get("profile_id") or None
+        if profile_id is not None and (not isinstance(profile_id, str) or not profile_id.strip()):
+            raise ValueError("Neplatné ID denního přehledu.")
+        if profile_id and report != "daily":
+            raise ValueError("Uložený přehled lze přiřadit pouze k Dennímu stavu.")
         return cls(
             id=str(raw.get("id") or uuid4()), name=name, recipients=recipients,
             report=report, send_time=send_time, date_mode=mode,
             day_offset=offset, fixed_date=str(fixed) if fixed else None,
-            enabled=enabled,
+            enabled=enabled, profile_id=profile_id,
         )
 
     def to_dict(self) -> dict:
@@ -83,6 +89,7 @@ class MailTask:
             "report": self.report, "send_time": self.send_time,
             "date_mode": self.date_mode, "day_offset": self.day_offset,
             "fixed_date": self.fixed_date, "enabled": self.enabled,
+            "profile_id": self.profile_id,
         }
 
 
@@ -124,3 +131,4 @@ def next_send_at(task: MailTask, now: datetime) -> datetime | None:
     if result <= now:
         result += timedelta(days=1)
     return result
+

@@ -14,3 +14,5 @@ screenshots/
 .venv-web/
 dist-web/
 dist-web-worker/
+daily_reports.json
+

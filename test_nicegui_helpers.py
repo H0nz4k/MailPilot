@@ -361,7 +361,8 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertNotIn("password_toggle_button", db_source)
         self.assertNotIn("password_toggle_button", mail_source)
         self.assertNotIn("Uložit nastavení", build_source)
-        self.assertIn("AutoReport by HanzG", build_source)
+        self.assertIn("BRAND_FOOTER", build_source)
+        self.assertEqual(gui.BRAND_FOOTER, "DataShip by HanzG")
 
     def test_both_pdf_actions_automatically_persist_settings(self):
         generate_source = inspect.getsource(gui.NiceGuiApp.generate_pdf)
@@ -503,3 +504,4 @@ class NiceGuiHelperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

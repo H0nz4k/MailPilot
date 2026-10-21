@@ -22,7 +22,7 @@ UI_TEXT_SIZE_LABELS = {
     "extra": "Extra velká",
 }
 UI_TEXT_SIZE_PX = {
-    "text": {"mala": 13, "stredni": 14, "velka": 16, "extra": 18},
+    "text": {"mala": 13, "stredni": 16, "velka": 18, "extra": 20},
     "nadpis": {"mala": 15, "stredni": 16, "velka": 19, "extra": 22},
     "popis": {"mala": 11, "stredni": 12, "velka": 14, "extra": 16},
 }
@@ -1485,3 +1485,4 @@ UI_CSS = "\n".join(
         _CSS_LAYOUTS,
     )
 )
+

@@ -15,6 +15,7 @@ from nicegui import ui
 from services.web_mail_task_store import load_tasks, save_tasks, task_file
 from services.web_mail_tasks import MailTask, next_send_at
 from services.web_mail_cooking_days import resolve_task_date
+from services.web_daily_profiles import load_profiles, profile_file
 
 REPORTS = {"daily": "Denní stav / počty", "meal_summary": "Souhrn počtu jídel"}
 DATE_MODES = {
@@ -41,6 +42,11 @@ def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = No
             ui.notify(f"Nelze načíst úlohy: {exc}", type="negative")
             return None
 
+    def profile_options():
+        return {"": "Výchozí nastavení (všechny povolené kategorie)", **{
+            p.id: p.name for p in load_profiles(profile_file(Path(config_directory)))
+        }}
+
     @ui.refreshable
     def table():
         tasks = read()
@@ -55,6 +61,12 @@ def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = No
                     ui.badge("Aktivní" if task.enabled else "Vypnutá")
                 ui.label(f"{REPORTS[task.report]} · {task.send_time} · {', '.join(task.recipients)}")
                 ui.label(f"Datum sestavy: {DATE_MODES[task.date_mode]}")
+                if task.profile_id:
+                    try:
+                        label = profile_options().get(task.profile_id, "Chybějící přehled – upravte úlohu")
+                    except (OSError, ValueError) as exc:
+                        label = f"Přehled nelze načíst: {exc}"
+                    ui.label(f"Uložený přehled: {label}")
                 upcoming = next_send_at(task, datetime.now())
                 if upcoming:
                     try:
@@ -103,11 +115,20 @@ def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = No
         dialog.open()
 
     def editor(task=None, duplicate=False):
+        try:
+            profiles = profile_options()
+        except (OSError, ValueError) as exc:
+            ui.notify(f"Přehledy nelze načíst: {exc}", type="negative")
+            return
+        if task and task.profile_id and task.profile_id not in profiles:
+            profiles[task.profile_id] = "Chybějící přehled – vyberte jiný"
         with ui.dialog() as dialog, ui.card().classes("w-full").style("min-width: min(90vw, 520px)"):
             ui.label("Kopírovat úlohu" if duplicate else "Upravit úlohu" if task else "Nová úloha").classes("text-h6")
             name = ui.input("Název", value=(task.name + " – kopie" if duplicate else task.name) if task else "").classes("w-full")
             recipients = ui.textarea("E-mailové adresy (čárka nebo nový řádek)", value=", ".join(task.recipients) if task else "").classes("w-full")
             report = ui.select(REPORTS, label="Sestava", value=task.report if task else "daily").classes("w-full")
+            profile = ui.select(profiles, label="Uložený denní přehled", value=(task.profile_id or "") if task else "").classes("w-full")
+            profile.bind_visibility_from(report, "value", backward=lambda value: value == "daily")
             time = ui.input("Čas odeslání (HH:MM)", value=task.send_time if task else "08:00").classes("w-full")
             mode = ui.select(DATE_MODES, label="Datum sestavy", value=task.date_mode if task else "today").classes("w-full")
             offset = ui.number("Posun (dní)", value=task.day_offset if task else 0, step=1).classes("w-full")
@@ -126,7 +147,10 @@ def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = No
                             "report": report.value, "send_time": time.value,
                             "date_mode": mode.value, "day_offset": offset.value,
                             "fixed_date": fixed.value, "enabled": enabled.value,
+                            "profile_id": (profile.value or None) if report.value == "daily" else None,
                         })
+                        if new.profile_id and new.profile_id not in profile_options():
+                            raise ValueError("Vyberte existující uložený přehled.")
                     except (ValueError, TypeError) as exc:
                         ui.notify(f"Neplatná úloha: {exc}", type="negative")
                         return
@@ -140,3 +164,4 @@ def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = No
         ui.button("Nová úloha", icon="add", on_click=lambda: editor()).props("color=primary")
         ui.button("Obnovit", icon="refresh", on_click=table.refresh).props("outline")
     table()
+

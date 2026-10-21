@@ -117,6 +117,8 @@ from services.web_branding import (
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
+from services.web_daily_design import DailyDesignMixin
+from services.web_daily_design_css import DATASHIP_CSS
 from ui_theme import (
     DEFAULT_UI_LAYOUT,
     DEFAULT_UI_TEMPLATE,
@@ -415,7 +417,7 @@ def shutdown_when_last_client_closes(current_client: Any) -> None:
         app.shutdown()
 
 
-class NiceGuiApp:
+class NiceGuiApp(DailyDesignMixin):
     """Stav a obslužné funkce lokálního technického UI."""
 
     def __init__(self, config_path: Path) -> None:
@@ -522,12 +524,13 @@ class NiceGuiApp:
             lambda: shutdown_when_last_client_closes(current_client)
         )
         ui.add_css(UI_CSS)
+        ui.add_css(DATASHIP_CSS)
         self._dark_mode = ui.dark_mode(False)
         appearance = peek_ui_appearance(self.raw)
         apply_ui_appearance(appearance, dark_mode=self._dark_mode)
         self.layout = layout_tokens(appearance)
 
-        with ui.column().classes("app-page gap-0 px-3 py-2"):
+        with ui.column().classes("app-page dataship-ui gap-0 px-3 py-2"):
             self._build_topbar()
             self.status_label = ui.label("").classes(
                 "status-strip w-full px-2 py-1 mt-1"
@@ -578,6 +581,9 @@ class NiceGuiApp:
                 .classes("shrink-0")
             )
             self.lock_admin_button.set_visibility(False)
+            ui.button(icon="contrast", on_click=self.toggle_color_mode).props(
+                'flat round aria-label="Přepnout světlý a tmavý režim"'
+            ).classes("ds-theme-toggle")
             self.brand_home.on("keydown.enter", self.go_home)
             self.brand_home.on("keydown.space", self.go_home)
             self._build_admin_dialog()
@@ -585,6 +591,16 @@ class NiceGuiApp:
     def go_home(self) -> None:
         """Logo vždy vrací na hlavní obrazovku bez změny admin oprávnění."""
         self.tabs.value = "daily"
+
+    def toggle_color_mode(self) -> None:
+        current = self._appearance_from_widgets()["schema"]
+        if UI_THEMES[current]["dark"]:
+            target = getattr(self, "_last_light_schema", "svetle")
+        else:
+            self._last_light_schema = current
+            target = "tmave"
+        self.ui_theme.value = target
+        self.save_ui_appearance()
 
     def _build_workspace(self) -> None:
         """Navigace a obsah. Umístění navigace řídí CSS podle zvolené šablony."""
@@ -920,36 +936,15 @@ class NiceGuiApp:
         self.raw = raw
         self.all_categories = all_categories
         self.allowed_categories = set(chosen)
-        self.selected_categories = set(chosen)
+        self.selected_categories = (self.selected_categories & self.allowed_categories
+                                    if getattr(self, "daily_profile_id", None) else set(chosen))
         self._render_daily_selection()
         self.category_settings_status.set_text(
             "Uloženo: všechny kategorie." if all_categories
             else f"Uloženo: {len(chosen)} vybraných kategorií."
         )
 
-    def _build_daily_panel(self) -> None:
-        with ui.column().classes("ui-block w-full"):
-            w.section_header(
-                "Denní stav",
-                "Sestava počtů strávníků k vybranému dni pro zvolené kategorie.",
-                "today",
-            )
-            self._build_daily_overview()
-            with w.card():
-                with w.toolbar():
-                    self._build_date_field()
-                    self._build_category_panel()
-                    self.meal_type_select = ui.select(
-                        {"__all__": "Všechny typy stravy"},
-                        value="__all__",
-                        label="Typ stravy",
-                    ).props("dense options-dense").classes("w-48")
-                    # Volba služby musí zůstat viditelná i při jediném typu.
-                with ui.expansion(
-                    "Pokročilé nastavení PDF", icon="tune"
-                ).props("dense dense-toggle").classes("w-full app-note"):
-                    self._build_pdf_settings_section()
-            self._build_pdf_panel()
+    _build_daily_panel = DailyDesignMixin._build_daily_workspace
 
     def _build_daily_overview(self) -> None:
         """Přehledové dlaždice; zobrazí je jen šablona s přehledem (CSS)."""
@@ -1005,6 +1000,7 @@ class NiceGuiApp:
 
     async def _on_date_changed(self) -> None:
         self.update_mail_subject()
+        self._queue_daily_summary()
         await self._reload_meal_types()
 
     async def _reload_meal_types(self) -> None:
@@ -1032,12 +1028,13 @@ class NiceGuiApp:
             return
         options = {"__all__": "Všechny typy stravy", **normalized}
         selected = str(self.meal_type_select.value or "__all__")
+        if selected != "__all__" and selected not in normalized:
+            options[selected] = f"{selected} (bez objednávek v tomto dni)"
         self.meal_type_select.options = options
-        self.meal_type_select.value = (
-            selected if selected in normalized else "__all__"
-        )
+        self.meal_type_select.value = selected
         self.meal_type_select.set_visibility(True)
         self.meal_type_select.update()
+        self._queue_daily_summary()
 
     def _build_closing_panel(self) -> None:
         closing = peek_closing_ui(self.raw)
@@ -1414,6 +1411,8 @@ class NiceGuiApp:
             options=self.categories,
             selected=self._allowed_category_order(),
         )
+        self._render_daily_category_grid()
+        self._queue_daily_summary()
 
     def _render_z17_selection(self) -> None:
         self._update_z17_expansion_caption()
@@ -1463,6 +1462,7 @@ class NiceGuiApp:
     def _apply_daily_categories(self, codes: list[str]) -> None:
         self.selected_categories = set(codes) & self.allowed_categories
         self._render_daily_selection()
+        self._mark_daily_dirty()
 
     def open_allowed_category_dialog(self) -> None:
         """Globální omezení kategorií vyžaduje odemčeného správce."""
@@ -2486,7 +2486,8 @@ class NiceGuiApp:
         self._connection_password = None
         if hasattr(self, "meal_type_select"):
             self.meal_type_select.value = "__all__"
-            self.meal_type_select.set_visibility(False)
+            self.meal_type_select.set_visibility(True)
+        self._queue_daily_summary()
         if hasattr(self, "z17_generate_button"):
             self.z17_generate_button.disable()
         if hasattr(self, "bulk_send_button"):
@@ -2543,6 +2544,7 @@ class NiceGuiApp:
         self.date_input.value = selected.strftime(CZECH_DATE_FORMAT)
         self.date_menu.close()
         self.update_mail_subject()
+        self._queue_daily_summary()
         asyncio.create_task(self._reload_meal_types())
 
     def _collect_config(self) -> dict[str, Any]:
@@ -2705,8 +2707,11 @@ class NiceGuiApp:
             code for code, _name in self.categories
             if self.all_categories or code in configured_set
         }
-        # A new DB TEST resets a one-off choice to all allowed categories.
-        self.selected_categories = set(self.allowed_categories)
+        # Preserve a saved profile while rechecking current DB/admin permissions.
+        profile = next((p for p in getattr(self, "daily_profiles", [])
+                        if p.id == getattr(self, "daily_profile_id", None)), None)
+        self.selected_categories = (set(profile.categories) & self.allowed_categories
+                                    if profile else set(self.allowed_categories))
         known = {code for code, _name in self.categories}
         saved_z17 = set(peek_z17_ui(self.raw)["povolene_kategorie"])
         if saved_z17:
@@ -2718,6 +2723,8 @@ class NiceGuiApp:
                 code for code in self.z17_selected_categories if code in known
             }
         self.render_categories()
+        if hasattr(self, "daily_profile_choices"):
+            self._render_daily_profile_choices()
         self.render_z17_categories()
         self._update_z17_expansion_caption()
 
@@ -2725,7 +2732,7 @@ class NiceGuiApp:
         self._render_daily_selection()
 
     def select_all(self) -> None:
-        self.selected_categories = {code for code, _name in self.categories}
+        self.selected_categories = {code for code, _name in self.categories if code in self.allowed_categories}
         self._render_daily_selection()
 
     def clear_all(self) -> None:
@@ -3216,3 +3223,4 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
