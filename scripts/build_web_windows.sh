@@ -13,8 +13,8 @@ cd "$ROOT"
 VENV="$ROOT/.venv-web"
 PY="$VENV/Scripts/python.exe"
 if [[ ! -f "$PY" ]]; then
-  command -v py >/dev/null 2>&1 || { echo "CHYBA: nainstaluj Python 3 pro Windows (py launcher)." >&2; exit 2; }
-  py -3 -m venv "$VENV"
+  command -v py >/dev/null 2>&1 || { echo "CHYBA: nainstaluj Python 3.12 pro Windows (py launcher)." >&2; exit 2; }
+  py -3.12 -m venv "$VENV" || { echo "CHYBA: nainstaluj Python 3.12 x64 a zopakuj build." >&2; exit 2; }
 fi
 echo "[1/3] Instaluji zavislosti webove verze..."
 "$PY" -m pip install --disable-pip-version-check -r "$ROOT/requirements-web-build.txt"
