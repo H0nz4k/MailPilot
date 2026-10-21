@@ -1,0 +1,9 @@
+# Standalone Windows NiceGUI build; legacy Qt desktop dependencies excluded.
+psycopg[binary]>=3.2,<4
+reportlab>=4.2,<5
+pypdf>=5.0,<7
+keyring>=25.0,<27
+resend==2.1.0
+python-dotenv>=1.2,<2
+nicegui==3.15.0
+pyinstaller>=6.16,<7
