@@ -626,5 +626,27 @@ class QueryRegressionTests(unittest.TestCase):
         self.assertIsNone(peek_jidelna_period(cursor))
 
 
+class ManualPDFSelectionTest(unittest.TestCase):
+    def test_two_reports_same_day_use_different_paths(self):
+        from services.web_report_output import manual_pdf_path
+
+        target = Path("vystup/DataShip_2026-10-21.pdf")
+        allowed = ("ISŠ", "Z1", "Z2", "Z3", "Z4", "Z5")
+        first = manual_pdf_path(target, ("Z1", "Z2"), allowed)
+        second = manual_pdf_path(target, ("ISŠ", "Z3", "Z4", "Z5"), allowed)
+        self.assertNotEqual(first, second)
+        self.assertNotEqual(first, target)
+        self.assertNotEqual(second, target)
+        self.assertIn("kat-2", first.name)
+        self.assertIn("kat-4", second.name)
+
+    def test_default_all_keeps_configured_output_path(self):
+        from services.web_report_output import manual_pdf_path
+
+        target = Path("vystup/DataShip_2026-10-21.pdf")
+        allowed = ("Z1", "Z2")
+        self.assertEqual(manual_pdf_path(target, allowed, allowed), target)
+
+
 if __name__ == "__main__":
     unittest.main()
