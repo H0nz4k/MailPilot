@@ -20,8 +20,15 @@ def service_command(config_directory: Path, action: str) -> str:
     config = (Path(config_directory) / "config.json").resolve()
     base = [str(nssm)]
     if action == "install":
+        if getattr(sys, "frozen", False):
+            worker = Path(sys.executable).with_name("MailPilot-Web-Worker.exe")
+            if not worker.is_file():
+                raise ValueError("Chybí MailPilot-Web-Worker.exe vedle webové aplikace.")
+            command = [str(worker), "--config", str(config)]
+        else:
+            command = [sys.executable, "-m", "services.web_mail_worker", "--config", str(config)]
         commands = [
-            base + ["install", name, sys.executable, "-m", "services.web_mail_worker", "--config", str(config)],
+            base + ["install", name, *command],
             base + ["set", name, "AppDirectory", str(config.parent)],
             base + ["set", name, "Start", "SERVICE_AUTO_START"],
             base + ["set", name, "AppExit", "Default", "Restart"],
