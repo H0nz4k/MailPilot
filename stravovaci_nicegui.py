@@ -72,7 +72,7 @@ from credential_store import (
     set_password,
     write_config,
 )
-from pocty_nastaveni import peek_client_categories
+from pocty_nastaveni import all_client_categories, peek_client_categories
 from planovac import (
     ACTION_CLOSING,
     ACTION_CUSTOM,
@@ -159,6 +159,7 @@ from stravovaci_sestava import (
     ConfigError,
     create_pdf,
     fetch_report,
+    available_meal_types,
     load_config,
     peek_jidelna_period,
 )
@@ -422,7 +423,9 @@ class NiceGuiApp:
         self.connection_name = "Databáze není připojena"
         self.connection_details = "Kliknutím otevřete TEST připojení"
         self.categories: list[tuple[str, str]] = []
-        self.selected_categories: set[str] = set()
+        self.all_categories = all_client_categories(self.raw)
+        self.selected_categories: set[str] = set(peek_client_categories(self.raw))
+        self._connection_password: str | None = None
         self.z17_selected_categories: set[str] = set(
             peek_z17_ui(self.raw)["povolene_kategorie"]
         )
@@ -811,22 +814,89 @@ class NiceGuiApp:
             element.on("change", self.invalidate_connection)
 
     def _build_category_panel(self) -> None:
-        """Kompaktní výběr kategorií: počet, tlačítko a stručný přehled."""
+        """Ve veřejném Denním stavu je výběr kategorií pouze pro čtení."""
         with ui.row().classes("items-center gap-2 no-wrap"):
             w.field_label(
                 "Kategorie",
-                "Do denního stavu a do --poctyemailem jdou jen zvolené kategorie.",
+                "Změnit lze v Administraci → Kategorie denního stavu.",
             )
             self.daily_expansion_label = ui.label(
                 self._daily_category_caption()
             ).classes("count-badge")
-            ui.button(
-                "Změnit výběr",
-                icon="checklist",
-                on_click=self.open_daily_category_dialog,
-            ).props("outline dense no-caps")
-        self.daily_category_list = ui.row().classes("chip-row w-full")
+
+    def _build_category_settings_panel(self) -> None:
+        """Filtrovat kategorie smí pouze správce. Defaultně jsou všechny."""
+        w.section_header(
+            "Kategorie denního stavu",
+            "Výchozí jsou všechny kategorie z databáze. Změna ovlivní "
+            "také automatické odesílání denních počtů.",
+            "checklist",
+        )
+        with w.card():
+            self.category_mode = ui.radio(
+                {
+                    "all": "Všechny kategorie (doporučeno)",
+                    "selected": "Jen vybrané kategorie",
+                },
+                value="all" if self.all_categories else "selected",
+            ).props("inline dense")
+            with ui.column().classes("w-full gap-1") as self.category_settings_custom:
+                with w.toolbar():
+                    self.admin_category_count = ui.label(
+                        self._daily_category_caption()
+                    ).classes("count-badge")
+                    ui.button(
+                        "Změnit výběr", icon="checklist",
+                        on_click=self.open_daily_category_dialog,
+                    ).props("outline dense no-caps")
+                self.daily_category_list = ui.row().classes("chip-row w-full")
+            self.category_mode.on(
+                "update:model-value", lambda: self._refresh_category_settings_panel()
+            )
+            self._refresh_category_settings_panel()
+            with w.toolbar():
+                ui.button(
+                    "Uložit nastavení kategorií", icon="save",
+                    on_click=self.save_category_settings,
+                ).props("no-caps unelevated")
+                self.category_settings_status = ui.label("").classes("inline-status")
+
+    def _refresh_category_settings_panel(self) -> None:
+        if hasattr(self, "category_settings_custom"):
+            selected = str(self.category_mode.value) == "selected"
+            self.category_settings_custom.set_visibility(selected)
         self._render_daily_selection()
+
+    def save_category_settings(self) -> None:
+        if not self.admin_unlocked:
+            ui.notify("Nejprve odemkněte Administraci.", type="warning")
+            return
+        all_categories = str(self.category_mode.value) == "all"
+        chosen = self._selected_category_order()
+        if not all_categories and not chosen:
+            self.category_settings_status.set_text(
+                "Vyberte alespoň jednu kategorii; případně použijte Všechny."
+            )
+            return
+        raw = sanitize_config(self.raw)
+        block = raw.get("poctyemailem")
+        block = dict(block) if isinstance(block, dict) else {}
+        block["vsechny_kategorie"] = all_categories
+        block["povolene_kategorie"] = chosen
+        raw["poctyemailem"] = block
+        raw["povolene_kategorie"] = chosen
+        try:
+            write_config(self.config_path, raw)
+        except OSError as exc:
+            self.category_settings_status.set_text(f"Uložení selhalo: {exc}")
+            return
+        self.raw = raw
+        self.all_categories = all_categories
+        self._render_daily_selection()
+        self.category_settings_status.set_text(
+            "Uloženo: všechny kategorie." if all_categories
+            else f"Uloženo: {len(chosen)} vybraných kategorií."
+        )
 
     def _build_daily_panel(self) -> None:
         with ui.column().classes("ui-block w-full"):
@@ -1559,6 +1629,7 @@ class NiceGuiApp:
 
     ADMIN_SECTIONS = (
         ("db", "Databáze", "storage"),
+        ("categories", "Kategorie denního stavu", "checklist"),
         ("mail", "E-maily", "mail"),
         ("scheduler", "Plánovač", "schedule"),
         ("mail_settings", "Nastavení odesílání", "outgoing_mail"),
@@ -1580,6 +1651,8 @@ class NiceGuiApp:
             ).classes("flex-grow min-w-0"):
                 with ui.tab_panel("db"):
                     self._build_db_panel()
+                with ui.tab_panel("categories"):
+                    self._build_category_settings_panel()
                 with ui.tab_panel("mail"):
                     self._build_mail_panel()
                 with ui.tab_panel("scheduler"):
