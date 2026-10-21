@@ -21,6 +21,9 @@ from services.jidelnasql_warning import (
     peek_warning_settings, show_jidelnasql_mail_warning,
 )
 from services.web_mail_task_store import load_tasks, task_file
+from services.web_mail_settings import load_settings, settings_path
+from services.web_mail_smtp import smtp_send
+from services.jidelnasql_warning import JidelnaWarningSettings
 from services.web_mail_tasks import target_date
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
@@ -35,19 +38,27 @@ def request_stop(*_):
 
 def deliver_daily(config_path: Path, task, report_date: date) -> None:
     raw = read_saved_settings(config_path)
-    sender = normalize_recipient(raw.get("mail_odesilatel"))
-    api_key = get_resend_api_key()
-    if not api_key:
-        raise ValueError("Chybí Resend API klíč.")
+    settings = load_settings(settings_path(config_path.parent))
     config = load_config(config_path, date_override=report_date.strftime("%d.%m.%Y"))
     report = fetch_report(config)
     pdf = create_pdf(config, report)
-    result = send_pdf_via_mailsender(
-        task.recipients, mail_subject(config.report_date),
-        str(raw.get("mail_text", "")), pdf, api_key=api_key, sender_email=sender,
-    )
-    LOG.info("Sent task=%s date=%s recipients=%s", task.id, report_date, result.recipients)
-
+    report_label = "Denní stav"
+    data = {"report": report_label, "date": report_date.strftime("%d.%m.%Y")}
+    subject = settings["subject_template"].format(**data)
+    body = settings["body_template"].format(**data)
+    if settings["transport"] == "smtp":
+        result = smtp_send(settings, task.recipients, subject, body, pdf)
+    else:
+        sender = normalize_recipient(settings["from_email"] or raw.get("mail_odesilatel"))
+        api_key = get_resend_api_key()
+        if not api_key:
+            raise ValueError("Chybí Resend API klíč.")
+        sent = send_pdf_via_mailsender(
+            task.recipients, subject, body, pdf,
+            api_key=api_key, sender_email=sender,
+        )
+        result = sent.recipients
+    LOG.info("Sent task=%s date=%s recipients=%s", task.id, report_date, result)
 
 def dispatch(config_path: Path, task, sent_on: date) -> None:
     # Never silently send the wrong report or assume calendar days are cooking days.
@@ -102,10 +113,16 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
             LOG.exception("Task %s failed", task.name)
             # The warning only adds information; it must not mask delivery errors.
             try:
-                settings = peek_warning_settings(read_saved_settings(config_path))
-                show_jidelnasql_mail_warning(
+                web_settings = load_settings(settings_path(config_path.parent))
+                settings = JidelnaWarningSettings(
+                    enabled=web_settings["dashboard_enabled"],
+                    template_path=Path(web_settings["dashboard_path"]),
+                )
+                warning_error = show_jidelnasql_mail_warning(
                     settings, message=f"MailPilot: neodeslána úloha {task.name}: {exc}"
                 )
+                if warning_error:
+                    LOG.error("Dashboard warning: %s", warning_error)
             except Exception:
                 LOG.exception("Cannot update JídelnaSQL dashboard")
             # Avoid rapid retry storms. Retry on next scheduled day until
