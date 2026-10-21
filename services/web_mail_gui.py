@@ -13,7 +13,8 @@ from uuid import uuid4
 from nicegui import ui
 
 from services.web_mail_task_store import load_tasks, save_tasks, task_file
-from services.web_mail_tasks import MailTask, next_send_at, target_date
+from services.web_mail_tasks import MailTask, next_send_at
+from services.web_mail_cooking_days import resolve_task_date
 
 REPORTS = {"daily": "Denní stav / počty", "meal_summary": "Souhrn počtu jídel"}
 DATE_MODES = {
@@ -22,9 +23,10 @@ DATE_MODES = {
 }
 
 
-def build_mail_tasks_panel(config_directory: Path) -> None:
+def build_mail_tasks_panel(config_directory: Path, config_path: Path | None = None) -> None:
     """Mount task management as a tab in the existing NiceGUI application."""
     path = task_file(Path(config_directory))
+    active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
     ui.label("E-mailové úlohy").classes("text-h6")
     ui.label(
         "Každá úloha má vlastní příjemce, sestavu, čas a cílové datum. "
@@ -56,12 +58,12 @@ def build_mail_tasks_panel(config_directory: Path) -> None:
                 upcoming = next_send_at(task, datetime.now())
                 if upcoming:
                     try:
-                        report_date = target_date(task, upcoming.date())
+                        report_date = resolve_task_date(active_config_path, task, upcoming.date())
                         ui.label(f"Další běh: {upcoming:%d.%m.%Y %H:%M}; sestava za {report_date:%d.%m.%Y}")
-                    except ValueError:
+                    except Exception as exc:
                         ui.label(
                             f"Další běh: {upcoming:%d.%m.%Y %H:%M}; "
-                            "datum sestavy vyžaduje kalendář varných dnů"
+                            f"datum sestavy nelze určit: {exc}"
                         )
                 with ui.row().classes("gap-2"):
                     ui.button("Upravit", on_click=lambda t=task: editor(t)).props("outline")
