@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from services.web_mail_settings import load_settings, settings_path
+from services.web_branding import WORKER_EXE_NAME
 
 def service_command(config_directory: Path, action: str) -> str:
     if action not in ("install", "start", "stop", "restart", "status"):
@@ -21,9 +22,9 @@ def service_command(config_directory: Path, action: str) -> str:
     base = [str(nssm)]
     if action == "install":
         if getattr(sys, "frozen", False):
-            worker = Path(sys.executable).with_name("MailPilot-Web-Worker.exe")
+            worker = Path(sys.executable).with_name(WORKER_EXE_NAME)
             if not worker.is_file():
-                raise ValueError("Chybí MailPilot-Web-Worker.exe vedle webové aplikace.")
+                raise ValueError(f"Chybí {WORKER_EXE_NAME} vedle webové aplikace.")
             command = [str(worker), "--config", str(config)]
         else:
             command = [sys.executable, "-m", "services.web_mail_worker", "--config", str(config)]
