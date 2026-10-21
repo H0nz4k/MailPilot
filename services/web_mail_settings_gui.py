@@ -78,6 +78,14 @@ def build_web_settings_panel(directory: Path) -> None:
         ui.label("Pozor: odstranění smaže i případné aktuální produkční upozornění.").classes("text-caption")
 
     with ui.card().classes("w-full"):
+        ui.label("Varné dny – JídelnaSQL").classes("text-subtitle1")
+        cooking_meal_type = ui.input(
+            "Typ služby v public.varnedny",
+            value=values["cooking_meal_type"],
+        ).classes("w-full")
+        ui.label("Například Oběd. A = vaří, N = nevaří; víkendy ani svátky se nefiltrují.").classes("text-caption")
+
+    with ui.card().classes("w-full"):
         ui.label("Odchozí e-mail").classes("text-subtitle1")
         transport = ui.select({"resend": "Resend API (stávající)", "smtp": "SMTP server"},
                               label="Způsob odesílání", value=values["transport"]).classes("w-full")
@@ -96,6 +104,7 @@ def build_web_settings_panel(directory: Path) -> None:
     def save():
         data = dict(
             nssm_path=nssm.value.strip(), service_name=name.value.strip(),
+            cooking_meal_type=cooking_meal_type.value.strip(),
             dashboard_enabled=warning_on.value, dashboard_path=template.value.strip(),
             transport=transport.value, smtp_host=host.value.strip(),
             smtp_port=int(port.value), smtp_security=security.value,
