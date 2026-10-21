@@ -58,10 +58,10 @@
   "datum": "05.08.2026",
   "jazyk_jidelnicku": "česky",
   "cislo_jidelnicku": 1,
-  "pdf_vystup": "vystup/MailPilot_{datum}.pdf",
+  "pdf_vystup": "vystup/DataShip_{datum}.pdf",
   "pdf_orientace": "na_vysku",
   "pdf_velikost_dat": 8.5,
-  "pdf_velikost_popisku": 9.0,
+  "pdf_velikost_popisku": 9,
   "pdf_tucne": false,
   "ui_layout": "compact",
   "ui_velikost_textu": "stredni",
@@ -79,7 +79,11 @@
   "mail_jen_varne_dny": false,
   "mail_odesilatel": "podpora@altisima.cz",
   "uzaverka": {
-    "sestavy": ["fksp", "stravovaci_arch", "rekapitulace"],
+    "sestavy": [
+      "fksp",
+      "stravovaci_arch",
+      "rekapitulace"
+    ],
     "stravovaci_arch": "StravovaciArch",
     "stravovaci_arch_hromadne": true,
     "rekapitulace": "R",
@@ -102,11 +106,20 @@
       "0114": [],
       "0114a": []
     },
-    "doplnkova_v_ramci_vyhlasky": ["0102", "0103", "0112"],
+    "doplnkova_v_ramci_vyhlasky": [
+      "0102",
+      "0103",
+      "0112"
+    ],
     "vystup": "vystup/z17/{rok}",
     "vsechny_kategorie": true,
     "povolene_kategorie": [],
     "mail_prijemci": [],
     "mail_text": "Dobrý den,\n\nv příloze zasíláme podklad Z 17-01."
-  }
+  },
+  "poctyemailem": {
+    "vsechny_kategorie": true
+  },
+  "seznam_stravniku": true,
+  "typ_stravy_denne": null
 }
