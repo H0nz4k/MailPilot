@@ -11,3 +11,6 @@ planovac.json
 dist/
 build/
 screenshots/
+.venv-web/
+dist-web/
+dist-web-worker/
