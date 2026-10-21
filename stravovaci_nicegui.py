@@ -116,6 +116,7 @@ from services.web_branding import (
 )
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
+from services.web_report_output import manual_pdf_path
 from ui_theme import (
     DEFAULT_UI_LAYOUT,
     DEFAULT_UI_TEMPLATE,
@@ -2828,6 +2829,7 @@ class NiceGuiApp:
             return
         try:
             categories = self._manual_daily_categories()
+            allowed = tuple(self._allowed_category_order())
             await self._persist_settings()
         except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
             ui.notify(str(exc), type="negative", position="top")
@@ -2838,7 +2840,7 @@ class NiceGuiApp:
         self.set_status("Probíhá tvorba PDF.")
         try:
             path = await run.io_bound(
-                self._create_pdf, self._selected_daily_meal_type(), categories
+                self._create_pdf, self._selected_daily_meal_type(), categories, allowed
             )
         except Exception as exc:
             self.pdf_status.set_text(f"Vytvoření PDF selhalo: {exc}")
@@ -2865,6 +2867,7 @@ class NiceGuiApp:
         self,
         meal_type: str | None = None,
         categories: tuple[str, ...] | None = None,
+        allowed_categories: tuple[str, ...] | None = None,
     ) -> Path:
         config = load_config(self.config_path)
         config = replace(
@@ -2873,7 +2876,11 @@ class NiceGuiApp:
             categories=categories if categories is not None else config.categories,
         )
         report = fetch_report(config)
-        return create_pdf(config, report)
+        output_path = (
+            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type)
+            if categories is not None and allowed_categories is not None else None
+        )
+        return create_pdf(config, report, output_path=output_path)
 
     async def generate_z17(self) -> None:
         if not self.connection_ok:
@@ -2956,6 +2963,7 @@ class NiceGuiApp:
         try:
             self._flush_mail_editor()
             categories = self._manual_daily_categories()
+            allowed = tuple(self._allowed_category_order())
             daily = self.mail_by_function[FUNCTION_DAILY]
             recipients = normalize_recipients(daily["prijemci"])
             api_key = await self._persist_settings(require_api_key=True)
@@ -2981,6 +2989,7 @@ class NiceGuiApp:
                 bool(daily["jen_varne_dny"]),
                 self._selected_daily_meal_type(),
                 categories,
+                allowed,
             )
         except Exception as exc:
             self.mail_status.set_text(f"Odeslání selhalo: {exc}")
@@ -3021,6 +3030,7 @@ class NiceGuiApp:
         only_cooking_days: bool,
         meal_type: str | None = None,
         categories: tuple[str, ...] | None = None,
+        allowed_categories: tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
         config = load_config(self.config_path)
         config = replace(
@@ -3033,7 +3043,11 @@ class NiceGuiApp:
             return {"skipped": True, "message": cooking_status_message(statuses)}
 
         report = fetch_report(config)
-        path = create_pdf(config, report)
+        output_path = (
+            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type)
+            if categories is not None and allowed_categories is not None else None
+        )
+        path = create_pdf(config, report, output_path=output_path)
         dispatch = send_pdf_via_mailsender(
             recipients,
             mail_subject(config.report_date),
