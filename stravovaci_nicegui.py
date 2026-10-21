@@ -426,7 +426,8 @@ class NiceGuiApp:
         self.connection_details = "Kliknutím otevřete TEST připojení"
         self.categories: list[tuple[str, str]] = []
         self.all_categories = all_client_categories(self.raw)
-        self.selected_categories: set[str] = set(peek_client_categories(self.raw))
+        self.allowed_categories: set[str] = set(peek_client_categories(self.raw))
+        self.selected_categories: set[str] = set()
         self._connection_password: str | None = None
         self.z17_selected_categories: set[str] = set(
             peek_z17_ui(self.raw)["povolene_kategorie"]
@@ -540,7 +541,11 @@ class NiceGuiApp:
     def _build_topbar(self) -> None:
         """Kompaktní hlavička: DataShip | provozovna | stav DB | období | Administrace."""
         with ui.element("div").classes("app-topbar no-wrap"):
-            with ui.row().classes("brand-mark items-center no-wrap shrink-0"):
+            with ui.row().classes(
+                "brand-mark items-center no-wrap shrink-0 cursor-pointer"
+            ).on("click", self.go_home).props(
+                'role="link" tabindex="0" aria-label="DataShip – hlavní obrazovka"'
+            ) as self.brand_home:
                 ui.icon(BRAND_ICON, size="1.25rem")
                 ui.label(APP_TITLE).classes("app-title")
                 ui.label(APP_VERSION).classes("ui-help")
@@ -572,7 +577,13 @@ class NiceGuiApp:
                 .classes("shrink-0")
             )
             self.lock_admin_button.set_visibility(False)
+            self.brand_home.on("keydown.enter", self.go_home)
+            self.brand_home.on("keydown.space", self.go_home)
             self._build_admin_dialog()
+
+    def go_home(self) -> None:
+        """Logo vždy vrací na hlavní obrazovku bez změny admin oprávnění."""
+        self.tabs.value = "daily"
 
     def _build_workspace(self) -> None:
         """Navigace a obsah. Umístění navigace řídí CSS podle zvolené šablony."""
@@ -816,22 +827,27 @@ class NiceGuiApp:
             element.on("change", self.invalidate_connection)
 
     def _build_category_panel(self) -> None:
-        """Ve veřejném Denním stavu je výběr kategorií pouze pro čtení."""
-        with ui.row().classes("items-center gap-2 no-wrap"):
+        """Uživatel vybírá podmnožinu kategorií povolených správcem."""
+        with ui.row().classes("items-center gap-2 flex-wrap"):
             w.field_label(
                 "Kategorie",
-                "Změnit lze v Administraci → Kategorie denního stavu.",
+                "Vybírejte z kategorií povolených správcem v Administraci.",
             )
             self.daily_expansion_label = ui.label(
                 self._daily_category_caption()
             ).classes("count-badge")
+            ui.button(
+                "Změnit výběr",
+                icon="checklist",
+                on_click=self.open_daily_category_dialog,
+            ).props("outline dense no-caps")
 
     def _build_category_settings_panel(self) -> None:
         """Filtrovat kategorie smí pouze správce. Defaultně jsou všechny."""
         w.section_header(
-            "Kategorie denního stavu",
-            "Výchozí jsou všechny kategorie z databáze. Změna ovlivní "
-            "také automatické odesílání denních počtů.",
+            "Povolené kategorie",
+            "Správce určuje, které kategorie smí běžný uživatel vybrat. "
+            "Výchozí jsou všechny z databáze. Stejný seznam platí pro automatický export.",
             "checklist",
         )
         with w.card():
@@ -849,7 +865,7 @@ class NiceGuiApp:
                     ).classes("count-badge")
                     ui.button(
                         "Změnit výběr", icon="checklist",
-                        on_click=self.open_daily_category_dialog,
+                        on_click=self.open_allowed_category_dialog,
                     ).props("outline dense no-caps")
                 self.daily_category_list = ui.row().classes("chip-row w-full")
             self.category_mode.on(
@@ -881,7 +897,7 @@ class NiceGuiApp:
             return
         chosen = (
             [code for code, _ in self.categories] if all_categories and self.categories
-            else self._selected_category_order()
+            else self._allowed_category_order()
         )
         if not all_categories and not chosen:
             self.category_settings_status.set_text(
@@ -902,6 +918,8 @@ class NiceGuiApp:
             return
         self.raw = raw
         self.all_categories = all_categories
+        self.allowed_categories = set(chosen)
+        self.selected_categories = set(chosen)
         self._render_daily_selection()
         self.category_settings_status.set_text(
             "Uloženo: všechny kategorie." if all_categories
@@ -925,7 +943,7 @@ class NiceGuiApp:
                         value="__all__",
                         label="Typ stravy",
                     ).props("dense options-dense").classes("w-48")
-                    self.meal_type_select.set_visibility(False)
+                    # Volba služby musí zůstat viditelná i při jediném typu.
                 with ui.expansion(
                     "Pokročilé nastavení PDF", icon="tune"
                 ).props("dense dense-toggle").classes("w-full app-note"):
@@ -1017,7 +1035,7 @@ class NiceGuiApp:
         self.meal_type_select.value = (
             selected if selected in normalized else "__all__"
         )
-        self.meal_type_select.set_visibility(len(normalized) > 1)
+        self.meal_type_select.set_visibility(True)
         self.meal_type_select.update()
 
     def _build_closing_panel(self) -> None:
@@ -1372,20 +1390,18 @@ class NiceGuiApp:
                     chip.on("click", lambda _e=None, item=code: on_missing(item))
 
     def _daily_category_caption(self) -> str:
-        total = len(self.categories)
+        total = len(self._allowed_category_order())
         selected = len(self.selected_categories)
-        if self.all_categories:
-            return f"všechny · {total}" if total else "všechny · po TESTu"
-        if total:
-            return f"vybrané · {selected} / {total}"
-        return f"vybrané · {selected} · po TESTu"
+        if not self.categories:
+            return "po TESTu připojení"
+        return f"vybráno {selected} / {total} povolených"
 
     def _render_daily_selection(self) -> None:
         if hasattr(self, "daily_expansion_label"):
             self.daily_expansion_label.set_text(self._daily_category_caption())
         if hasattr(self, "admin_category_count"):
             self.admin_category_count.set_text(
-                f"{len(self.selected_categories)} / {len(self.categories)}"
+                f"{len(self.allowed_categories)} / {len(self.categories)}"
             )
         ordered = [
             code for code, _name in self.categories if code in self.selected_categories
@@ -1395,7 +1411,7 @@ class NiceGuiApp:
         self._render_selection_chips(
             getattr(self, "daily_category_list", None),
             options=self.categories,
-            selected=ordered,
+            selected=self._allowed_category_order(),
         )
 
     def _render_z17_selection(self) -> None:
@@ -1428,23 +1444,43 @@ class NiceGuiApp:
         )
 
     def open_daily_category_dialog(self) -> None:
-        if not self.admin_unlocked:
-            ui.notify("Výběr kategorií je pouze v Administraci.", type="warning")
-            return
-        if not self.categories:
-            ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
+        """Kterýkoli uživatel smí zvolit jen povolené kategorie."""
+        options = [
+            (code, name) for code, name in self.categories
+            if code in self.allowed_categories
+        ]
+        if not options:
+            ui.notify("Nejprve proveďte TEST připojení nebo nastavte povolené kategorie.", type="warning")
             return
         self._open_item_picker_dialog(
-            title="Zvolit kategorie",
-            options=self.categories,
-            selected=[
-                code for code, _name in self.categories if code in self.selected_categories
-            ],
+            title="Kategorie pro tuto sestavu",
+            options=options,
+            selected=[code for code, _ in options if code in self.selected_categories],
             on_confirm=self._apply_daily_categories,
         )
 
     def _apply_daily_categories(self, codes: list[str]) -> None:
-        self.selected_categories = set(codes)
+        self.selected_categories = set(codes) & self.allowed_categories
+        self._render_daily_selection()
+
+    def open_allowed_category_dialog(self) -> None:
+        """Globální omezení kategorií vyžaduje odemčeného správce."""
+        if not self.admin_unlocked:
+            ui.notify("Nejprve odemkněte Administraci.", type="warning")
+            return
+        if not self.categories:
+            ui.notify("Nejprve proveďte TEST připojení.", type="warning")
+            return
+        self._open_item_picker_dialog(
+            title="Povolené kategorie pro uživatele",
+            options=self.categories,
+            selected=[code for code, _ in self.categories if code in self.allowed_categories],
+            on_confirm=self._apply_allowed_categories,
+        )
+
+    def _apply_allowed_categories(self, codes: list[str]) -> None:
+        known = {code for code, _ in self.categories}
+        self.allowed_categories = set(codes) & known
         self._render_daily_selection()
 
     def open_z17_category_dialog(self) -> None:
@@ -2482,15 +2518,17 @@ class NiceGuiApp:
             "connect_timeout": 10,
         }
 
-    def _selected_category_order(self) -> list[str]:
+    def _allowed_category_order(self) -> list[str]:
         if self.categories:
-            return [code for code, _name in self.categories if code in self.selected_categories]
-        configured = peek_client_categories(self.raw)
-        if not configured:
-            configured = self.raw.get("povolene_kategorie", [])
-        if isinstance(configured, list):
-            return [str(code) for code in configured if str(code).strip()]
-        return []
+            return [code for code, _ in self.categories if code in self.allowed_categories]
+        return peek_client_categories(self.raw) if not self.all_categories else []
+
+    def _selected_category_order(self) -> list[str]:
+        # Never include a category outside the administrator's allowed set.
+        return [
+            code for code, _ in self.categories
+            if code in self.selected_categories and code in self.allowed_categories
+        ]
 
     def _selected_date(self) -> date:
         return parse_czech_date(self.date_input.value)
@@ -2507,11 +2545,9 @@ class NiceGuiApp:
         asyncio.create_task(self._reload_meal_types())
 
     def _collect_config(self) -> dict[str, Any]:
-        categories = self._selected_category_order()
-        if not self.all_categories and not categories:
-            raise ConfigError(
-                "V Administraci vyberte kategorie nebo zapněte režim Všechny."
-            )
+        allowed = self._allowed_category_order()
+        if not self.all_categories and not allowed:
+            raise ConfigError("Správce musí povolit alespoň jednu kategorii.")
         selected_date = self._selected_date()
         language = str(self.language_input.value or "").strip()
         output = str(self.pdf_output.value or "").strip()
@@ -2534,7 +2570,7 @@ class NiceGuiApp:
             pocty_block = {}
         pocty_block = dict(pocty_block)
         pocty_block["vsechny_kategorie"] = self.all_categories
-        pocty_block["povolene_kategorie"] = categories
+        pocty_block["povolene_kategorie"] = allowed
         try:
             closing_block = self._collect_closing_block()
         except ConfigError:
@@ -2557,7 +2593,7 @@ class NiceGuiApp:
         raw.update(
             {
                 "databaze": self._collect_database(),
-                "povolene_kategorie": categories,
+                "povolene_kategorie": allowed,
                 "poctyemailem": pocty_block,
                 "kategor_separ": bool(self.category_separation.value),
                 "dle_kategorii": bool(self.show_categories.value),
@@ -2664,10 +2700,12 @@ class NiceGuiApp:
     def populate_categories(self, categories: Sequence[tuple[str, str]]) -> None:
         self.categories = list(categories)
         configured_set = set(peek_client_categories(self.raw))
-        self.selected_categories = {
+        self.allowed_categories = {
             code for code, _name in self.categories
             if self.all_categories or code in configured_set
         }
+        # A new DB TEST resets a one-off choice to all allowed categories.
+        self.selected_categories = set(self.allowed_categories)
         known = {code for code, _name in self.categories}
         saved_z17 = set(peek_z17_ui(self.raw)["povolene_kategorie"])
         if saved_z17:
