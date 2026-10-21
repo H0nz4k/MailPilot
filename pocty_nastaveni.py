@@ -1,4 +1,10 @@
-"""Povolené kategorie klienta pro denní počty e-mailem (SCIO)."""
+"""Kategorie pro denní stav DataShip / automatické počty.
+
+Výchozí režim je VŠECHNY aktuální kategorie z public.kategor.
+Staré seznamy (povolene_kategorie) nemohou nepozorovaně omezit součet.
+Výběrový filtr se uplatní jedině po výslovném uložení v Administraci,
+kdy poctyemailem.vsechny_kategorie == false.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +13,21 @@ from typing import Any
 from stravovaci_sestava import ConfigError
 
 
+def all_client_categories(raw: dict[str, Any]) -> bool:
+    """Výchozí režim ALL platí i při migraci starého config.json."""
+    block = raw.get("poctyemailem")
+    if block is not None and not isinstance(block, dict):
+        raise ConfigError("'poctyemailem' musí být JSON objekt.")
+    flag = block.get("vsechny_kategorie") if isinstance(block, dict) else None
+    if flag is None:
+        return True
+    if not isinstance(flag, bool):
+        raise ConfigError("'poctyemailem.vsechny_kategorie' musí být true/false.")
+    return flag
+
+
 def peek_client_categories(raw: dict[str, Any]) -> list[str]:
-    """Vrátí uložený výběr klienta, i když je ještě prázdný."""
+    """Vrátí uložený historický seznam pro případ zapnutí vlastního výběru."""
     source = _category_source(raw)
     if not isinstance(source, list):
         return []
@@ -23,35 +42,17 @@ def peek_client_categories(raw: dict[str, Any]) -> list[str]:
 
 
 def parse_client_categories(raw: dict[str, Any]) -> tuple[str, ...]:
-    """Vrátí neprázdnou podmnožinu kategorií, kterou si klient sám povolil.
-
-    Uzávěrka má vlastní přepínač ``uzaverka.vsechny_kategorie`` a tento seznam
-    ignoruje. Počty e-mailem nesmí skrytě přepnout na všechny kategorie.
-    """
-    block = raw.get("poctyemailem")
-    if block is None:
-        block = {}
-    if not isinstance(block, dict):
-        raise ConfigError("'poctyemailem' musí být JSON objekt.")
-    if block.get("vsechny_kategorie") is True:
-        raise ConfigError(
-            "Počty e-mailem nesmí použít všechny kategorie. "
-            "Klient musí v záložce Kategorie vybrat povolenou podmnožinu."
-        )
-
+    """Prázdná tuple = VŠECHNY kategorie získané přímo z DB v čase sestavy."""
+    if all_client_categories(raw):
+        return ()
     source = _category_source(raw)
-    key = (
-        "poctyemailem.povolene_kategorie"
-        if isinstance(block, dict) and "povolene_kategorie" in block
-        else "povolene_kategorie"
-    )
     if not isinstance(source, list) or not source:
         raise ConfigError(
-            f"'{key}' musí být neprázdné JSON pole kategorií, "
-            "které si klient povolil pro odeslání počtů."
+            "Pro režim 'Jen vybrané kategorie' vyberte alespoň jednu kategorii "
+            "v Administraci → Kategorie denního stavu."
         )
     if not all(isinstance(item, str) and item.strip() for item in source):
-        raise ConfigError(f"Každá položka v '{key}' musí být neprázdný text.")
+        raise ConfigError("Povolené kategorie musí být neprázdné texty.")
     return tuple(dict.fromkeys(item.strip() for item in source))
 
 
