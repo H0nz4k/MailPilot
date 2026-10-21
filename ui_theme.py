@@ -1083,18 +1083,30 @@ html.nav-side .app-nav .q-tab--active,
 }
 
 .admin-nav {
-    width: 172px;
-    min-width: 172px;
-    padding: 6px;
+    width: 246px;
+    min-width: 246px;
+    padding: 8px;
     border-right: 1px solid var(--app-separator);
 }
 
-@media (max-width: 1240px) {
-    .admin-nav {
-        width: 52px;
-        min-width: 52px;
-    }
+/* Dlouhé názvy jako Nastavení odesílání se nesmí ořezávat. */
+.admin-nav .q-tab {
+    padding: 0 10px;
+}
+.admin-nav .q-tab__content {
+    min-width: 0;
+}
+.admin-nav .q-tab__label {
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
 
+@media (max-width: 740px) {
+    .admin-nav {
+        width: 58px;
+        min-width: 58px;
+    }
     .admin-nav .q-tab__label {
         display: none;
     }
