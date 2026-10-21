@@ -1,4 +1,4 @@
-"""Standalone PyInstaller entrypoint for the independent MailPilot web scheduler."""
+"""Standalone PyInstaller entrypoint for the independent DataShip web scheduler."""
 from __future__ import annotations
 
 from multiprocessing import freeze_support
