@@ -2,6 +2,22 @@
 
 Implementace schváleného konceptu ui-ux-pro-max do existující NiceGUI aplikace.
 
+### Úprava hustoty a kontrola chybějících počtů (21. 10. 2026)
+
+Pracovní plocha má nejvýše 1240 px, kompaktnější hlavičku, menší mezery, nižší tlačítka přehledů a tabulku s 26px řádky. Horní slogan a velká pomocná karta byly odstraněny. Kategorie zůstávají všechny viditelné, písmo a přiblížení nejsou zmenšeny. Dotykové ovládání zachovává větší cíle.
+
+Referenční tisk pro 21. 10. 2026 ukazuje 627 obědů, 36 snídaní a 32 večeří, celkem 695 porcí. Zachycený DataShip souhrn obsahuje 525 porcí a nulu u Integrované školy. Rozdíl 170 odpovídá právě jejím 102 obědům, 36 snídaním a 32 večeřím.
+
+Denní SQL zatím používá `prihlas`; uzávěrkové SQL pracuje i s hromadnými objednávkami `prihlasn`. Než lze bezpečně doplnit rozpad hromadných objednávek do menu 1–9, je potřeba ověřit jejich skutečnou strukturu. Tato úprava UI proto sama neprohlašuje chybu počtů za vyřešenou.
+
+Z kořene repozitáře v Git Bash spusťte čtecí diagnostiku:
+
+```bash
+./.venv-web/Scripts/python.exe scripts/inspect_daily_counts.py --date 21.10.2026
+```
+
+Použije stejnou přednost provozních konfigurací jako vývojový spouštěč, nastaví SQL transakci pouze pro čtení a vypíše strukturu `prihlasn`, denní počty přes existující databázovou funkci a případná pole obsahující `menu`. Nevypisuje heslo ani jména strávníků. Výstup slouží k ověření formátu hromadných přihlášek, nikoliv ke změně databáze.
+
 ## Co se změnilo
 
 - Denní stav má formulář s přehledy vlevo a souhrn skutečných počtů porcí vpravo. Na menších obrazovkách se obsah skládá do sloupce.

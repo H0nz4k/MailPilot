@@ -29,9 +29,7 @@ class DailyDesignMixin:
         with ui.column().classes("ui-block ds-daily w-full"):
             with ui.row().classes("ds-page-heading w-full items-center justify-between"):
                 with ui.column().classes("gap-1"):
-                    ui.label("SESTAVY POD KONTROLOU").classes("ds-eyebrow")
                     ui.label("Denní stav").classes("ds-page-title").props('role="heading" aria-level="1"')
-                    ui.label("Správné porce. Přehledné sestavy. Každý den.").classes("ds-page-subtitle")
             self._build_daily_overview()
             with ui.element("div").classes("ds-daily-grid"):
                 with w.card().classes("ds-editor"):
@@ -39,12 +37,12 @@ class DailyDesignMixin:
                         ui.label("Moje přehledy").classes("app-heading")
                         self.daily_profile_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
                     self.daily_profile_choices = ui.row().classes("ds-profile-choices w-full")
-                    self.daily_profile_name = ui.input("Název přehledu", value="Denní přehled").props("outlined maxlength=80").classes("w-full")
+                    self.daily_profile_name = ui.input("Název přehledu", value="Denní přehled").props("outlined dense maxlength=80").classes("w-full")
                     self.daily_profile_name.on_value_change(lambda _e: self._mark_daily_dirty())
                     with ui.element("div").classes("ds-daily-fields"):
                         self._build_date_field()
                         self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
-                        self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined options-dense").classes("w-full")
+                        self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined dense options-dense").classes("w-full")
                         self.meal_type_select.on_value_change(lambda _e: self._daily_filters_changed())
                     self._build_category_panel()
                     self.daily_category_grid = ui.element("div").classes("ds-category-grid")
@@ -70,9 +68,7 @@ class DailyDesignMixin:
                             {"name": "portions", "label": "Porce", "field": "portions", "align": "right"},
                         ], rows=[], row_key="code").props('flat dense hide-bottom wrap-cells aria-label="Souhrn počtu porcí podle kategorií"').classes("w-full ds-summary-table")
                         self.daily_summary_status = ui.label("Souhrn se načte po úspěšném TESTu připojení.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
-                    with w.card().classes("ds-next-step"):
-                        ui.label("Každý přehled může mít vlastní úlohu").classes("app-label")
-                        ui.label("Samostatné kategorie, příjemci i čas odesílání.").classes("ui-help")
+                    with ui.row().classes("ds-next-step w-full"):
                         ui.button("E-mailové úlohy", icon="schedule_send", on_click=lambda: setattr(self.tabs, "value", "mail_tasks")).props("flat no-caps")
             self._build_pdf_panel()
         self._render_daily_profile_choices()
@@ -187,7 +183,7 @@ class DailyDesignMixin:
                         ui.label("Kategorie se zobrazí po TESTu připojení.").classes("ui-help")
                     for code, name in options:
                         self.daily_checkboxes[code] = ui.checkbox(name or code, value=code in self.selected_categories,
-                            on_change=lambda e, c=code: self._toggle_daily_category(c, bool(e.value))).classes("ds-category")
+                            on_change=lambda e, c=code: self._toggle_daily_category(c, bool(e.value))).props("dense").classes("ds-category")
             else:
                 for code, checkbox in self.daily_checkboxes.items():
                     checkbox.value = code in self.selected_categories
