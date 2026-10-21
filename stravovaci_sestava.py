@@ -711,27 +711,50 @@ def fetch_report(config: AppConfig) -> ReportData:
 
 
 def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[str, ...]:
-    """Distinct meal types on selected date from public.prihlas (read-only)."""
+    """Read meal types for the month from JídelnaSQL, not only that day's orders.
+
+    Even when only one type was ordered today, an operator must still be
+    able to select a different configured service type. Missing orders
+    yield a valid zero-portion report.
+    """
     try:
         import psycopg
-        from psycopg import sql
     except ImportError as exc:
         raise RuntimeError("Chybí balíček psycopg.") from exc
-    query = sql.SQL("""
-        SELECT DISTINCT BTRIM(p.typsluzby) AS typ
-        FROM public.prihlas AS p
-        JOIN public.stravnik AS s ON s.evidcislo = p.stravnik
-        JOIN public.kategor AS k ON BTRIM(k.oznaceni) = BTRIM(s.kategorie)
-        WHERE p.rok = %s
-          AND p.mesic = %s
-          AND p.{day_column} ~ '^[1-9]$'
-          AND COALESCE(s.deleted, false) = false
-          AND NULLIF(BTRIM(p.typsluzby), '') IS NOT NULL
+
+    query = """
+        SELECT DISTINCT typ
+        FROM (
+            SELECT BTRIM(p.typsluzby) AS typ
+            FROM public.prihlas AS p
+            WHERE p.rok = %s AND p.mesic = %s
+            UNION
+            SELECT BTRIM(v.typsluzby) AS typ
+            FROM public.varnedny AS v
+            WHERE v.rok = %s AND v.mesic = %s
+            UNION
+            SELECT BTRIM(j.typstravy) AS typ
+            FROM public.jidelnicek AS j
+            WHERE j.datum >= %s AND j.datum < %s
+        ) AS typy
+        WHERE NULLIF(typ, '') IS NOT NULL
         ORDER BY typ
-    """).format(day_column=sql.Identifier(f"d{report_date.day:02d}"))
+    """
+    month_start = report_date.replace(day=1)
+    next_month = (
+        date(month_start.year + 1, 1, 1) if month_start.month == 12
+        else date(month_start.year, month_start.month + 1, 1)
+    )
     with psycopg.connect(**database) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(query, (report_date.year, report_date.month))
+            cursor.execute(
+                query,
+                (
+                    report_date.year, report_date.month,
+                    report_date.year, report_date.month,
+                    month_start, next_month,
+                ),
+            )
             return tuple(row[0] for row in cursor.fetchall())
 
 
