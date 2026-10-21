@@ -25,24 +25,28 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertEqual(gui.peek_ui_text_size({}), "stredni")
         self.assertEqual(gui.peek_ui_text_size({"ui_velikost_textu": "velka"}), "velka")
         self.assertEqual(gui.peek_ui_text_size({"ui_velikost_textu": "obri"}), "stredni")
-        self.assertEqual(gui.UI_TEXT_SIZE_PX["text"]["mala"], 13)
+        self.assertEqual(gui.UI_TEXT_SIZE_PX["text"]["mala"], 14)
         self.assertEqual(gui.UI_TEXT_SIZE_PX["nadpis"]["extra"], 22)
-        self.assertEqual(gui.UI_TEXT_SIZE_PX["popis"]["stredni"], 12)
+        self.assertEqual(gui.UI_TEXT_SIZE_PX["popis"]["stredni"], 13)
         appearance = gui.peek_ui_appearance(
             {
                 "ui_velikost_textu": "mala",
                 "ui_velikost_nadpisu": "velka",
                 "ui_velikost_popisu": "extra",
-                "ui_barevne_schema": "tmave",
+                "ui_barevne_schema": "svestkova",
                 "ui_zvyrazneni_bloku": True,
             }
         )
         self.assertEqual(appearance["text"], "mala")
         self.assertEqual(appearance["nadpis"], "velka")
         self.assertEqual(appearance["popis"], "extra")
-        self.assertEqual(appearance["schema"], "tmave")
+        self.assertEqual(appearance["schema"], "svestkova")
         self.assertTrue(appearance["zvyrazneni"])
-        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "neon"}), "svetle")
+        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "neon"}), "horcicova")
+        # Dříve uložená schémata se bezpečně převedou na výchozí.
+        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "tmave"}), "horcicova")
+        self.assertEqual(gui.peek_ui_theme({"ui_barevne_schema": "svetle"}), "horcicova")
+        self.assertEqual(set(gui.UI_THEMES), {"horcicova", "svestkova", "kremova"})
         self.assertFalse(gui.peek_ui_blocks({}))
         self.assertTrue(gui.peek_ui_blocks({"ui_zvyrazneni_bloku": "ano"}))
         self.assertEqual(gui.peek_ui_zoom({}), 100)
@@ -61,8 +65,9 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertEqual(gui.peek_ui_density({"ui_hustota_poli": "husta"}), "husta")
         self.assertEqual(gui.appearance_config(appearance)["ui_zoom"], 100)
         self.assertEqual(gui.appearance_config(appearance)["ui_sablona"], "bezna")
-        self.assertIn("tmave", gui.UI_THEMES)
-        self.assertTrue(gui.UI_THEMES["tmave"]["dark"])
+        self.assertIn("horcicova", gui.UI_THEMES)
+        self.assertTrue(gui.UI_THEMES["horcicova"]["dark"])
+        self.assertFalse(gui.UI_THEMES["kremova"]["dark"])
         self.assertIn("blocks-emphasized", gui.UI_CSS)
         self.assertIn("--app-gap", gui.UI_CSS)
         self.assertIn("--app-panel-pad", gui.UI_CSS)

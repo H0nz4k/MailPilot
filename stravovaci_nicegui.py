@@ -171,6 +171,18 @@ from stravovaci_sestava import (
 
 
 APP_TITLE = BRAND_NAME
+# Uživatelský text stavu připojení (interní hodnoty zůstávají „DB OK“ / „BEZ SPOJENÍ“).
+CONNECTION_CAPTION_TEXT = {"DB OK": "Připojeno", "BEZ SPOJENÍ": "Bez spojení"}
+
+
+def connection_period_text(details: str) -> str:
+    """Z detailu připojení vytáhne „říjen 2026“ pro horní lištu; jinak prázdné."""
+    marker = "Aktuální měsíc:"
+    text = str(details or "")
+    if marker not in text:
+        return ""
+    value = text.split(marker, 1)[1].split("·", 1)[0]
+    return value.split("(", 1)[0].strip().capitalize()
 APP_VERSION = BRAND_STAGE
 NATIVE_WINDOW_SIZE = (1280, 860)
 SCHEDULER_HELP_TEXT = (
@@ -551,23 +563,30 @@ class NiceGuiApp(DailyDesignMixin):
                 'role="link" tabindex="0" aria-label="DataShip – hlavní obrazovka"'
             ) as self.brand_home:
                 ui.icon(BRAND_ICON, size="1.25rem")
-                ui.label(APP_TITLE).classes("app-title")
-                ui.label(APP_VERSION).classes("ui-help")
+                with ui.column().classes("gap-0 min-w-0"):
+                    with ui.row().classes("items-baseline gap-1 no-wrap"):
+                        ui.label(APP_TITLE).classes("app-title")
+                        ui.label(APP_VERSION).classes("ds-stage")
+                    self.connection_name_label = ui.label(self.connection_name).classes(
+                        "connection-name truncate"
+                    )
+            # Hlavní navigace je přímo v horní liště (podtržení aktivní položky).
+            self._build_navigation()
+            self.period_label = ui.label("").classes("ds-period shrink-0")
+            self.period_label.set_visibility(False)
             with ui.row().classes(
-                "db-chip items-center gap-2 no-wrap px-2 py-1 flex-grow min-w-0"
+                "db-chip ds-connection-pill items-center gap-2 no-wrap shrink-0"
             ).on("click", self.open_database_settings) as self.connection_strip:
                 self.connection_icon = ui.icon(
                     "cloud_off", size="1.05rem", color="negative"
                 )
                 self.connection_caption_label = ui.label(
-                    self.connection_caption
+                    CONNECTION_CAPTION_TEXT.get(self.connection_caption, self.connection_caption)
                 ).classes("connection-caption shrink-0")
-                self.connection_name_label = ui.label(self.connection_name).classes(
-                    "connection-name shrink-0"
-                )
                 self.connection_details_label = ui.label(
                     self.connection_details
                 ).classes("connection-details truncate")
+                self.connection_details_label.set_visibility(False)
                 self.connection_tooltip = ui.tooltip(self.connection_details)
             self.lock_admin_button = (
                 ui.button(icon="lock_open", on_click=self.lock_admin)
@@ -595,22 +614,21 @@ class NiceGuiApp(DailyDesignMixin):
     def toggle_color_mode(self) -> None:
         current = self._appearance_from_widgets()["schema"]
         if UI_THEMES[current]["dark"]:
-            target = getattr(self, "_last_light_schema", "svetle")
+            target = getattr(self, "_last_light_schema", "kremova")
         else:
             self._last_light_schema = current
-            target = "tmave"
+            target = "horcicova"
         self.ui_theme.value = target
         self.save_ui_appearance()
 
     def _build_workspace(self) -> None:
         """Navigace a obsah. Umístění navigace řídí CSS podle zvolené šablony."""
         with ui.element("div").classes("app-shell workspace w-full mt-1"):
-            self._build_navigation()
             self._build_panels()
 
     def _build_navigation(self) -> None:
-        with ui.tabs().props("inline-label dense no-caps").classes(
-            "app-nav"
+        with ui.tabs().props("inline-label no-caps indicator-color=primary").classes(
+            "app-nav ds-top-nav"
         ) as self.tabs:
             self.daily_tab = ui.tab("daily", label="Denní stav", icon="today")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
@@ -1041,47 +1059,59 @@ class NiceGuiApp(DailyDesignMixin):
         with ui.column().classes("ui-block w-full"):
             w.section_header(
                 "Uzávěrka",
-                "Volby pro DataShip.exe --zaverka_MMRRRR nebo --zaverka_am.",
+                "Měsíční sestavy, uložení a odeslání e-mailem.",
                 "print",
             )
-            with w.card():
-                with w.toolbar():
-                    w.field_label(
-                        "Generovat sestavy",
-                        "Zaškrtnuté sestavy se vytvoří při každé uzávěrce.",
-                    )
-                    selected = set(closing["sestavy"])
-                    self.closing_arch = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_ARCH],
-                        value=SESTAVA_ARCH in selected,
-                    ).props("dense")
-                    self.closing_fksp = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_FKSP],
-                        value=SESTAVA_FKSP in selected,
-                    ).props("dense")
-                    self.closing_recap = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_REKAPITULACE],
-                        value=SESTAVA_REKAPITULACE in selected,
-                    ).props("dense")
-                with w.toolbar():
+            with w.card().classes("ds-steps ds-narrow"):
+                with ui.row().classes("ds-step w-full no-wrap"):
+                    ui.label("1").classes("ds-step-num")
+                    with ui.column().classes("ds-step-body"):
+                        ui.label("Které sestavy vytvořit").classes("ds-section-title")
+                        selected = set(closing["sestavy"])
+                        with ui.element("div").classes("ds-toggle-cards"):
+                            self.closing_arch = ui.checkbox(
+                                REPORT_LABELS[SESTAVA_ARCH],
+                                value=SESTAVA_ARCH in selected,
+                            ).classes("ds-toggle-card")
+                            self.closing_fksp = ui.checkbox(
+                                REPORT_LABELS[SESTAVA_FKSP],
+                                value=SESTAVA_FKSP in selected,
+                            ).classes("ds-toggle-card")
+                            self.closing_recap = ui.checkbox(
+                                REPORT_LABELS[SESTAVA_REKAPITULACE],
+                                value=SESTAVA_REKAPITULACE in selected,
+                            ).classes("ds-toggle-card")
+                with ui.row().classes("ds-step w-full no-wrap"):
+                    ui.label("2").classes("ds-step-num")
+                    with ui.column().classes("ds-step-body"):
+                        ui.label("Co s nimi udělat").classes("ds-section-title")
+                        with ui.row().classes("ds-switch-row w-full items-center justify-between no-wrap"):
+                            with ui.column().classes("gap-0"):
+                                ui.label("Zabalit do jednoho souboru ZIP")
+                                ui.label("Snazší posílání a archivace.").classes("ui-help")
+                            self.closing_zip = ui.switch(value=bool(closing["zip"]))
+                        with ui.row().classes("ds-switch-row w-full items-center justify-between no-wrap"):
+                            with ui.column().classes("gap-0"):
+                                ui.label("Odeslat e-mailem")
+                                ui.label(
+                                    "Příjemce nastaví správce v Administraci → E-maily."
+                                ).classes("ui-help")
+                            self.closing_mail = ui.switch(value=bool(closing["odeslat_mail"]))
+                with ui.row().classes("ds-step w-full no-wrap"):
+                    ui.label("3").classes("ds-step-num")
+                    with ui.column().classes("ds-step-body"):
+                        ui.label("Hotovo").classes("ds-section-title")
+                        ui.label(
+                            "Nastavení se uloží samo. Uzávěrka proběhne podle "
+                            "tohoto nastavení při spuštění z Jídelny."
+                        ).classes("ui-help")
+                with ui.expansion("Pokročilé", icon="tune").classes("w-full app-note ds-advanced"):
                     self.closing_output = self._output_path_field(
                         "Složka pro uložení",
                         str(closing["vystup"]),
                         "Relativní cesta je vůči složce aplikace. {rok} a {mesic} "
                         "se za vybranou složku doplní, aby se měsíce nepřepisovaly.",
                         on_change=self.save_closing_settings,
-                    )
-                    self.closing_zip = ui.checkbox(
-                        "ZIP",
-                        value=bool(closing["zip"]),
-                    ).props("dense")
-                    self.closing_zip.tooltip("Zabalit sestavy do jednoho ZIP archivu.")
-                    self.closing_mail = ui.checkbox(
-                        "Odeslat e-mailem",
-                        value=bool(closing["odeslat_mail"]),
-                    ).props("dense")
-                    self.closing_mail.tooltip(
-                        "Příjemce nastavíte v Administraci → E-maily, funkce Uzávěrka."
                     )
                 self.closing_status = ui.label(
                     "Nastavení se ukládá automaticky."
@@ -1163,7 +1193,7 @@ class NiceGuiApp(DailyDesignMixin):
                 with w.toolbar():
                     w.field_label(
                         "Kategorie",
-                        "Jídelna spustí DataShip.exe --z17_RRRR se stejným výběrem.",
+                        "Stejný výběr se použije i při automatickém spuštění z Jídelny.",
                     )
                     self.z17_category_mode = ui.radio(
                         {"all": "Všechny", "selected": "Jen zvolené"},
@@ -2289,7 +2319,7 @@ class NiceGuiApp(DailyDesignMixin):
                     )
                     self.mail_subject_label = ui.label(
                         mail_subject(self._selected_date())
-                    ).classes("inline-status truncate")
+                    ).classes("inline-status truncate ds-hide")
                     ui.tooltip(
                         "Příjemce denního stavu přiřadíte v Administraci → E-maily."
                     )
@@ -2297,14 +2327,14 @@ class NiceGuiApp(DailyDesignMixin):
                 "Otevřít poslední", icon="open_in_new", on_click=self.open_last_pdf
             ).props("flat no-caps")
             self.open_pdf_button.disable()
+            self.send_button = ui.button(
+                "Vytvořit a odeslat", icon="send", on_click=self.send_mail
+            ).props("outline no-caps")
             self.generate_button = ui.button(
                 "Vytvořit PDF",
                 icon="picture_as_pdf",
                 on_click=self.generate_pdf,
-            ).props("outline no-caps")
-            self.send_button = ui.button(
-                "Vytvořit a odeslat", icon="send", on_click=self.send_mail
-            ).props("no-caps unelevated")
+            ).props("no-caps unelevated color=primary").classes("ds-primary-cta")
             self.send_button.disable()
 
     def _build_mail_panel(self) -> None:
@@ -2430,10 +2460,18 @@ class NiceGuiApp(DailyDesignMixin):
             self.mail_assign_status.set_text(f"Mail funkce {label} je uložený.")
 
     def set_status(self, message: str) -> None:
+        """Stav ukazuje jako krátký toast; trvalý pruh zůstává skrytý."""
         text = str(message or "").strip()
         self.status_label.set_text(text)
-        self.status_label.set_visibility(bool(text))
+        self.status_label.set_visibility(False)
         self.status_label.update()
+        if not text or text.startswith("Probíhá"):
+            return
+        lowered = text.lower()
+        if "nepodařil" in lowered or "nutné" in lowered or "chyb" in lowered:
+            ui.notify(text, type="warning", position="top", timeout=6000)
+        else:
+            ui.notify(text, type="positive", position="top", timeout=4000)
 
     def set_connection_display(
         self,
@@ -2457,7 +2495,13 @@ class NiceGuiApp(DailyDesignMixin):
             self.connection_strip.classes(remove="connection-ready")
             self.connection_icon.props("name=cloud_off color=negative")
 
-        self.connection_caption_label.set_text(self.connection_caption)
+        self.connection_caption_label.set_text(
+            CONNECTION_CAPTION_TEXT.get(self.connection_caption, self.connection_caption)
+        )
+        period = connection_period_text(self.connection_details) if connected else ""
+        if hasattr(self, "period_label"):
+            self.period_label.set_text(period)
+            self.period_label.set_visibility(bool(period))
         self.connection_name_label.set_text(self.connection_name)
         self.connection_details_label.set_text(self.connection_details)
         if hasattr(self, "connection_tooltip"):
@@ -2856,7 +2900,7 @@ class NiceGuiApp(DailyDesignMixin):
         else:
             self.last_pdf = path
             self.open_pdf_button.enable()
-            self.pdf_status.set_text(f"PDF vytvořeno: {path}")
+            self.pdf_status.set_text(f"PDF vytvořeno: {Path(path).name}")
             self._refresh_overview_tiles()
             self.set_status("PDF bylo vytvořeno a otevřeno.")
             try:
@@ -3021,10 +3065,9 @@ class NiceGuiApp(DailyDesignMixin):
                     f"{datetime.now().strftime('%d.%m.%Y %H:%M')} · "
                     f"{len(dispatch.recipients)} příjemců"
                 )
-                self.pdf_status.set_text(f"PDF vytvořeno: {path}")
+                self.pdf_status.set_text(f"PDF vytvořeno: {Path(path).name}")
                 self._refresh_overview_tiles()
                 self.set_status("PDF bylo vytvořeno a mail odeslán.")
-                ui.notify("Mail byl odeslán.", type="positive", position="top")
         finally:
             self.send_button.enable()
 

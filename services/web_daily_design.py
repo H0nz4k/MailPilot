@@ -31,7 +31,7 @@ class DailyDesignMixin:
                 with ui.column().classes("gap-1"):
                     ui.label("Denní stav").classes("ds-page-title").props('role="heading" aria-level="1"')
             self._build_daily_overview()
-            with ui.element("div").classes("ds-daily-grid"):
+            with ui.element("div").classes("ds-daily-grid ds-daily-single"):
                 with w.card().classes("ds-editor"):
                     with ui.row().classes("w-full items-center justify-between"):
                         ui.label("Moje přehledy").classes("app-heading")
@@ -45,31 +45,32 @@ class DailyDesignMixin:
                         self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined dense options-dense").classes("w-full")
                         self.meal_type_select.on_value_change(lambda _e: self._daily_filters_changed())
                     self._build_category_panel()
+                    ui.label("Skupiny strávníků").classes("ds-section-title")
                     self.daily_category_grid = ui.element("div").classes("ds-category-grid")
-                    ui.label("Každý přehled má vlastní výběr z kategorií povolených správcem.").classes("ui-help")
-                    with ui.expansion("Pokročilé nastavení PDF", icon="tune").classes("w-full app-note"):
+                    with ui.row().classes("ds-total-line w-full items-center justify-between no-wrap"):
+                        with ui.row().classes("items-baseline gap-2 no-wrap"):
+                            ui.label("Celkem").classes("ds-total-caption")
+                            self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem" aria-live="polite"')
+                            ui.label("porcí").classes("ds-total-caption")
+                        self._daily_show_counts = False
+                        self.daily_detail_toggle = ui.button("Zobrazit detail", on_click=self._toggle_daily_detail).props("flat no-caps dense").classes("ds-detail-toggle")
+                    self.daily_summary_status = ui.label("Souhrn se načte po úspěšném TESTu připojení.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
+                    with ui.expansion("Pokročilé nastavení PDF", icon="tune").classes("w-full app-note ds-advanced"):
                         self._build_pdf_settings_section()
                     for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list):
                         field.on_value_change(lambda _e: self._mark_daily_dirty())
                     with ui.row().classes("ds-editor-actions w-full justify-between"):
                         ui.button("Nový přehled", icon="add", on_click=self.new_daily_profile).props("flat no-caps")
                         ui.button("Uložit přehled", icon="bookmark_border", on_click=self.save_daily_profile).props("outline no-caps")
-                with ui.column().classes("w-full gap-4 min-w-0"):
-                    with w.card().classes("ds-summary"):
-                        with ui.row().classes("w-full items-center justify-between"):
-                            ui.label("Souhrn sestavy").classes("app-heading")
-                            ui.button(icon="refresh", on_click=self.refresh_daily_summary).props('flat round aria-label="Obnovit souhrn"')
-                        self.daily_summary_name = ui.label("Denní přehled").classes("ds-summary-name")
-                        self.daily_summary_meta = ui.label("").classes("ui-help")
-                        self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem"')
-                        ui.label("porcí celkem").classes("ui-help")
-                        self.daily_summary_table = ui.table(columns=[
-                            {"name": "name", "label": "Kategorie", "field": "name", "align": "left"},
-                            {"name": "portions", "label": "Porce", "field": "portions", "align": "right"},
-                        ], rows=[], row_key="code").props('flat dense hide-bottom wrap-cells aria-label="Souhrn počtu porcí podle kategorií"').classes("w-full ds-summary-table")
-                        self.daily_summary_status = ui.label("Souhrn se načte po úspěšném TESTu připojení.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
-                    with ui.row().classes("ds-next-step w-full"):
-                        ui.button("E-mailové úlohy", icon="schedule_send", on_click=lambda: setattr(self.tabs, "value", "mail_tasks")).props("flat no-caps")
+                # Souhrnná karta byla odstraněna; prvky zůstávají kvůli stávající logice.
+                with ui.column().classes("ds-summary-hidden") as summary_box:
+                    self.daily_summary_name = ui.label("Denní přehled").classes("ds-summary-name")
+                    self.daily_summary_meta = ui.label("").classes("ui-help")
+                    self.daily_summary_table = ui.table(columns=[
+                        {"name": "name", "label": "Kategorie", "field": "name", "align": "left"},
+                        {"name": "portions", "label": "Porce", "field": "portions", "align": "right"},
+                    ], rows=[], row_key="code").props("flat dense hide-bottom").classes("w-full ds-summary-table")
+                summary_box.set_visibility(False)
             self._build_pdf_panel()
         self._render_daily_profile_choices()
         self._render_daily_category_grid()
@@ -187,8 +188,28 @@ class DailyDesignMixin:
             else:
                 for code, checkbox in self.daily_checkboxes.items():
                     checkbox.value = code in self.selected_categories
+            self._daily_category_names = {code: name or code for code, name in options}
+            self._apply_daily_count_badges()
         finally:
             self._syncing_daily_checks = False
+
+    def _toggle_daily_detail(self) -> None:
+        self._daily_show_counts = not getattr(self, "_daily_show_counts", False)
+        self.daily_detail_toggle.set_text("Skrýt detail" if self._daily_show_counts else "Zobrazit detail")
+        self._apply_daily_count_badges()
+
+    def _apply_daily_count_badges(self) -> None:
+        """Volitelně ukáže počet porcí přímo ve štítku skupiny (nulové ztlumeně)."""
+        names = getattr(self, "_daily_category_names", {})
+        counts = getattr(self, "_daily_counts", {})
+        show = getattr(self, "_daily_show_counts", False)
+        for code, checkbox in getattr(self, "daily_checkboxes", {}).items():
+            name = names.get(code, code)
+            count = counts.get(code) if show else None
+            checkbox.set_text(name if count is None else f"{name} · {count}")
+            checkbox.classes(remove="ds-zero")
+            if count == 0:
+                checkbox.classes(add="ds-zero")
 
     def _toggle_daily_category(self, code: str, checked: bool) -> None:
         if self._syncing_daily_checks:
@@ -205,6 +226,8 @@ class DailyDesignMixin:
             return
         self._daily_summary_revision += 1
         self.daily_summary_total.set_text("—")
+        self._daily_counts = {}
+        self._apply_daily_count_badges()
         self.daily_summary_table.rows = []
         self.daily_summary_table.update()
         if self._daily_summary_timer is not None:
@@ -246,6 +269,8 @@ class DailyDesignMixin:
             row["portions"] += item.applications
         total = sum(item.portions for item in report.menus)
         self.daily_summary_total.set_text(f"{total:,}".replace(",", " "))
+        self._daily_counts = {code: row["portions"] for code, row in rows.items()}
+        self._apply_daily_count_badges()
         self.daily_summary_table.rows = list(rows.values())
         self.daily_summary_table.update()
         self.daily_summary_status.set_text(f"Aktuální data · {len(categories)} kategorií · {total} porcí")
