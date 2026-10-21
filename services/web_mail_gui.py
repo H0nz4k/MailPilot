@@ -120,7 +120,7 @@ def build_mail_tasks_panel(config_directory: Path) -> None:
                     try:
                         new = MailTask.from_dict({
                             "id": str(uuid4()) if duplicate or task is None else task.id,
-                            "name": name.value, "recipients": recipients.value,
+                            "name": name.value, "recipients": [address.strip() for address in recipients.value.replace("\n", ",").split(",") if address.strip()],
                             "report": report.value, "send_time": time.value,
                             "date_mode": mode.value, "day_offset": offset.value,
                             "fixed_date": fixed.value, "enabled": enabled.value,
