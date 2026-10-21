@@ -71,7 +71,7 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config.pdf_bold)
         self.assertEqual(
             config.pdf_output,
-            path.parent / "vystup" / "MailPilot_2026-08-05.pdf",
+            (path.parent / "vystup" / "MailPilot_2026-08-05.pdf").resolve(),
         )
 
     def test_poctyemailem_categories_override_root_list(self):
@@ -193,7 +193,7 @@ class ConfigTests(unittest.TestCase):
         config = load_config(path)
         self.assertEqual(
             config.pdf_output,
-            path.parent / "sestavy" / "seznam_05.08.2026.pdf",
+            (path.parent / "sestavy" / "seznam_05.08.2026.pdf").resolve(),
         )
 
         override = path.parent / "vlastni.pdf"
