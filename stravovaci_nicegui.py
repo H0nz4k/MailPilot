@@ -878,7 +878,10 @@ class NiceGuiApp:
                 "Nejprve proveďte TEST připojení k databázi."
             )
             return
-        chosen = self._selected_category_order()
+        chosen = (
+            [code for code, _ in self.categories] if all_categories and self.categories
+            else self._selected_category_order()
+        )
         if not all_categories and not chosen:
             self.category_settings_status.set_text(
                 "Vyberte alespoň jednu kategorii; případně použijte Všechny."
@@ -1004,6 +1007,9 @@ class NiceGuiApp:
             label = str(name).strip()
             if label:
                 normalized.setdefault(label.casefold(), label)
+        # A newer date may have been selected while the DB query was running.
+        if day != self._selected_date():
+            return
         options = {"__all__": "Všechny typy stravy", **normalized}
         selected = str(self.meal_type_select.value or "__all__")
         self.meal_type_select.options = options
@@ -2660,7 +2666,8 @@ class NiceGuiApp:
         self.categories = list(categories)
         configured_set = set(peek_client_categories(self.raw))
         self.selected_categories = {
-            code for code, _name in self.categories if code in configured_set
+            code for code, _name in self.categories
+            if self.all_categories or code in configured_set
         }
         known = {code for code, _name in self.categories}
         saved_z17 = set(peek_z17_ui(self.raw)["povolene_kategorie"])
