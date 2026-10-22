@@ -1936,29 +1936,36 @@ class NiceGuiApp(DailyDesignMixin):
                     appearance["hustota"],
                     "Výška vstupních polí a selectů.",
                 )
-                self.ui_heading_size = w.setting_select(
-                    "Nadpisy",
-                    UI_TEXT_SIZE_LABELS,
-                    appearance["nadpis"],
-                    "Velikost nadpisů sekcí.",
-                )
-                self.ui_text_size = w.setting_select(
-                    "Běžný text",
-                    UI_TEXT_SIZE_LABELS,
-                    appearance["text"],
-                    "Velikost hodnot, tlačítek a seznamů.",
-                )
-                self.ui_help_size = w.setting_select(
-                    "Popisy",
-                    UI_TEXT_SIZE_LABELS,
-                    appearance["popis"],
-                    "Velikost nápověd a stavových hlášek.",
-                )
-                self.ui_blocks = w.setting_switch(
-                    "Zvýraznit rámování",
-                    bool(appearance["zvyrazneni"]),
-                    "Orámuje sekce výrazněji a podbarví nadpisy.",
-                )
+            with w.form_grid(3):
+                with ui.column().classes("w-full gap-0"):
+                    self.ui_heading_size = w.setting_select(
+                        "Nadpisy", UI_TEXT_SIZE_LABELS, appearance["nadpis"],
+                        "Velikost nadpisů sekcí.",
+                    )
+                    self.ui_heading_bold = w.setting_switch(
+                        "Tučné nadpisy", appearance["tucne_nadpisy"],
+                    )
+                with ui.column().classes("w-full gap-0"):
+                    self.ui_text_size = w.setting_select(
+                        "Běžný text", UI_TEXT_SIZE_LABELS, appearance["text"],
+                        "Velikost hodnot, tlačítek a seznamů.",
+                    )
+                    self.ui_text_bold = w.setting_switch(
+                        "Tučný běžný text", appearance["tucny_text"],
+                    )
+                with ui.column().classes("w-full gap-0"):
+                    self.ui_help_size = w.setting_select(
+                        "Popisy", UI_TEXT_SIZE_LABELS, appearance["popis"],
+                        "Velikost popisků polí, nápověd a stavových hlášek.",
+                    )
+                    self.ui_help_bold = w.setting_switch(
+                        "Tučné popisy a nápověda", appearance["tucne_popisy"],
+                    )
+            self.ui_blocks = w.setting_switch(
+                "Zvýraznit rámování",
+                bool(appearance["zvyrazneni"]),
+                "Orámuje sekce výrazněji a podbarví nadpisy.",
+            )
             with ui.column().classes("w-full app-note p-2 gap-0"):
                 ui.label("Nadpis sekce").classes("app-heading")
                 ui.label("Běžný text, tlačítka a hodnoty ve formulářích.").classes(
@@ -1973,6 +1980,9 @@ class NiceGuiApp(DailyDesignMixin):
             self.ui_heading_size,
             self.ui_help_size,
             self.ui_text_size,
+            self.ui_heading_bold,
+            self.ui_text_bold,
+            self.ui_help_bold,
             self.ui_zoom,
             self.ui_spacing,
             self.ui_line,
@@ -2110,6 +2120,9 @@ class NiceGuiApp(DailyDesignMixin):
                 and self.ui_heading_size.value,
                 "ui_velikost_popisu": getattr(self, "ui_help_size", None)
                 and self.ui_help_size.value,
+                "ui_tucne_nadpisy": self.ui_heading_bold.value,
+                "ui_tucny_text": self.ui_text_bold.value,
+                "ui_tucne_popisy": self.ui_help_bold.value,
                 "ui_barevne_schema": self.ui_theme.value,
                 "ui_vlastni_barvy": getattr(self, "custom_palette", self.raw.get("ui_vlastni_barvy")),
                 "ui_zvyrazneni_bloku": bool(self.ui_blocks.value),

@@ -2,6 +2,10 @@
 
 Implementace schváleného konceptu ui-ux-pro-max do existující NiceGUI aplikace.
 
+### Tučné písmo
+
+V **Nastavení → Vzhled → Doladění hustoty a písma** lze samostatně zapnout **Tučné nadpisy**, **Tučný běžný text** a **Tučné popisy a nápověda**. Přepínače jsou pod příslušnou velikostí písma. Popisy zahrnují také názvy polí a stavové hlášky. Náhled i aplikace se změní ihned; volby se automaticky uloží a obnoví při příštím spuštění.
+
 ### Vlastní barevné schéma
 
 V **Nastavení → Vzhled → Barvy a přiblížení** zvolte **Upravit vlastní barvy** nebo v nabídce schémat vyberte **Vlastní barvy**. Barevná kolečka otevírají paletu; barvy lze zadat také kódem. Měnit lze tlačítka a zvýraznění, pozadí stránky, pozadí bloků, hlavní i doplňkové texty, rámečky a pozadí vybraných prvků.

@@ -489,6 +489,13 @@ def peek_ui_blocks(raw: dict[str, Any] | None) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "ano", "on"}
 
 
+def _peek_bold(data: dict[str, Any], key: str) -> bool:
+    value = data.get(key, data.get(f"ui_{key}"))
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().casefold() in {"1", "true", "ano", "on"}
+
+
 def peek_ui_template(raw: dict[str, Any] | None) -> str:
     """Šablona hustoty; bez uloženého výběru ji předvolí UI šablona."""
     if isinstance(raw, dict):
@@ -565,6 +572,9 @@ def peek_ui_appearance(raw: dict[str, Any] | None) -> dict[str, Any]:
         "text": peek_ui_size(mapped, "ui_velikost_textu"),
         "nadpis": peek_ui_size(mapped, "ui_velikost_nadpisu"),
         "popis": peek_ui_size(mapped, "ui_velikost_popisu"),
+        "tucne_nadpisy": _peek_bold(data, "tucne_nadpisy"),
+        "tucny_text": _peek_bold(data, "tucny_text"),
+        "tucne_popisy": _peek_bold(data, "tucne_popisy"),
         "schema": peek_ui_theme(mapped),
         "zvyrazneni": peek_ui_blocks(mapped),
         "zoom": peek_ui_zoom(mapped),
@@ -584,6 +594,9 @@ def appearance_config(appearance: dict[str, Any]) -> dict[str, Any]:
         "ui_velikost_textu": peeked["text"],
         "ui_velikost_nadpisu": peeked["nadpis"],
         "ui_velikost_popisu": peeked["popis"],
+        "ui_tucne_nadpisy": peeked["tucne_nadpisy"],
+        "ui_tucny_text": peeked["tucny_text"],
+        "ui_tucne_popisy": peeked["tucne_popisy"],
         "ui_barevne_schema": peeked["schema"],
         "ui_zvyrazneni_bloku": bool(peeked["zvyrazneni"]),
         "ui_zoom": int(peeked["zoom"]),
@@ -627,6 +640,9 @@ def appearance_css_vars(appearance: dict[str, Any]) -> dict[str, str]:
             "--app-text": f"{UI_TEXT_SIZE_PX['text'][peeked['text']]}px",
             "--app-heading": f"{UI_TEXT_SIZE_PX['nadpis'][peeked['nadpis']]}px",
             "--app-help": f"{UI_TEXT_SIZE_PX['popis'][peeked['popis']]}px",
+            "--app-weight-heading": "700" if peeked["tucne_nadpisy"] else "650",
+            "--app-weight-text": "700" if peeked["tucny_text"] else "400",
+            "--app-weight-help": "700" if peeked["tucne_popisy"] else "400",
             "--app-line": UI_LINE_HEIGHT[peeked["radkovani"]],
             "--app-zoom": f"{peeked['zoom'] / 100:.2f}",
             "--app-gap": f"{space['gap']}px",
@@ -750,6 +766,7 @@ _CSS_TOKENS = """
     --app-zoom: 1.00;
     --app-weight-heading: 650;
     --app-weight-text: 400;
+    --app-weight-help: 400;
     --app-gap: 10px;
     --app-stack: 10px;
     --app-panel-pad: 10px;
@@ -828,10 +845,12 @@ _CSS_TYPOGRAPHY = """
 .inline-status,
 .app-footer,
 .connection-details,
-.connection-caption {
+.connection-caption,
+.q-field__messages,
+.q-tooltip {
     color: var(--app-muted);
     font-size: var(--app-help);
-    font-weight: var(--app-weight-text);
+    font-weight: var(--app-weight-help);
     line-height: var(--app-line);
 }
 
@@ -859,7 +878,7 @@ _CSS_FORMS = """
 .q-field__label {
     color: var(--app-field-label);
     font-size: var(--app-help);
-    font-weight: var(--app-weight-text);
+    font-weight: var(--app-weight-help);
 }
 
 .q-field--dense .q-field__control,
@@ -930,6 +949,7 @@ pre, code {
 .field-hint {
     color: var(--app-muted);
     font-size: var(--app-help);
+    font-weight: var(--app-weight-help);
     cursor: help;
 }
 """
@@ -939,7 +959,7 @@ _CSS_BUTTONS = """
     min-height: var(--app-control-min);
     border-radius: var(--app-radius);
     font-size: var(--app-text);
-    font-weight: var(--app-weight-heading);
+    font-weight: max(var(--app-weight-heading), var(--app-weight-text));
     letter-spacing: 0;
     text-transform: none;
 }
@@ -1260,6 +1280,7 @@ html.overview-on .overview-row {
 .stat-card-label {
     color: var(--app-muted);
     font-size: var(--app-help);
+    font-weight: var(--app-weight-help);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -1340,7 +1361,7 @@ html.layout-dashboard .chip-row {
     border-radius: 999px;
     padding: 1px 8px;
     font-size: var(--app-help);
-    font-weight: var(--app-weight-text);
+    font-weight: var(--app-weight-help);
     line-height: 1.4;
 }
 
