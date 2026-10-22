@@ -93,3 +93,53 @@ def test_invalid_nssm_download_is_not_cached_or_retried(tmp_path, monkeypatch):
         release.download_nssm(archive)
     assert calls == [1]
     assert not list(archive.parent.iterdir())
+
+
+def test_upstream_outage_reuses_only_nssm_from_verified_previous_release(tmp_path, monkeypatch):
+    from urllib.error import HTTPError
+    previous = tmp_path / 'previous.zip'
+    with ZipFile(previous, 'w') as z:
+        z.writestr('DataShip/nssm/win64/nssm.exe', b'MZ-verified-nssm')
+        z.writestr('DataShip/nssm/README-upstream.txt', 'public domain')
+        z.writestr('DataShip/DataShip.exe', b'old-gui-must-not-be-reused')
+        z.writestr('DataShip/DataShip-Worker.exe', b'old-worker-must-not-be-reused')
+        z.writestr('DataShip/config.json', b'old-config-must-not-be-reused')
+    data = previous.read_bytes()
+    monkeypatch.setattr(release, 'NSSM_FALLBACK_SHA256', hashlib.sha256(data).hexdigest())
+    requests = []
+    def unavailable(url, timeout):
+        requests.append(url)
+        raise HTTPError(url, 503, 'unavailable', {}, None)
+    downloads = []
+    def github_download(args, *, stdout, stderr, check):
+        assert args == ['gh', 'api', '--hostname', 'github.com', release.NSSM_FALLBACK_ASSET,
+                        '--header', 'Accept: application/octet-stream']
+        assert check
+        downloads.append(args)
+        stdout.write(data)
+    monkeypatch.setattr(release.urllib.request, 'urlopen', unavailable)
+    monkeypatch.setattr(release.subprocess, 'run', github_download)
+    monkeypatch.setattr(release.time, 'sleep', lambda _: None)
+    cache = tmp_path / 'cache/nssm.zip'
+    release.download_nssm(cache)
+    assert len(requests) == 3
+    assert len(downloads) == 1
+    assert cache.read_bytes() == data
+    app = tmp_path / 'new-app'
+    release.install_nssm(cache, app)
+    assert (app / 'nssm/win64/nssm.exe').read_bytes() == b'MZ-verified-nssm'
+    assert not (app / 'DataShip.exe').exists()
+    assert not (app / 'DataShip-Worker.exe').exists()
+    assert not (app / 'config.json').exists()
+    assert release.NSSM_FALLBACK_SHA256 in (app / 'nssm/SOURCE.txt').read_text()
+    assert list(cache.parent.iterdir()) == [cache]
+
+
+def test_changed_fallback_bundle_is_not_cached(tmp_path, monkeypatch):
+    def github_download(_args, *, stdout, **_kwargs):
+        stdout.write(b'untrusted bundle or API error')
+    monkeypatch.setattr(release.subprocess, 'run', github_download)
+    cache = tmp_path / 'nssm.zip'
+    with pytest.raises(ValueError, match='checksum'):
+        release.download_nssm_fallback(cache)
+    assert not list(tmp_path.iterdir())

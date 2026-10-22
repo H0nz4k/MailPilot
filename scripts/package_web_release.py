@@ -21,14 +21,38 @@ from services.web_branding import WEB_VERSION
 NSSM_VERSION = '2.24-101-g897c7ad'
 NSSM_URL = f'https://nssm.cc/ci/nssm-{NSSM_VERSION}.zip'
 NSSM_SHA256 = '99f5045fffbffb745d67fe3a065a953c4a3d9c253b868892d9b685b0ee7d07b8'
+# Our rc.3 bundle contains these exact verified upstream NSSM files. Only its
+# NSSM payload is reused; no older GUI, worker or configuration is extracted.
+NSSM_FALLBACK_ASSET = 'repos/H0nz4k/MailPilot/releases/assets/666037948'
+NSSM_FALLBACK_SHA256 = '6cc4eb73e25a8a43d28fbd865918136459db586a48bb52eb1ca50d49d02feaa9'
 REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'START_WEB.cmd', 'START_WORKER_MANUAL.cmd')
 
 
 def verified_nssm(archive: Path) -> bytes:
     data = archive.read_bytes()
-    if hashlib.sha256(data).hexdigest() != NSSM_SHA256:
+    if hashlib.sha256(data).hexdigest() not in (NSSM_SHA256, NSSM_FALLBACK_SHA256):
         raise ValueError('NSSM archive checksum does not match the pinned upstream build.')
     return data
+
+
+def download_nssm_fallback(archive: Path) -> None:
+    """Read a pinned asset from our own release with gh's authenticated client."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=archive.parent, prefix='nssm-fallback-', delete=False) as file:
+            temporary = Path(file.name)
+            subprocess.run(
+                ['gh', 'api', '--hostname', 'github.com', NSSM_FALLBACK_ASSET,
+                 '--header', 'Accept: application/octet-stream'],
+                stdout=file, stderr=subprocess.PIPE, check=True,
+            )
+        # Require the whole known bundle, even if an API error returned JSON.
+        if hashlib.sha256(temporary.read_bytes()).hexdigest() != NSSM_FALLBACK_SHA256:
+            raise ValueError('Fallback NSSM bundle checksum does not match the pinned release.')
+        temporary.replace(archive)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def download_nssm(archive: Path) -> None:
@@ -49,7 +73,9 @@ def download_nssm(archive: Path) -> None:
             if isinstance(exc, urllib.error.HTTPError) and exc.code not in (408, 429, 500, 502, 503, 504):
                 raise
             if attempt == 2:
-                raise
+                print('Pouzivam overeny NSSM z naseho predchoziho balicku na GitHubu.')
+                download_nssm_fallback(archive)
+                return
             print(f'NSSM server je docasne nedostupny. Opakuji stazeni ({attempt + 2}/3)...')
             time.sleep(2 ** attempt)
         finally:
@@ -65,15 +91,21 @@ def make_zip(stage: Path, output: Path) -> None:
 
 
 def install_nssm(archive: Path, app: Path) -> None:
-    verified_nssm(archive)
+    data = verified_nssm(archive)
+    fallback = hashlib.sha256(data).hexdigest() == NSSM_FALLBACK_SHA256
     nssm = app / 'nssm'
     (nssm / 'win64').mkdir(parents=True, exist_ok=True)
     with ZipFile(archive) as z:
-        for source, target in [(f'nssm-{NSSM_VERSION}/win64/nssm.exe', 'win64/nssm.exe'),
-                               (f'nssm-{NSSM_VERSION}/README.txt', 'README-upstream.txt')]:
+        sources = [('DataShip/nssm/win64/nssm.exe', 'win64/nssm.exe'),
+                   ('DataShip/nssm/README-upstream.txt', 'README-upstream.txt')] if fallback else [
+                   (f'nssm-{NSSM_VERSION}/win64/nssm.exe', 'win64/nssm.exe'),
+                   (f'nssm-{NSSM_VERSION}/README.txt', 'README-upstream.txt')]
+        for source, target in sources:
             (nssm / target).write_bytes(z.read(source))
-    (nssm / 'SOURCE.txt').write_text(
-        f'NSSM {NSSM_VERSION} (win64)\nPublic domain\n{NSSM_URL}\nSHA256: {NSSM_SHA256}\n', encoding='utf-8')
+    provenance = f'NSSM {NSSM_VERSION} (win64)\nPublic domain\n{NSSM_URL}\nSHA256: {NSSM_SHA256}\n'
+    if fallback:
+        provenance += f'Fallback: https://api.github.com/{NSSM_FALLBACK_ASSET}\nBundle SHA256: {NSSM_FALLBACK_SHA256}\n'
+    (nssm / 'SOURCE.txt').write_text(provenance, encoding='utf-8')
 
 
 def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Path]:

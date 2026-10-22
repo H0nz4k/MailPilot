@@ -95,3 +95,7 @@ Starší odesílání bez vlastního kalendáře dál používá dosavadní spol
 4. **Uložit** uloží pravidelné odesílání. Samo nic neodešle; plán provádí spuštěný worker v nastaveném čase.
 
 Datum náhledu se pravidelnému odesílání nepředává. **Uložit změny…** po úpravě existujícího přehledu změní i obsah jeho budoucích odesílání. **Uložit jako nový…** vytvoří samostatný přehled. **Odeslat jednou…** je dosavadní ruční odeslání s potvrzením příjemců.
+
+## Záložní zdroj NSSM při sestavení
+
+Po třech neúspěšných pokusech o stažení z oficiálního serveru build načte náš konkrétní balíček rc.3 přes GitHub CLI. Celý ZIP musí odpovídat pevně zadanému SHA-256. Převezme se pouze NSSM a jeho dokumentace; starší GUI, worker ani konfigurace se nekopírují. V GitHub Actions se používá token repozitáře, při lokálním sestavení je pro tuto zálohu potřeba přihlášené `gh`. Alternativně lze již stažený ověřený NSSM ZIP nebo náš NSSM balíček rc.3 předat pomocí `--nssm-archive`. Zdroj se zaznamená v `nssm/SOURCE.txt`.
