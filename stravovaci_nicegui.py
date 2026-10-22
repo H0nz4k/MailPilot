@@ -640,7 +640,10 @@ class NiceGuiApp(DailyDesignMixin):
                 self._build_bulk_panel()
             with ui.tab_panel("mail_tasks"):
                 from services.web_mail_gui import build_mail_tasks_panel
-                build_mail_tasks_panel(self.config_path.parent, config_path=self.config_path)
+                build_mail_tasks_panel(
+                    self.config_path.parent, config_path=self.config_path,
+                    category_names=lambda: dict(self.categories),
+                )
             with ui.tab_panel("admin"):
                 self._build_admin_panel()
 

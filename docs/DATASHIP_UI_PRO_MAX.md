@@ -43,7 +43,9 @@ Při každém TESTu se uložený výběr protne s aktuálně dostupnými a povol
 
 ## Vlastní přehled v e-mailové úloze
 
-V **E-mailové úlohy → Nová úloha / Upravit → Uložený denní přehled** vyberte požadovaný přehled. Každá úloha může mít jiné kategorie, příjemce, čas a pravidlo data. Uložení úlohy samo nic neodesílá.
+V **E-mailové úlohy → Nová úloha / Upravit → Který přehled odesílat?** vyberte požadovaný pojmenovaný přehled. Pod výběrem se ukazují jeho uložené kategorie, typ stravy a zapnutí seznamu strávníků. Přehledy se připravují v **Denní stav → Moje přehledy**; bez uloženého přehledu aplikace nejprve vysvětlí tento krok. Každá úloha může mít jiné kategorie, příjemce, čas a pravidlo data. Uložení úlohy samo nic neodesílá.
+
+Nové úlohy už nenabízejí dvě podobně pojmenované sestavy ani neurčité výchozí nastavení. Posun dnů a konkrétní datum se zobrazují jen při příslušné volbě data. Starší úloha bez přehledu ponechá volbu **Dosavadní společné nastavení**, aby pouhá úprava názvu nebo času nezměnila obsah PDF. Nezapojený původní souhrn je u starších úloh označen jako nepodporovaný; převod na pojmenovaný denní přehled vyžaduje výslovné zaškrtnutí v editoru.
 
 Starší úlohy bez `profile_id` používají dosavadní společné nastavení. Worker při každém spuštění znovu načte přehled a povolené kategorie. Chybějící přehled nebo úplně zakázaný výběr skončí chybou; nikdy se tiše nenahradí všemi kategoriemi. Výstupní PDF úloh s přehledem má vlastní příponu, aby nepřepsalo výstup jiného přehledu.
 
