@@ -2,6 +2,14 @@
 
 Implementace schváleného konceptu ui-ux-pro-max do existující NiceGUI aplikace.
 
+### Vlastní barevné schéma
+
+V **Nastavení → Vzhled → Barvy a přiblížení** zvolte **Upravit vlastní barvy** nebo v nabídce schémat vyberte **Vlastní barvy**. Barevná kolečka otevírají paletu; barvy lze zadat také kódem. Měnit lze tlačítka a zvýraznění, pozadí stránky, pozadí bloků, hlavní i doplňkové texty, rámečky a pozadí vybraných prvků.
+
+Náhled i rozhraní se aktualizují okamžitě. Nastavení se automaticky ukládá jako `ui_vlastni_barvy` a přežije restart i dočasné přepnutí na přednastavené schéma. Tlačítko **Obnovit výchozí barvy** vrátí vlastní paletu na základní modré schéma. Přednastavené palety se neupravují.
+
+Text tlačítek se automaticky volí černý nebo bílý podle čitelnosti. Ovládací prvky se přizpůsobí světlému či tmavému pozadí; editor samotný zůstává čitelný i při pokusech s nevhodnou kombinací barev. Náhled upozorní na malý kontrast textu. Neplatný kód barvy se neukládá, poslední platná barva zůstane zachována.
+
 ### Zákaznické ovládání a čitelnost (22. 10. 2026)
 
 Rozhraní je určeno pro pracovnice jídelen, včetně uživatelek 55+. Hlavička obsahuje značku, název jídelny, hlavní nabídku a Nastavení jako jeden blok. Technické údaje o serveru a databázi se v běžné hlavičce nezobrazují. Výchozí text má 20 px a popisky 16 px při 100% přiblížení; i dříve uložená malá velikost nyní používá 18 px. Větší písmo a přiblížení zůstávají nastavitelné. Formulářové popisky se nezmenšují na obtížně čitelnou velikost po vyplnění pole, včetně dialogů mimo hlavní stránku.

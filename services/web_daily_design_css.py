@@ -2,7 +2,7 @@
 
 DATASHIP_CSS = """
 .dataship-ui {
-    --ds-on-primary: #ffffff;
+    --ds-on-primary: var(--custom-on-primary, #ffffff);
     --ds-space: 16px;
     font-family: Inter, 'Segoe UI', Roboto, Arial, sans-serif;
     gap: 0;
@@ -125,6 +125,20 @@ html.blocks-emphasized .dataship-ui .ds-daily .app-card { border: 2px solid var(
 .ds-recipient-chip > .q-icon { color: var(--app-primary); }
 .ds-recipient-chip > .q-icon + div { overflow-wrap: anywhere; font-size: var(--app-text); }
 .ds-recipient-chip .q-btn { min-width: 44px; min-height: 44px; }
+html.theme-vlastni .q-btn.bg-primary { color: var(--custom-on-primary) !important; }
+/* Keep the palette editor readable even while choosing low-contrast colors. */
+.ds-palette-editor {
+    --app-ink: #18243b; --app-muted: #4a5870; --app-field: #18243b;
+    --app-field-label: #4a5870; --app-primary: #255bdd; --q-primary: #255bdd;
+    --app-field-border: #7d8ba2; --app-border: #cbd4e2;
+    background: #ffffff; color: #18243b; border: 1px solid #cbd4e2;
+    border-radius: 10px; padding: 16px; gap: 12px;
+}
+.ds-palette-editor .q-field__control { background: #ffffff; }
+.ds-palette-picker { --app-ink: #18243b; --app-field: #18243b; --app-field-label: #4a5870; color: #18243b; background: #ffffff; }
+.ds-palette-preview { background: var(--app-page-to); color: var(--app-ink); border: 2px solid var(--app-border); padding: 12px; border-radius: 8px; gap: 8px; }
+.ds-palette-sample { background: var(--app-surface); border: 1px solid var(--app-border); padding: 12px; border-radius: 6px; gap: 8px; }
+.ds-palette-button { background: var(--app-primary); color: var(--custom-on-primary); border-radius: 6px; padding: 8px 12px; }
 @media (max-width: 1200px) {
     .dataship-ui .app-topbar { flex-wrap: wrap; }
     .dataship-ui .app-nav { order: 5; width: 100%; flex-basis: 100%; }

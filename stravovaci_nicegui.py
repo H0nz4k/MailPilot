@@ -142,6 +142,7 @@ from ui_theme import (
     UI_ZOOM_MIN,
     UI_ZOOM_STEP,
     appearance_config,
+    appearance_theme,
     appearance_css_vars,
     appearance_html_classes,
     apply_ui_appearance,
@@ -599,7 +600,7 @@ class NiceGuiApp(DailyDesignMixin):
 
     def toggle_color_mode(self) -> None:
         current = self._appearance_from_widgets()["schema"]
-        if UI_THEMES[current]["dark"]:
+        if appearance_theme(self._appearance_from_widgets())["dark"]:
             target = getattr(self, "_last_light_schema", "svetle")
         else:
             self._last_light_schema = current
@@ -1904,6 +1905,8 @@ class NiceGuiApp(DailyDesignMixin):
                     self.ui_zoom_value = ui.label(f"{appearance['zoom']} %").classes(
                         "app-label w-12 text-right shrink-0"
                     )
+            ui.button("Upravit vlastní barvy", icon="palette", on_click=self._use_custom_colors).props("outline no-caps")
+            self._build_custom_palette(appearance)
 
         with ui.expansion("Doladění hustoty a písma", icon="tune").props(
             "dense"
@@ -1979,6 +1982,87 @@ class NiceGuiApp(DailyDesignMixin):
         self.ui_blocks.on("update:model-value", lambda: self.save_ui_appearance())
         self._highlight_layout_card(appearance["layout"])
 
+    def _build_custom_palette(self, appearance: dict[str, Any]) -> None:
+        from services.web_custom_palette import CUSTOM_COLOR_LABELS, normalize_palette
+
+        self.custom_palette = normalize_palette(appearance["vlastni_barvy"])
+        self._updating_palette = False
+        self.ui_palette_panel = ui.column().classes("ds-palette-editor w-full")
+        self.ui_palette_panel.bind_visibility_from(self.ui_theme, "value", backward=lambda value: value == "vlastni")
+        self.ui_custom_colors = {}
+        with self.ui_palette_panel:
+            ui.label("Vlastní barevné schéma").classes("app-heading")
+            ui.label("Klikněte na barevné kolečko. Změny se projeví ihned a uloží automaticky.").classes("ui-help")
+            with w.form_grid(3):
+                for key, label in CUSTOM_COLOR_LABELS.items():
+                    field = ui.color_input(label, value=self.custom_palette[key], preview=True,
+                        on_change=lambda event, name=key: self._save_palette_color(name, event.value)).props("outlined dense").classes("w-full")
+                    field.button.props(f'aria-label="Vybrat barvu: {label}"')
+                    field.picker.classes("ds-palette-picker")
+                    field.picker.q_color.props("format-model=hex")
+                    field.picker.q_color.props["dark"] = False
+                    self.ui_custom_colors[key] = field
+            self.custom_palette_preview = ui.column().classes("ds-palette-preview w-full")
+            with self.custom_palette_preview:
+                ui.label("Náhled barev").classes("app-label")
+                with ui.column().classes("ds-palette-sample w-full"):
+                    ui.label("Takto bude vypadat váš přehled.").classes("app-text")
+                    ui.label("Doplňkový text a vysvětlení.").classes("ui-help")
+                    ui.label("Ukázka tlačítka").classes("ds-palette-button")
+            self.custom_palette_contrast = ui.label().classes("ui-help").props('role="status" aria-live="polite"')
+            ui.button("Obnovit výchozí barvy", icon="restart_alt", on_click=self._reset_custom_colors).props("flat no-caps")
+        self._refresh_custom_preview()
+
+    def _use_custom_colors(self) -> None:
+        self.ui_theme.value = "vlastni"
+        self.save_ui_appearance()
+
+    def _save_palette_color(self, key: str, value: object) -> None:
+        from services.web_custom_palette import hex_color
+
+        if self._updating_palette:
+            return
+        field = self.ui_custom_colors[key]
+        color = hex_color(value)
+        if color is None:
+            field.props["error"] = True
+            field.props["error-message"] = "Vyberte barvu kolečkem nebo zadejte kód #RRGGBB."
+            field.update()
+            return
+        field.props(remove="error error-message")
+        field.update()
+        self.custom_palette[key] = color
+        self._refresh_custom_preview()
+        self.save_ui_appearance()
+
+    def _refresh_custom_preview(self) -> None:
+        from services.web_custom_palette import palette_tokens, contrast
+
+        palette = self.custom_palette
+        self.custom_palette_preview.style("; ".join(f"{key}: {value}" for key, value in palette_tokens(palette).items()))
+        readable = min(contrast(palette[key], palette[background])
+                       for key in ("text", "muted") for background in ("page", "surface")) >= 4.5
+        readable = readable and min(contrast(palette["primary"], palette[background])
+                                    for background in ("surface", "soft")) >= 3
+        self.custom_palette_contrast.set_text(
+            "Text má dobrý kontrast vůči pozadí." if readable else
+            "Text a pozadí jsou si příliš podobné. Pro lepší čitelnost upravte jejich barvy."
+        )
+
+    def _reset_custom_colors(self) -> None:
+        from services.web_custom_palette import DEFAULT_CUSTOM_PALETTE
+
+        self._updating_palette = True
+        try:
+            self.custom_palette = dict(DEFAULT_CUSTOM_PALETTE)
+            for key, field in self.ui_custom_colors.items():
+                field.props(remove="error error-message")
+                field.value = self.custom_palette[key]
+        finally:
+            self._updating_palette = False
+        self._refresh_custom_preview()
+        self.save_ui_appearance()
+
     def _pick_layout(self, name: str) -> None:
         """Výběr šablony z dlaždice; hustotu předvolí podle šablony."""
         if name not in UI_LAYOUTS:
@@ -2027,6 +2111,7 @@ class NiceGuiApp(DailyDesignMixin):
                 "ui_velikost_popisu": getattr(self, "ui_help_size", None)
                 and self.ui_help_size.value,
                 "ui_barevne_schema": self.ui_theme.value,
+                "ui_vlastni_barvy": getattr(self, "custom_palette", self.raw.get("ui_vlastni_barvy")),
                 "ui_zvyrazneni_bloku": bool(self.ui_blocks.value),
                 "ui_zoom": None if zoom_widget is None else zoom_widget.value,
                 "ui_sablona": getattr(self, "ui_template", None)
@@ -2066,15 +2151,8 @@ class NiceGuiApp(DailyDesignMixin):
         if hasattr(self, "ui_zoom_value"):
             self.ui_zoom_value.set_text(f"{appearance['zoom']} %")
         if hasattr(self, "ui_text_status"):
-            layout = UI_LAYOUT_LABELS[appearance["layout"]]
             theme = UI_THEME_LABELS[appearance["schema"]]
-            blocks = "zapnuto" if appearance["zvyrazneni"] else "vypnuto"
-            self.ui_text_status.set_text(
-                f"Uloženo do config.json: šablona {layout}, "
-                f"{theme.casefold()} schéma, rozestupy "
-                f"{UI_SPACING_LABELS[appearance['rozestupy']].casefold()}, "
-                f"rámování {blocks}, přiblížení {appearance['zoom']} %."
-            )
+            self.ui_text_status.set_text(f"Vzhled uložen. Barevné schéma: {theme}.")
 
     def _build_scheduler_panel(self) -> None:
         w.section_header(

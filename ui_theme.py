@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from nicegui import ui
+from services.web_custom_palette import normalize_palette, palette_tokens, luminance
 
 # ---------------------------------------------------------------------------
 # Písmo: tři styly pro celou aplikaci
@@ -168,6 +169,7 @@ UI_THEME_LABELS = {
     "les": "Les",
     "pisek": "Písek",
     "burgund": "Burgund",
+    "vlastni": "Vlastní barvy",
 }
 UI_THEMES: dict[str, dict[str, Any]] = {
     "svetle": {
@@ -446,7 +448,7 @@ def peek_ui_text_size(raw: dict[str, Any] | None) -> str:
 
 def peek_ui_theme(raw: dict[str, Any] | None) -> str:
     value = raw.get("ui_barevne_schema") if isinstance(raw, dict) else None
-    return str(value) if value in UI_THEMES else DEFAULT_UI_THEME
+    return str(value) if value in UI_THEME_LABELS else DEFAULT_UI_THEME
 
 
 def peek_ui_layout(raw: dict[str, Any] | None) -> str:
@@ -570,6 +572,7 @@ def peek_ui_appearance(raw: dict[str, Any] | None) -> dict[str, Any]:
         "rozestupy": peek_ui_spacing(mapped),
         "radkovani": peek_ui_line(mapped),
         "hustota": peek_ui_density(mapped),
+        "vlastni_barvy": normalize_palette(data.get("vlastni_barvy", data.get("ui_vlastni_barvy"))),
     }
 
 
@@ -588,6 +591,7 @@ def appearance_config(appearance: dict[str, Any]) -> dict[str, Any]:
         "ui_rozestupy": peeked["rozestupy"],
         "ui_radkovani": peeked["radkovani"],
         "ui_hustota_poli": peeked["hustota"],
+        "ui_vlastni_barvy": peeked["vlastni_barvy"],
     }
 
 
@@ -596,13 +600,28 @@ def layout_tokens(appearance: dict[str, Any]) -> dict[str, Any]:
     return dict(UI_LAYOUTS[peek_ui_appearance(appearance)["layout"]])
 
 
+def appearance_theme(appearance: dict[str, Any]) -> dict[str, Any]:
+    peeked = peek_ui_appearance(appearance)
+    if peeked["schema"] != "vlastni":
+        return UI_THEMES[peeked["schema"]]
+    palette = peeked["vlastni_barvy"]
+    dark = luminance(palette["page"]) < 0.18
+    base = UI_THEMES["tmave" if dark else "svetle"]
+    return {**base, "dark": dark, "primary": palette["primary"],
+            "secondary": palette["primary"], "accent": palette["primary"],
+            "vars": {**base["vars"], **palette_tokens(palette)}}
+
+
 def appearance_css_vars(appearance: dict[str, Any]) -> dict[str, str]:
     """Design tokeny pro CSS z uloženého vzhledu."""
     peeked = peek_ui_appearance(appearance)
-    theme = UI_THEMES[peeked["schema"]]
+    theme = appearance_theme(peeked)
     layout = UI_LAYOUTS[peeked["layout"]]
     space = UI_SPACING_PX[peeked["rozestupy"]]
     variables = dict(theme["vars"])
+    variables.setdefault("--app-field-border", variables["--app-border"])
+    variables.setdefault("--custom-on-primary", "#ffffff")
+    variables.setdefault("--ds-on-primary", "#ffffff")
     variables.update(
         {
             "--app-text": f"{UI_TEXT_SIZE_PX['text'][peeked['text']]}px",
@@ -645,7 +664,7 @@ def appearance_html_classes(appearance: dict[str, Any]) -> str:
 
 
 def _removable_html_classes() -> str:
-    names = [f"theme-{name}" for name in UI_THEMES]
+    names = [f"theme-{name}" for name in UI_THEME_LABELS]
     names += [f"layout-{name}" for name in UI_LAYOUTS]
     names += [f"cards-{name}" for name in ("jemne", "vyrazne", "zadne")]
     names += [f"nav-{name}" for name in (NAV_TOP, NAV_SIDE)]
@@ -662,7 +681,7 @@ def apply_ui_appearance(
 ) -> None:
     """Nastaví design tokeny a šablonu v běžícím okně."""
     peeked = peek_ui_appearance(appearance)
-    theme = UI_THEMES[peeked["schema"]]
+    theme = appearance_theme(peeked)
     variables = appearance_css_vars(peeked)
     inline = "; ".join(f"{key}: {value}" for key, value in variables.items())
     ui.query(":root").style(inline)
