@@ -316,7 +316,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("open_z17_category_dialog", special_picker)
         closing_source = inspect.getsource(gui.NiceGuiApp._build_closing_panel)
         self.assertIn("ZIP", closing_source)
-        self.assertIn("Odeslat e-mailem", closing_source)
+        self.assertIn("Odesílat při automatické uzávěrce z plánovače", closing_source)
         self.assertIn("save_closing_settings", closing_source)
         daily_panel = inspect.getsource(gui.NiceGuiApp._build_daily_panel)
         self.assertNotIn("my-6", daily_panel)

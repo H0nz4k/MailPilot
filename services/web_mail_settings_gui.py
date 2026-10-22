@@ -20,92 +20,98 @@ def build_web_settings_panel(directory: Path) -> None:
         ui.label(f"Nastavení nelze načíst: {exc}").classes("text-negative")
         return
 
-    ui.label("Služba a odesílání").classes("text-h6")
-    ui.label("Nastavení se ukládá pro centrální plánovač. Instalace služby vyžaduje oprávnění správce.")
-    with ui.card().classes("w-full"):
-        ui.label("Windows služba NSSM").classes("text-subtitle1")
-        nssm = ui.input("Cesta k nssm.exe", value=values["nssm_path"]).classes("w-full")
-        name = ui.input("Název služby", value=values["service_name"]).classes("w-full")
-        ui.label("1. Spusťte DataShip.exe jako správce Windows. 2. Ověřte databázi a e-mail. 3. Instalujte službu. 4. Klikněte na Spustit.").classes("ui-help")
-        ui.label("Služba zajistí odesílání, i když je okno DataShipu zavřené. Používá DataShip-Worker.exe ze stejné složky.").classes("ui-help")
-        service_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
-        async def control(action: str):
-            try:
-                # Save current service paths before invoking NSSM.
-                current = load_settings(path)
-                current.update(nssm_path=nssm.value.strip(), service_name=name.value.strip())
-                save_settings(path, current)
-                result = await run.io_bound(service_command, directory, action)
-                service_status.set_text(result)
-                ui.notify(result, type="positive", timeout=8000)
-            except Exception as exc:
-                message = ("Nastavení služby nelze uložit. Ověřte právo zápisu do složky aplikace."
-                           if isinstance(exc, OSError) and exc.errno else str(exc))
-                service_status.set_text(message)
-                ui.notify(message, type="negative", timeout=15000)
-        with ui.row().classes("gap-2"):
-            for action, caption in (
-                ("install", "Instalovat službu"), ("start", "Spustit"),
-                ("stop", "Zastavit"), ("restart", "Restart"),
-                ("status", "Stav")
-            ):
-                ui.button(caption, on_click=lambda op=action: control(op)).props("outline")
+    ui.label("Služba a odesílání").classes("ds-page-title").props('role="heading" aria-level="1"')
+    ui.label("Služba odesílá přehledy i při zavřeném okně DataShipu. Instalace vyžaduje oprávnění správce Windows.").classes("ui-help")
+    with ui.element("div").classes("ds-settings-grid"):
+        with ui.column().classes("ds-settings-column w-full"):
+            with ui.card().classes("ds-settings-card"):
+                ui.label("Windows služba NSSM").classes("app-heading")
+                nssm = ui.input("Cesta k nssm.exe", value=values["nssm_path"]).props("outlined dense").classes("w-full")
+                name = ui.input("Název služby", value=values["service_name"]).props("outlined dense").classes("w-full")
+                ui.label("1. Spusťte DataShip.exe jako správce Windows. 2. Ověřte databázi a e-mail. 3. Instalujte službu. 4. Klikněte na Spustit.").classes("ui-help")
+                ui.label("Služba zajistí odesílání, i když je okno DataShipu zavřené. Používá DataShip-Worker.exe ze stejné složky.").classes("ui-help")
+                service_status = ui.label("Stav služby zatím nebyl ověřen. Klikněte na Ověřit stav.").classes("ui-help ds-service-status").props('role="status" aria-live="polite"')
+                async def control(action: str):
+                    try:
+                        # Save current service paths before invoking NSSM.
+                        current = load_settings(path)
+                        current.update(nssm_path=nssm.value.strip(), service_name=name.value.strip())
+                        save_settings(path, current)
+                        result = await run.io_bound(service_command, directory, action)
+                        service_status.set_text(result)
+                        ui.notify(result, type="positive", timeout=8000)
+                    except Exception as exc:
+                        message = ("Nastavení služby nelze uložit. Ověřte právo zápisu do složky aplikace."
+                                   if isinstance(exc, OSError) and exc.errno else str(exc))
+                        service_status.set_text(message)
+                        ui.notify(message, type="negative", timeout=15000)
+                with ui.row().classes("gap-2"):
+                    for action, caption in (
+                        ("install", "Instalovat službu"), ("start", "Spustit službu"),
+                        ("stop", "Zastavit službu"), ("restart", "Restartovat"),
+                        ("status", "Ověřit stav")
+                    ):
+                        ui.button(caption, on_click=lambda op=action: control(op)).props("outline no-caps")
 
-    with ui.card().classes("w-full"):
-        ui.label("Upozornění v dashboardu Jídelny").classes("text-subtitle1")
-        warning_on = ui.checkbox("Povolit upozornění při chybě", value=values["dashboard_enabled"])
-        template = ui.input("Cesta k dashboard.template.html", value=values["dashboard_path"]).classes("w-full")
-        state = ui.label("")
-        def warning_settings():
-            return JidelnaWarningSettings(
-                enabled=True, template_path=Path(template.value).expanduser()
-            )
-        def test_show():
-            if not warning_on.value:
-                ui.notify("Nejdřív povolte upozornění.", type="warning")
-                return
-            result = show_jidelnasql_mail_warning(
-                warning_settings(), message="TEST MailPilot: upozornění funguje."
-            )
-            ui.notify(result or "Testovací upozornění vloženo.", type="negative" if result else "positive")
-            refresh_state()
-        def test_clear():
-            result = clear_jidelnasql_mail_warning(warning_settings())
-            ui.notify(result or "Testovací upozornění odstraněno.", type="negative" if result else "positive")
-            refresh_state()
-        def refresh_state():
-            active = is_jidelnasql_mail_warning_active(warning_settings())
-            state.set_text("Upozornění je v HTML aktivní." if active else "Upozornění v HTML není aktivní.")
-        with ui.row().classes("gap-2"):
-            ui.button("Zobrazit test", on_click=test_show).props("outline")
-            ui.button("Odstranit upozornění", on_click=test_clear).props("outline")
-            ui.button("Ověřit stav", on_click=refresh_state).props("flat")
-        refresh_state()
-        ui.label("Pozor: odstranění smaže i případné aktuální produkční upozornění.").classes("text-caption")
+            with ui.card().classes("ds-settings-card"):
+                ui.label("Upozornění v dashboardu Jídelny").classes("app-heading")
+                warning_on = ui.checkbox("Povolit upozornění při chybě", value=values["dashboard_enabled"])
+                template = ui.input("Cesta k dashboard.template.html", value=values["dashboard_path"]).props("outlined dense").classes("w-full")
+                state = ui.label("")
+                def warning_settings():
+                    return JidelnaWarningSettings(
+                        enabled=True, template_path=Path(template.value).expanduser()
+                    )
+                def test_show():
+                    if not warning_on.value:
+                        ui.notify("Nejdřív povolte upozornění.", type="warning")
+                        return
+                    result = show_jidelnasql_mail_warning(
+                        warning_settings(), message="TEST MailPilot: upozornění funguje."
+                    )
+                    ui.notify(result or "Testovací upozornění vloženo.", type="negative" if result else "positive")
+                    refresh_state()
+                def test_clear():
+                    result = clear_jidelnasql_mail_warning(warning_settings())
+                    ui.notify(result or "Testovací upozornění odstraněno.", type="negative" if result else "positive")
+                    refresh_state()
+                def refresh_state():
+                    active = is_jidelnasql_mail_warning_active(warning_settings())
+                    state.set_text("Upozornění je v HTML aktivní." if active else "Upozornění v HTML není aktivní.")
+                with ui.row().classes("gap-2"):
+                    ui.button("Zobrazit test", on_click=test_show).props("outline")
+                    ui.button("Odstranit upozornění", on_click=test_clear).props("outline")
+                    ui.button("Ověřit stav", on_click=refresh_state).props("flat")
+                refresh_state()
+                ui.label("Pozor: odstranění smaže i případné aktuální produkční upozornění.").classes("text-caption")
+
+        with ui.column().classes("ds-settings-column w-full"):
+            with ui.card().classes("ds-settings-card"):
+                ui.label("Odchozí e-mail").classes("app-heading")
+                transport = ui.select({"resend": "Resend API", "smtp": "SMTP server"},
+                                      label="Způsob odesílání", value=values["transport"]).props("outlined dense").classes("w-full")
+                with ui.column().classes("w-full gap-3") as smtp_fields:
+                    host = ui.input("SMTP server", value=values["smtp_host"]).props("outlined dense").classes("w-full")
+                    port = ui.number("Port SMTP", value=values["smtp_port"], min=1, max=65535, step=1)
+                    security = ui.select({"starttls": "STARTTLS", "ssl": "SSL/TLS", "none": "Bez TLS"},
+                                         value=values["smtp_security"], label="Zabezpečení SMTP")
+                    username = ui.input("SMTP přihlašovací jméno", value=values["smtp_username"]).props("outlined dense").classes("w-full")
+                    ui.label("Heslo SMTP ukládejte do prostředí služby jako MAILPILOT_SMTP_PASSWORD, ne do JSON souboru.").classes("text-caption")
+                smtp_fields.bind_visibility_from(transport, "value", backward=lambda value: value == "smtp")
+                ui.label("Resend API klíč nastavíte v Nastavení → E-maily.").classes("ui-help").bind_visibility_from(transport, "value", backward=lambda value: value == "resend")
+                from_email = ui.input("E-mail odesílatele", value=values["from_email"]).props("outlined dense").classes("w-full")
+                from_name = ui.input("Zobrazované jméno odesílatele", value=values["from_name"]).props("outlined dense").classes("w-full")
+                subject = ui.input("Výchozí předmět", value=values["subject_template"]).props("outlined dense").classes("w-full")
+                body = ui.textarea("Výchozí text e-mailu", value=values["body_template"]).props("outlined dense").classes("w-full")
+                ui.label("Dostupné proměnné: {report}, {date}.").classes("text-caption")
 
     with ui.expansion("Kalendář starších odesílání", icon="history").classes("w-full app-note"):
         ui.label("Platí pouze pro starší odesílání bez vlastního kalendáře. U každého nového odesílání vyberete kalendář přímo v jeho úpravě.").classes("ui-help")
         cooking_meal_type = ui.input(
             "Dosavadní kalendář varných dnů",
             value=values["cooking_meal_type"],
-        ).classes("w-full")
+        ).props("outlined dense").classes("w-full")
         ui.label("Po uložení vlastního kalendáře u odesílání se toto společné nastavení pro něj už nepoužije.").classes("ui-help")
-
-    with ui.card().classes("w-full"):
-        ui.label("Odchozí e-mail").classes("text-subtitle1")
-        transport = ui.select({"resend": "Resend API (stávající)", "smtp": "SMTP server"},
-                              label="Způsob odesílání", value=values["transport"]).classes("w-full")
-        host = ui.input("SMTP server", value=values["smtp_host"]).classes("w-full")
-        port = ui.number("Port SMTP", value=values["smtp_port"], min=1, max=65535, step=1)
-        security = ui.select({"starttls": "STARTTLS", "ssl": "SSL/TLS", "none": "Bez TLS"},
-                             value=values["smtp_security"], label="Zabezpečení SMTP")
-        username = ui.input("SMTP přihlašovací jméno", value=values["smtp_username"]).classes("w-full")
-        ui.label("Heslo SMTP ukládejte do prostředí služby jako MAILPILOT_SMTP_PASSWORD, ne do JSON souboru.").classes("text-caption")
-        from_email = ui.input("E-mail odesílatele", value=values["from_email"]).classes("w-full")
-        from_name = ui.input("Zobrazované jméno odesílatele", value=values["from_name"]).classes("w-full")
-        subject = ui.input("Výchozí předmět", value=values["subject_template"]).classes("w-full")
-        body = ui.textarea("Výchozí text e-mailu", value=values["body_template"]).classes("w-full")
-        ui.label("Dostupné proměnné: {report}, {date}.").classes("text-caption")
 
     def save():
         data = dict(
@@ -125,5 +131,6 @@ def build_web_settings_panel(directory: Path) -> None:
         else:
             ui.notify("Nastavení uloženo.", type="positive")
 
-    ui.button("Uložit nastavení", on_click=save, icon="save").props("color=primary")
+    with ui.row().classes("ds-settings-save"):
+        ui.button("Uložit nastavení", on_click=save, icon="save").props("color=primary no-caps").style("color: var(--ds-on-primary) !important")
 

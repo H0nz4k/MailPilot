@@ -60,11 +60,12 @@ def build_mail_tasks_panel(
         if not tasks:
             ui.label("Zatím nemáte nastavené žádné odesílání.").classes("ui-help")
         for task in tasks:
-            with ui.card().classes("w-full"):
+            with ui.card().classes("ds-mail-task w-full"):
                 with ui.row().classes("w-full items-center justify-between"):
-                    ui.label(task.name).classes("text-subtitle1")
-                    ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá")
-                ui.label(f"{REPORTS[task.report]} · {task.send_time} · {', '.join(task.recipients)}")
+                    ui.label(task.name).classes("ds-task-title")
+                    ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá").classes("ds-task-badge")
+                ui.label(f"Každý den v {task.send_time}").classes("ds-task-line")
+                ui.label(f"Příjemci: {', '.join(task.recipients)}").classes("ds-task-line")
                 date_label = f"Den přehledu: {DATE_MODES[task.date_mode]}"
                 if task.date_mode == "next_cooking_day":
                     try:
@@ -93,7 +94,7 @@ def build_mail_tasks_panel(
                             f"Příští odeslání: {upcoming:%d.%m.%Y %H:%M}; "
                             f"den přehledu nelze určit: {exc}"
                         )
-                with ui.row().classes("gap-2"):
+                with ui.row().classes("ds-task-actions gap-2"):
                     ui.button("Upravit", on_click=lambda t=task: editor(t)).props("outline")
                     ui.button("Kopírovat", on_click=lambda t=task: editor(t, duplicate=True)).props("outline")
                     ui.button(
@@ -320,7 +321,7 @@ def build_mail_tasks_panel(
         request_calendars()
 
     with ui.row():
-        ui.button("Nové odesílání", icon="add", on_click=lambda: editor()).props("color=primary")
+        ui.button("Nové odesílání", icon="add", on_click=lambda: editor()).props("color=primary").style("color: var(--ds-on-primary) !important")
         ui.button("Obnovit", icon="refresh", on_click=table.refresh).props("outline")
         if on_open_reports:
             ui.button("Přejít do Přehledů", icon="today", on_click=on_open_reports).props("flat no-caps")

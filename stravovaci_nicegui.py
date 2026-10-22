@@ -120,6 +120,7 @@ from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
 from services.web_daily_design import DailyDesignMixin
 from services.web_daily_design_css import DATASHIP_CSS
+from services.web_closing_design import ClosingDesignMixin
 from ui_theme import (
     DEFAULT_UI_LAYOUT,
     DEFAULT_UI_TEMPLATE,
@@ -419,7 +420,7 @@ def shutdown_when_last_client_closes(current_client: Any) -> None:
         app.shutdown()
 
 
-class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
+class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
     """Stav a obslužné funkce zákaznické aplikace."""
 
     def __init__(self, config_path: Path) -> None:
@@ -621,10 +622,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
             "app-nav"
         ) as self.tabs:
             self.daily_tab = ui.tab("daily", label="Přehledy", icon="today")
+            self.mail_tasks_tab = ui.tab("mail_tasks", label="Odesílání", icon="schedule_send")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
-            self.mail_tasks_tab = ui.tab("mail_tasks", label="Odesílání", icon="schedule_send")
             self.admin_tab = ui.tab("admin", label="Nastavení", icon="settings")
         self.nav_tab_elements = {
             "daily": self.daily_tab, "closing": self.closing_tab,
@@ -1052,64 +1053,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
         self.meal_type_select.update()
         self._queue_daily_summary()
 
-    def _build_closing_panel(self) -> None:
-        closing = peek_closing_ui(self.raw)
-        with ui.column().classes("ui-block w-full"):
-            w.section_header(
-                "Uzávěrka",
-                "Volby pro DataShip.exe --zaverka_MMRRRR nebo --zaverka_am.",
-                "print",
-            )
-            with w.card():
-                with w.toolbar():
-                    w.field_label(
-                        "Generovat sestavy",
-                        "Zaškrtnuté sestavy se vytvoří při každé uzávěrce.",
-                    )
-                    selected = set(closing["sestavy"])
-                    self.closing_arch = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_ARCH],
-                        value=SESTAVA_ARCH in selected,
-                    ).props("dense")
-                    self.closing_fksp = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_FKSP],
-                        value=SESTAVA_FKSP in selected,
-                    ).props("dense")
-                    self.closing_recap = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_REKAPITULACE],
-                        value=SESTAVA_REKAPITULACE in selected,
-                    ).props("dense")
-                with w.toolbar():
-                    self.closing_output = self._output_path_field(
-                        "Složka pro uložení",
-                        str(closing["vystup"]),
-                        "Relativní cesta je vůči složce aplikace. {rok} a {mesic} "
-                        "se za vybranou složku doplní, aby se měsíce nepřepisovaly.",
-                        on_change=self.save_closing_settings,
-                    )
-                    self.closing_zip = ui.checkbox(
-                        "ZIP",
-                        value=bool(closing["zip"]),
-                    ).props("dense")
-                    self.closing_zip.tooltip("Zabalit sestavy do jednoho ZIP archivu.")
-                    self.closing_mail = ui.checkbox(
-                        "Odeslat e-mailem",
-                        value=bool(closing["odeslat_mail"]),
-                    ).props("dense")
-                    self.closing_mail.tooltip(
-                        "Příjemce nastavíte v Administraci → E-maily, funkce Uzávěrka."
-                    )
-                self.closing_status = ui.label(
-                    "Nastavení se ukládá automaticky."
-                ).classes("inline-status")
-        for element in (
-            self.closing_fksp,
-            self.closing_arch,
-            self.closing_recap,
-            self.closing_zip,
-            self.closing_mail,
-        ):
-            element.on("update:model-value", lambda: self.save_closing_settings())
+    _build_closing_panel = ClosingDesignMixin._build_closing_workspace
 
     def _selected_closing_reports(self) -> list[str]:
         selected: list[str] = []
@@ -1411,6 +1355,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
         return f"Vybráno kategorií: {selected}"
 
     def _render_daily_selection(self) -> None:
+        self._render_daily_preview_categories()
         if hasattr(self, "daily_expansion_label"):
             self.daily_expansion_label.set_text(self._daily_category_caption())
         if hasattr(self, "admin_category_count"):
@@ -1750,7 +1695,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
         ("categories", "Kategorie denního stavu", "checklist"),
         ("mail", "E-maily", "mail"),
         ("scheduler", "Plánovač", "schedule"),
-        ("mail_settings", "Nastavení odesílání", "outgoing_mail"),
+        ("mail_settings", "Služba a odesílání", "outgoing_mail"),
         ("navigation", "Hlavní nabídka", "view_list"),
         ("appearance", "Vzhled", "palette"),
         ("cli", "Bez GUI", "terminal"),
@@ -1758,9 +1703,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
 
     def _build_admin_panel(self) -> None:
         """Administrace se sidebarem; každá sekce se vejde bez dlouhého scrollování."""
-        with ui.row().classes("w-full items-stretch no-wrap gap-0"):
-            with ui.tabs().props("vertical dense no-caps inline-label").classes(
-                "side-nav admin-nav shrink-0"
+        with ui.column().classes("ds-admin-layout w-full gap-3"):
+            with ui.tabs().props("dense no-caps inline-label").classes(
+                "ds-admin-nav w-full"
             ) as self.admin_sections:
                 for name, label, icon in self.ADMIN_SECTIONS:
                     ui.tab(name, label=label, icon=icon)

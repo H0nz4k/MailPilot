@@ -30,12 +30,17 @@ class DailyDesignMixin:
                 with ui.column().classes("gap-1"):
                     ui.label("Přehledy").classes("ds-page-title").props('role="heading" aria-level="1"')
                     ui.label("Prohlédněte si počty nebo vytvořte PDF. Uložený výběr pak můžete pravidelně odesílat.").classes("ui-help")
+            with w.card().classes("ds-report-toolbar"):
+                self.daily_profile_choices = ui.row().classes("ds-profile-choices")
+                self.daily_profile_status = ui.label("").classes("ui-help ds-preview-state").props('role="status" aria-live="polite"')
+                with ui.row().classes("ds-editor-actions"):
+                    self.daily_new_button = ui.button("Uložit výběr…", icon="bookmark_border", on_click=lambda: self.open_daily_save_dialog(as_new=True)).props("outline no-caps").mark("daily-save-new")
+                    self.daily_update_button = ui.button("Uložit změny…", on_click=lambda: self.open_daily_save_dialog(as_new=False)).props("outline no-caps").mark("daily-save-update")
+                    self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("flat no-caps")
             with ui.element("div").classes("ds-daily-grid"):
                 with w.card().classes("ds-editor"):
                     with ui.row().classes("w-full items-center justify-between"):
                         ui.label("Co zobrazit").classes("app-heading")
-                        self.daily_profile_status = ui.label("").classes("ui-help ds-preview-state").props('role="status" aria-live="polite"')
-                    self.daily_profile_choices = ui.row().classes("ds-profile-choices w-full")
                     self.daily_preview_note = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
                     with ui.element("div").classes("ds-daily-fields"):
                         self._build_date_field()
@@ -44,35 +49,35 @@ class DailyDesignMixin:
                         self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined dense options-dense").classes("w-full")
                         self.meal_type_select.on_value_change(lambda _e: self._daily_filters_changed())
                     self._build_category_panel()
+                    self.daily_preview_categories = ui.row().classes("ds-selected-categories w-full")
                     self.daily_edit_expansion = ui.expansion("Vzhled a obsah PDF", icon="tune").classes("w-full app-note")
                     with self.daily_edit_expansion:
                         self._build_pdf_settings_section()
                     for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list):
                         field.on_value_change(lambda _e: self._mark_daily_dirty())
-                    with ui.row().classes("ds-editor-actions w-full justify-between"):
-                        self.daily_new_button = ui.button("Uložit výběr…", icon="bookmark_border", on_click=lambda: self.open_daily_save_dialog(as_new=True)).props("outline no-caps").mark("daily-save-new")
-                        self.daily_update_button = ui.button("Uložit změny…", on_click=lambda: self.open_daily_save_dialog(as_new=False)).props("outline no-caps").mark("daily-save-update")
-                        self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("flat no-caps")
                 with ui.column().classes("w-full gap-4 min-w-0"):
                     with w.card().classes("ds-summary"):
-                        with ui.row().classes("w-full items-center justify-between"):
-                            ui.label("Počty porcí").classes("app-heading")
-                            ui.button(icon="refresh", on_click=self.refresh_daily_summary).props('flat round aria-label="Obnovit souhrn"')
-                        self.daily_summary_name = ui.label("Vlastní výběr").classes("ds-summary-name")
-                        self.daily_summary_meta = ui.label("").classes("ui-help")
-                        self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem"')
-                        ui.label("porcí celkem").classes("ui-help")
+                        with ui.row().classes("ds-summary-heading w-full items-center justify-between"):
+                            with ui.column().classes("gap-1 min-w-0"):
+                                ui.label("Počty porcí").classes("app-heading")
+                                self.daily_summary_name = ui.label("Vlastní výběr").classes("ds-summary-name")
+                                self.daily_summary_meta = ui.label("").classes("ui-help")
+                            with ui.row().classes("items-center gap-3"):
+                                with ui.column().classes("gap-0"):
+                                    self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem"')
+                                    ui.label("porcí celkem").classes("ui-help")
+                                ui.button(icon="refresh", on_click=self.refresh_daily_summary).props('flat round aria-label="Obnovit souhrn"')
+                        self._build_pdf_panel()
+                        with ui.row().classes("ds-next-step w-full items-center justify-between") as self.daily_schedule_card:
+                            ui.label("Stejný výběr můžete pravidelně odesílat.").classes("ui-help")
+                            self.daily_schedule_button = ui.button("Nastavit odesílání", icon="schedule_send", on_click=self.schedule_daily_profile).props("no-caps unelevated").style("color: var(--ds-on-primary) !important")
+                        self.daily_schedule_card.set_visibility(self.mail_tasks_tab.visible)
                         self.daily_summary_table = ui.table(columns=[
                             {"name": "name", "label": "Kategorie", "field": "name", "align": "left"},
                             {"name": "portions", "label": "Porce", "field": "portions", "align": "right"},
-                        ], rows=[], row_key="code").props('flat dense hide-bottom wrap-cells aria-label="Souhrn počtu porcí podle kategorií"').classes("w-full ds-summary-table")
+                        ], rows=[], row_key="code").props('flat dense hide-bottom wrap-cells tabindex="0" aria-label="Souhrn počtu porcí podle kategorií"').classes("w-full ds-summary-table")
                         self.daily_summary_status = ui.label("Počty se zobrazí po připojení k Jídelně.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
-                    with w.card().classes("ds-next-step") as self.daily_schedule_card:
-                        ui.label("Chcete tento přehled pravidelně dostávat e-mailem?").classes("ds-summary-name")
-                        ui.label("Pokračujte s tímto výběrem. V Odesílání už doplníte jen příjemce, čas a pravidlo data.").classes("ui-help")
-                        self.daily_schedule_button = ui.button("Nastavit odesílání", icon="schedule_send", on_click=self.schedule_daily_profile).props("no-caps unelevated").style("color: var(--ds-on-primary) !important")
-                    self.daily_schedule_card.set_visibility(self.mail_tasks_tab.visible)
-            self._build_pdf_panel()
+
         self._build_daily_save_dialog()
         self._render_daily_profile_choices()
         if self.daily_profiles:
@@ -100,6 +105,18 @@ class DailyDesignMixin:
         self.daily_update_button.set_enabled(profile is not None)
         self.daily_update_button.set_text("Uložit změny…" if self._daily_dirty else "Upravit název…")
         self.daily_reset_button.set_visibility(bool(profile and self._daily_dirty))
+        self._render_daily_preview_categories()
+
+    def _render_daily_preview_categories(self) -> None:
+        if not hasattr(self, "daily_preview_categories"):
+            return
+        self.daily_preview_categories.clear()
+        with self.daily_preview_categories:
+            for code, name in self.categories:
+                if code in self.selected_categories:
+                    with ui.row().classes("ds-selected-category items-center no-wrap"):
+                        ui.icon("check", size="1rem").props('aria-hidden="true"')
+                        ui.label(name or code)
 
     def _build_daily_save_dialog(self) -> None:
         with ui.dialog() as self.daily_save_dialog, ui.card().classes("ds-mail-dialog"):
