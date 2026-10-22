@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from runtime_paths import application_directory
 
 DEFAULTS = {
     "nssm_path": "",
@@ -24,17 +25,26 @@ DEFAULTS = {
 def settings_path(directory: Path) -> Path:
     return Path(directory) / "web_mail_settings.json"
 
+def default_nssm_path() -> Path:
+    """The bundled NSSM follows the running EXE, even with config elsewhere."""
+    return application_directory() / "nssm" / "win64" / "nssm.exe"
+
+
 def load_settings(path: Path) -> dict:
-    if not path.exists():
-        values = dict(DEFAULTS)
-        bundled_nssm = path.parent / "nssm" / "nssm.exe"
-        if bundled_nssm.is_file():
-            values["nssm_path"] = str(bundled_nssm.resolve())
-        return values
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError("Nastavení musí být JSON objekt.")
-    return {**DEFAULTS, **raw}
+    raw = {}
+    if path.exists():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("Nastavení musí být JSON objekt.")
+    values = {**DEFAULTS, **raw}
+    current = str(values.get("nssm_path") or "").strip()
+    # Keep manual paths. Relocate a missing old bundled path after moving the app.
+    normalized = current.replace("\\", "/").casefold()
+    bundled = normalized.endswith(("/nssm/win64/nssm.exe", "/nssm/nssm.exe"))
+    if not current or (bundled and not Path(current).is_file()):
+        values["nssm_path"] = str(default_nssm_path())
+    return values
+
 
 def save_settings(path: Path, data: dict) -> None:
     values = {key: data[key] for key in DEFAULTS if key in data}

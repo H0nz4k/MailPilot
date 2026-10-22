@@ -1,6 +1,11 @@
-"""Windows NSSM service management; no command shell invocation."""
+"""NSSM service operations with Czech feedback and redirected Unicode output."""
 from __future__ import annotations
+
+import ctypes
+import locale
+import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -8,42 +13,128 @@ from pathlib import Path
 from services.web_mail_settings import load_settings, settings_path
 from services.web_branding import WORKER_EXE_NAME
 
+LOG = logging.getLogger(__name__)
+ADMIN_HELP = ('Spusťte DataShip.exe jako správce Windows: zavřete aplikaci, '
+              'klikněte na DataShip.exe pravým tlačítkem a zvolte „Spustit jako správce“. '
+              'Heslo do nastavení DataShipu tato oprávnění nenahrazuje.')
+
+
+def require_service_rights(action: str) -> None:
+    if os.name != 'nt':
+        raise ValueError('Službu NSSM lze spravovat pouze ve Windows.')
+    if action != 'status' and not ctypes.windll.shell32.IsUserAnAdmin():
+        raise PermissionError(ADMIN_HELP)
+
+
+def decode_nssm_output(value: bytes | str | None) -> str:
+    if isinstance(value, str):
+        return value.replace('\x00', '').strip()
+    if not value:
+        return ''
+    if value.startswith((b'\xff\xfe', b'\xfe\xff')):
+        return value.decode('utf-16', errors='replace').strip()
+    if value.count(b'\x00') > len(value) // 4:
+        return value.decode('utf-16-le', errors='replace').strip()
+    try:
+        return value.decode('utf-8').strip()
+    except UnicodeDecodeError:
+        return value.decode(locale.getpreferredencoding(False), errors='replace').strip()
+
+
+def service_error_message(output: str, *, code: int | None = None) -> str:
+    text = output.casefold()
+    def has(number: int) -> bool:
+        # NSSM exit codes themselves are not Windows error codes (notably 1/2).
+        return code == number or bool(re.search(rf'(?:error|chyba|code|kód|winerror)\s*[:=]?\s*\[?{number}\b|[\[(]{number}[\])]', text))
+    if has(5) or has(740) or any(s in text for s in ('access is denied', 'administrator', 'elevation', 'přístup byl odepřen')):
+        return 'Windows nepovolil změnu služby. ' + ADMIN_HELP
+    if has(1073) or 'already exists' in text or 'služba již existuje' in text:
+        return 'Služba již existuje. Použijte „Spustit“ nebo „Restart“; další službu neinstalujte.'
+    if has(1060) or 'does not exist' in text or 'not installed' in text or ('služba' in text and 'neexistuje' in text):
+        return 'Služba zatím není nainstalovaná. Nejprve klikněte na „Instalovat službu“.'
+    if has(1069) or 'logon failure' in text:
+        return 'Windows službu nepřihlásil. V nastavení služby zkontrolujte její účet a heslo.'
+    if has(1058):
+        return 'Služba je ve Windows zakázaná. Povolte její spouštění ve správě služeb.'
+    if has(1056):
+        return 'Služba již běží. Její stav ověříte tlačítkem „Stav“.'
+    if has(1062):
+        return 'Služba již je zastavená.'
+    if has(1072):
+        return 'Windows službu ještě odstraňuje. Zavřete správu služeb a zkuste operaci znovu.'
+    if has(193) or 'not a valid win32' in text:
+        return 'Soubor nelze spustit. Použijte přibalený 64bitový nssm.exe a DataShip-Worker.exe.'
+    if has(2) or 'cannot find the file' in text or 'file not found' in text:
+        return 'Windows nenalezl potřebný soubor. Zkontrolujte cestu k NSSM a DataShip-Worker.exe.'
+    if has(1053) or 'service_paused' in text or 'service_stopped' in text:
+        return 'Worker se nespustil správně. Zkontrolujte logy/web_mail_worker.log, účet služby a přístup ke konfiguraci.'
+    return 'Operaci služby se nepodařilo dokončit. Ověřte stav služby a logy ve složce logy. ' + ADMIN_HELP
+
+
+def _run_nssm(command: list[str]) -> str:
+    try:
+        completed = subprocess.run(command, capture_output=True, timeout=30,
+                                   stdin=subprocess.DEVNULL, check=False)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError('Windows neodpověděl do 30 sekund. Ověřte stav služby a zkuste to znovu.') from exc
+    except OSError as exc:
+        raise RuntimeError(service_error_message(str(exc), code=getattr(exc, 'winerror', None) or exc.errno)) from exc
+    output = '\n'.join(filter(None, (decode_nssm_output(completed.stdout), decode_nssm_output(completed.stderr))))
+    if completed.returncode:
+        LOG.warning('NSSM %s failed (exit=%s): %s', command[1], completed.returncode, output)
+        raise RuntimeError(service_error_message(output))
+    return output
+
+
 def service_command(config_directory: Path, action: str) -> str:
-    if action not in ("install", "start", "stop", "restart", "status"):
-        raise ValueError("Neznámá operace služby.")
+    if action not in ('install', 'start', 'stop', 'restart', 'status'):
+        raise ValueError('Neznámá operace služby.')
     settings = load_settings(settings_path(config_directory))
-    nssm = Path(settings["nssm_path"])
+    nssm = Path(settings['nssm_path'])
     if not nssm.is_file():
-        raise ValueError("NSSM.exe nebyl nalezen. Nastavte jeho cestu.")
-    name = str(settings["service_name"]).strip()
-    if not name or not all(c.isascii() and (c.isalnum() or c in "_-") for c in name):
-        raise ValueError("Neplatný název služby.")
-    config = (Path(config_directory) / "config.json").resolve()
+        raise ValueError(f'NSSM nebyl nalezen: {nssm}. Rozbalte celý balíček s NSSM; soubor má být ve složce nssm\\win64 vedle DataShip.exe.')
+    name = str(settings['service_name']).strip()
+    if not name or not all(c.isascii() and (c.isalnum() or c in '_-') for c in name):
+        raise ValueError('Název služby smí obsahovat jen písmena bez diakritiky, číslice, pomlčku a podtržítko.')
+    require_service_rights(action)
+    config = (Path(config_directory) / 'config.json').resolve()
     base = [str(nssm)]
-    if action == "install":
-        if getattr(sys, "frozen", False):
+    if action == 'install':
+        if not config.is_file():
+            raise ValueError('Nejprve ověřte připojení k databázi a uložte nastavení aplikace.')
+        if getattr(sys, 'frozen', False):
             worker = Path(sys.executable).with_name(WORKER_EXE_NAME)
             if not worker.is_file():
-                raise ValueError(f"Chybí {WORKER_EXE_NAME} vedle webové aplikace.")
-            command = [str(worker), "--config", str(config)]
+                raise ValueError(f'Chybí {WORKER_EXE_NAME} vedle DataShip.exe. Rozbalte celý balíček aplikace.')
+            command = [str(worker), '--config', str(config)]
         else:
-            command = [sys.executable, "-m", "services.web_mail_worker", "--config", str(config)]
+            command = [sys.executable, '-m', 'services.web_mail_worker', '--config', str(config)]
         commands = [
-            base + ["install", name, *command],
-            base + ["set", name, "AppDirectory", str(config.parent)],
-            base + ["set", name, "Start", "SERVICE_AUTO_START"],
-            base + ["set", name, "AppExit", "Default", "Restart"],
+            base + ['install', name, *command],
+            base + ['set', name, 'AppDirectory', str(config.parent)],
+            base + ['set', name, 'Start', 'SERVICE_AUTO_START'],
+            base + ['set', name, 'AppExit', 'Default', 'Restart'],
+            base + ['set', name, 'AppRestartDelay', '10000'],
         ]
-    elif action == "restart":
-        commands = [base + ["stop", name], base + ["start", name]]
+    elif action == 'restart':
+        commands = [base + ['restart', name]]
     else:
         commands = [base + [action, name]]
-    results = []
-    for command in commands:
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=30,
-                                   stdin=subprocess.DEVNULL, check=False)
-        output = (completed.stdout + "\n" + completed.stderr).strip()
-        if completed.returncode:
-            raise RuntimeError(output or f"NSSM selhal, kód {completed.returncode}.")
-        results.append(output)
-    return "\n".join(results).strip() or f"{action}: OK"
+    output = ''
+    installed = False
+    try:
+        for command in commands:
+            output = _run_nssm(command)
+            installed = installed or command[1] == 'install'
+    except RuntimeError as exc:
+        if installed:
+            raise RuntimeError('Služba byla vytvořena, ale její nastavení není dokončené. ' + str(exc)) from exc
+        raise
+    if action == 'status':
+        states = {'SERVICE_RUNNING': 'Služba běží.', 'SERVICE_STOPPED': 'Služba je zastavená.',
+                  'SERVICE_START_PENDING': 'Služba se spouští.', 'SERVICE_STOP_PENDING': 'Služba se zastavuje.',
+                  'SERVICE_PAUSED': 'Služba je pozastavená. Zkontrolujte log workeru.'}
+        return states.get(output.strip(), 'Stav služby se nepodařilo rozpoznat. Ověřte jej ve správě služeb Windows.')
+    return {'install': 'Služba je nainstalovaná a připravená. Zatím neběží; po kontrole odesílání klikněte na „Spustit“.',
+            'start': 'Služba byla spuštěna.', 'stop': 'Služba byla zastavena.',
+            'restart': 'Služba byla restartována.'}[action]

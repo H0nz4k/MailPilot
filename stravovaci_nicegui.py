@@ -114,6 +114,7 @@ from services.database import probe_connection
 from services.web_branding import (
     BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION,
 )
+from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
@@ -418,7 +419,7 @@ def shutdown_when_last_client_closes(current_client: Any) -> None:
         app.shutdown()
 
 
-class NiceGuiApp(DailyDesignMixin):
+class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
     """Stav a obslužné funkce zákaznické aplikace."""
 
     def __init__(self, config_path: Path) -> None:
@@ -542,6 +543,8 @@ class NiceGuiApp(DailyDesignMixin):
             self._build_workspace()
             with ui.row().classes("w-full justify-end pt-1"):
                 ui.label(BRAND_FOOTER).classes("app-footer")
+        self._build_database_setup_dialog()
+        current_client.on_connect(self._schedule_first_run)
 
     def _build_topbar(self) -> None:
         """Kompaktní hlavička: DataShip | provozovna | stav DB | období | Administrace."""
@@ -688,7 +691,7 @@ class NiceGuiApp(DailyDesignMixin):
         if first_setup:
             self.admin_dialog_title.set_text("Nastavit heslo administrátora")
             self.admin_dialog_help.set_text(
-                "Heslo se uloží do Windows Credential Manageru, nikoli do config.json."
+                "Zvolte si heslo pro nastavení DataShipu. V dalším kroku připojíme Jídelnu."
             )
             self.admin_password_repeat.set_visibility(True)
         else:
@@ -732,6 +735,8 @@ class NiceGuiApp(DailyDesignMixin):
         self.admin_dialog.close()
         self._open_admin_section(self._admin_target_section)
         self.set_status("")
+        if getattr(self, "_database_setup_pending", False):
+            self._open_database_setup()
 
     def lock_admin(self) -> None:
         self.admin_unlocked = False
@@ -2727,7 +2732,7 @@ class NiceGuiApp(DailyDesignMixin):
             info.period,
         )
 
-    async def test_connection(self) -> None:
+    async def test_connection(self) -> bool:
         try:
             database = self._collect_database()
             password = str(self.password_input.value or "")
@@ -2736,8 +2741,9 @@ class NiceGuiApp(DailyDesignMixin):
             if not password:
                 raise ConfigError("Vyplňte heslo k databázi.")
         except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
+            self.db_status.set_text(str(exc))
             ui.notify(str(exc), type="negative", position="top")
-            return
+            return False
 
         self.test_button.disable()
         self.db_status.set_text("Testuji připojení…")
@@ -2747,14 +2753,15 @@ class NiceGuiApp(DailyDesignMixin):
                 self._test_database, database, password
             )
         except Exception as exc:
+            message = database_error_message(exc)
             self.set_connection_display(
                 connected=False,
-                details=f"Poslední test selhal: {exc}",
+                details=message,
             )
-            self.db_status.set_text(f"Připojení selhalo: {exc}")
+            self.db_status.set_text(message)
             self.db_status.update()
             self.set_status("Připojení k databázi se nepodařilo.")
-            ui.notify(str(exc), type="negative", position="top", timeout=8000)
+            ui.notify(message, type="negative", position="top", timeout=8000)
         else:
             self.raw["databaze"] = database
             write_config(self.config_path, self.raw)
@@ -2797,6 +2804,7 @@ class NiceGuiApp(DailyDesignMixin):
             )
         finally:
             self.test_button.enable()
+        return self.connection_ok
 
     def populate_categories(self, categories: Sequence[tuple[str, str]]) -> None:
         self.categories = list(categories)

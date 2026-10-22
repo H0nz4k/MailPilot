@@ -26,7 +26,7 @@ jobs:
       - name: Build Windows EXEs (isolated web environment)
         run: bash scripts/build_web_windows.sh
       - name: Smoke-test actual frozen GUI and worker
-        run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py
+        run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
       - name: Package clean portable and NSSM distributions
         run: .venv-web/Scripts/python.exe scripts/package_web_release.py --commit "$GITHUB_SHA"
       - name: Upload distribution and test evidence

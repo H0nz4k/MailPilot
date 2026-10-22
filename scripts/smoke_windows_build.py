@@ -2,6 +2,7 @@
 from pathlib import Path
 import argparse
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -28,9 +29,46 @@ def stop(process):
         process.kill()
 
 
+def smoke_service(app: Path, tmp: Path) -> None:
+    from services.web_mail_nssm import _run_nssm, require_service_rights
+    require_service_rights('install')
+    service_dir = tmp / 'service'
+    service_dir.mkdir()
+    config = service_dir / 'config.json'
+    shutil.copy2(ROOT / 'config.example.json', config)
+    (service_dir / 'web_mail_tasks.json').write_text('{"version":1,"tasks":[]}', encoding='utf-8')
+    name = f'DataShipBuildSmoke_{os.getpid()}'
+    base = [str(app / 'nssm/win64/nssm.exe')]
+    installed = False
+    try:
+        _run_nssm(base + ['install', name, str(app / 'DataShip-Worker.exe'), '--config', str(config), '--interval', '10'])
+        installed = True
+        _run_nssm(base + ['set', name, 'AppDirectory', str(service_dir)])
+        _run_nssm(base + ['set', name, 'Start', 'SERVICE_DEMAND_START'])
+        _run_nssm(base + ['start', name])
+        deadline = time.monotonic() + 90
+        logfile = service_dir / 'logy/web_mail_worker.log'
+        while not logfile.exists() or 'scheduler started' not in logfile.read_text(encoding='utf-8'):
+            if time.monotonic() > deadline:
+                raise RuntimeError('NSSM service worker did not start in 90 seconds.')
+            time.sleep(0.5)
+        time.sleep(1)
+        if 'ERROR' in logfile.read_text(encoding='utf-8'):
+            raise RuntimeError('Worker reported an error under NSSM.')
+        assert _run_nssm(base + ['status', name]).strip() == 'SERVICE_RUNNING'
+    finally:
+        if installed:
+            try:
+                _run_nssm(base + ['stop', name])
+            finally:
+                _run_nssm(base + ['remove', name, 'confirm'])
+    print('Actual isolated NSSM install/start/status/stop/remove verified with no email tasks.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, default=ROOT / 'dist-web/DataShip')
+    parser.add_argument('--service', action='store_true', help='Also install/start/remove an isolated temporary service; administrator required.')
     args = parser.parse_args()
     app = args.app.resolve()
     for executable in ['DataShip.exe', 'DataShip-Worker.exe']:
@@ -82,6 +120,8 @@ def main():
                     raise RuntimeError(text)
             finally:
                 stop(worker)
+        if args.service:
+            smoke_service(app, tmp)
     print('Frozen GUI HTTP, worker startup and both version checks passed. No mail/tasks used.')
 
 

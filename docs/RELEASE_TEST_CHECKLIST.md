@@ -1,4 +1,4 @@
-# DataShip 1.0.0-rc.1 – kontrola před vydáním
+# DataShip 1.0.0-rc.2 – kontrola před vydáním
 
 Automatické testy používají izolované soubory a nahrazené DB/e-mailové transporty. Windows smoke kontrola ověřuje start skutečných sestavených EXE a HTTP odpověď GUI. Úspěšný build nepotvrzuje funkci zákaznické databáze ani účtu Windows služby.
 

@@ -26,7 +26,9 @@ def build_web_settings_panel(directory: Path) -> None:
         ui.label("Windows služba NSSM").classes("text-subtitle1")
         nssm = ui.input("Cesta k nssm.exe", value=values["nssm_path"]).classes("w-full")
         name = ui.input("Název služby", value=values["service_name"]).classes("w-full")
-        ui.label("Správa služby vyžaduje na Windows oprávnění správce.").classes("text-caption")
+        ui.label("1. Spusťte DataShip.exe jako správce Windows. 2. Ověřte databázi a e-mail. 3. Instalujte službu. 4. Klikněte na Spustit.").classes("ui-help")
+        ui.label("Služba zajistí odesílání, i když je okno DataShipu zavřené. Používá DataShip-Worker.exe ze stejné složky.").classes("ui-help")
+        service_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
         async def control(action: str):
             try:
                 # Save current service paths before invoking NSSM.
@@ -34,12 +36,16 @@ def build_web_settings_panel(directory: Path) -> None:
                 current.update(nssm_path=nssm.value.strip(), service_name=name.value.strip())
                 save_settings(path, current)
                 result = await run.io_bound(service_command, directory, action)
-                ui.notify(result or "Operace dokončena.", type="positive")
+                service_status.set_text(result)
+                ui.notify(result, type="positive", timeout=8000)
             except Exception as exc:
-                ui.notify(f"NSSM: {exc}", type="negative")
+                message = ("Nastavení služby nelze uložit. Ověřte právo zápisu do složky aplikace."
+                           if isinstance(exc, OSError) and exc.errno else str(exc))
+                service_status.set_text(message)
+                ui.notify(message, type="negative", timeout=15000)
         with ui.row().classes("gap-2"):
             for action, caption in (
-                ("install", "Instalovat"), ("start", "Spustit"),
+                ("install", "Instalovat službu"), ("start", "Spustit"),
                 ("stop", "Zastavit"), ("restart", "Restart"),
                 ("status", "Stav")
             ):
@@ -120,3 +126,4 @@ def build_web_settings_panel(directory: Path) -> None:
             ui.notify("Nastavení uloženo.", type="positive")
 
     ui.button("Uložit nastavení", on_click=save, icon="save").props("color=primary")
+

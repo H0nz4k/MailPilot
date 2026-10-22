@@ -31,9 +31,9 @@ def test_release_packages_only_program_and_clean_sample(tmp_path, monkeypatch):
             assert json.loads(z.read('DataShip/BUILD_INFO.json'))['commit'] == '0123456789abcdef'
             assert all(b'PRIVATE-DO-NOT-SHIP' not in z.read(name) for name in z.namelist())
     with ZipFile(paths[0]) as z:
-        assert 'DataShip/nssm/nssm.exe' not in z.namelist()
+        assert 'DataShip/nssm/win64/nssm.exe' not in z.namelist()
     with ZipFile(paths[1]) as z:
-        assert 'DataShip/nssm/nssm.exe' in z.namelist()
+        assert 'DataShip/nssm/win64/nssm.exe' in z.namelist()
         assert 'DataShip/INSTALOVAT_SLUZBU.sh' in z.namelist()
     for line in paths[2].read_text(encoding="utf-8").splitlines():
         digest, name = line.split('  ')
@@ -49,9 +49,11 @@ def test_changed_nssm_archive_is_rejected(tmp_path):
         release.verified_nssm(archive)
 
 
-def test_bundled_nssm_defaults_only_for_new_install(tmp_path):
-    binary = tmp_path / 'nssm/nssm.exe'
-    binary.parent.mkdir()
+def test_bundled_nssm_defaults_only_for_new_install(tmp_path, monkeypatch):
+    from services import web_mail_settings
+    monkeypatch.setattr(web_mail_settings, "application_directory", lambda: tmp_path)
+    binary = tmp_path / 'nssm/win64/nssm.exe'
+    binary.parent.mkdir(parents=True)
     binary.write_bytes(b'MZ-fixture')
     path = tmp_path / 'web_mail_settings.json'
     assert load_settings(path)['nssm_path'] == str(binary.resolve())

@@ -36,6 +36,18 @@ def make_zip(stage: Path, output: Path) -> None:
                 z.write(item, Path('DataShip') / item.relative_to(stage))
 
 
+def install_nssm(archive: Path, app: Path) -> None:
+    verified_nssm(archive)
+    nssm = app / 'nssm'
+    (nssm / 'win64').mkdir(parents=True, exist_ok=True)
+    with ZipFile(archive) as z:
+        for source, target in [(f'nssm-{NSSM_VERSION}/win64/nssm.exe', 'win64/nssm.exe'),
+                               (f'nssm-{NSSM_VERSION}/README.txt', 'README-upstream.txt')]:
+            (nssm / target).write_bytes(z.read(source))
+    (nssm / 'SOURCE.txt').write_text(
+        f'NSSM {NSSM_VERSION} (win64)\nPublic domain\n{NSSM_URL}\nSHA256: {NSSM_SHA256}\n', encoding='utf-8')
+
+
 def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Path]:
     if (ROOT / 'VERSION').read_text().strip() != WEB_VERSION:
         raise ValueError('VERSION and services/web_branding.py disagree.')
@@ -67,14 +79,7 @@ def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Pa
                     'platform': 'windows-x64', 'python': sys.version.split()[0]}
         (stage / 'BUILD_INFO.json').write_text(json.dumps(metadata, indent=2)+'\n', encoding='utf-8')
         make_zip(stage, paths[0])
-        nssm = stage / 'nssm'
-        nssm.mkdir()
-        with ZipFile(nssm_archive) as z:
-            for source, target in [(f'nssm-{NSSM_VERSION}/win64/nssm.exe', 'nssm.exe'),
-                                   (f'nssm-{NSSM_VERSION}/README.txt', 'README-upstream.txt')]:
-                (nssm / target).write_bytes(z.read(source))
-        (nssm / 'SOURCE.txt').write_text(
-            f'NSSM {NSSM_VERSION} (win64)\nPublic domain\n{NSSM_URL}\nSHA256: {NSSM_SHA256}\n', encoding='utf-8')
+        install_nssm(nssm_archive, stage)
         shutil.copy2(ROOT / 'scripts/install_dataship_service.sh', stage / 'INSTALOVAT_SLUZBU.sh')
         make_zip(stage, paths[1])
     checksums = output / 'SHA256SUMS.txt'
@@ -88,6 +93,7 @@ def main() -> None:
     parser.add_argument('--output', type=Path, default=ROOT / 'release-dist' / WEB_VERSION)
     parser.add_argument('--nssm-archive', type=Path)
     parser.add_argument('--commit')
+    parser.add_argument('--install-nssm', type=Path, help='Install verified NSSM beside a local EXE build only.')
     args = parser.parse_args()
     archive = args.nssm_archive or ROOT / 'build' / f'nssm-{NSSM_VERSION}.zip'
     if not archive.exists():
@@ -95,6 +101,10 @@ def main() -> None:
         # Download only from the official upstream and verify before extracting.
         with urllib.request.urlopen(NSSM_URL, timeout=60) as response:
             archive.write_bytes(response.read())
+    if args.install_nssm is not None:
+        install_nssm(archive, args.install_nssm)
+        print(args.install_nssm / 'nssm/win64/nssm.exe')
+        return
     commit = args.commit or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     for path in package(args.app, args.output, archive, commit):
         print(path)

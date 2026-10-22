@@ -8,7 +8,7 @@ from services.web_branding import (
 def test_dataship_brand_is_consistent():
     assert BRAND_NAME == "DataShip"
     from pathlib import Path
-    assert BRAND_STAGE == "rc.1"
+    assert BRAND_STAGE == WEB_VERSION.split("-", 1)[1]
     assert WEB_VERSION == Path(__file__).with_name("VERSION").read_text().strip()
     assert BRAND_FOOTER.startswith("DataShip")
     assert BRAND_ICON == "sailing"

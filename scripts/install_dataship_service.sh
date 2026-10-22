@@ -8,8 +8,8 @@ if [[ ! -f "$APP_DIR/DataShip-Worker.exe" ]]; then
 fi
 SERVICE="${1:-DataShipScheduler}"
 [[ "$SERVICE" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo 'Neplatny nazev sluzby.' >&2; exit 2; }
-NSSM="$APP_DIR/nssm/nssm.exe"
-[[ -f "$NSSM" && -f "$APP_DIR/config.json" ]] || { echo 'Chybi nssm/nssm.exe nebo config.json.' >&2; exit 2; }
+NSSM="$APP_DIR/nssm/win64/nssm.exe"
+[[ -f "$NSSM" && -f "$APP_DIR/config.json" ]] || { echo 'Chybi nssm/win64/nssm.exe nebo config.json.' >&2; exit 2; }
 # An installed service must be updated deliberately, never duplicated/replaced.
 if "$NSSM" get "$SERVICE" Application >/dev/null 2>&1; then
   echo "Sluzba $SERVICE uz existuje. Pouzij nastaveni aplikace k jeji sprave." >&2
@@ -25,4 +25,4 @@ mkdir -p "$APP_DIR/logy"
 "$NSSM" set "$SERVICE" AppStderr "$(cygpath -w "$APP_DIR/logy/nssm-stderr.log")"
 echo "Sluzba $SERVICE nainstalovana, zatim NEBEZI."
 echo 'Pred spustenim over ucet sluzby, pristup k DB a prijemce e-mailu.'
-echo "Spusteni: ./nssm/nssm.exe start $SERVICE"
+echo "Spusteni: ./nssm/win64/nssm.exe start $SERVICE"
