@@ -1446,6 +1446,7 @@ html.cards-zadne .stat-card {
 html.blocks-emphasized .app-card,
 html.blocks-emphasized .ui-block {
     border-left: 3px solid var(--app-primary);
+    padding: var(--app-block-pad);
 }
 
 html.blocks-emphasized .section-header {
