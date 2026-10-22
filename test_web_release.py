@@ -59,3 +59,37 @@ def test_bundled_nssm_defaults_only_for_new_install(tmp_path, monkeypatch):
     assert load_settings(path)['nssm_path'] == str(binary.resolve())
     path.write_text(json.dumps({'nssm_path': 'C:/existing/nssm.exe'}))
     assert load_settings(path)['nssm_path'] == 'C:/existing/nssm.exe'
+
+
+def test_nssm_download_retries_outage_and_caches_only_verified_bytes(tmp_path, monkeypatch):
+    import io
+    from urllib.error import HTTPError
+    data = b'complete verified upstream archive'
+    monkeypatch.setattr(release, 'NSSM_SHA256', hashlib.sha256(data).hexdigest())
+    calls = []
+    def request(url, timeout):
+        calls.append((url, timeout))
+        if len(calls) < 3:
+            raise HTTPError(url, 503, 'Service Temporarily Unavailable', {}, None)
+        return io.BytesIO(data)
+    monkeypatch.setattr(release.urllib.request, 'urlopen', request)
+    monkeypatch.setattr(release.time, 'sleep', lambda _: None)
+    archive = tmp_path / 'build/nssm.zip'
+    release.download_nssm(archive)
+    assert archive.read_bytes() == data
+    assert calls == [(release.NSSM_URL, 60)] * 3
+    assert list(archive.parent.iterdir()) == [archive]
+
+
+def test_invalid_nssm_download_is_not_cached_or_retried(tmp_path, monkeypatch):
+    import io
+    calls = []
+    def request(*_args, **_kwargs):
+        calls.append(1)
+        return io.BytesIO(b'invalid archive')
+    monkeypatch.setattr(release.urllib.request, 'urlopen', request)
+    archive = tmp_path / 'build/nssm.zip'
+    with pytest.raises(ValueError, match='checksum'):
+        release.download_nssm(archive)
+    assert calls == [1]
+    assert not list(archive.parent.iterdir())

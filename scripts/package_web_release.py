@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from zipfile import ZipFile, ZIP_DEFLATED
 
@@ -27,6 +29,32 @@ def verified_nssm(archive: Path) -> bytes:
     if hashlib.sha256(data).hexdigest() != NSSM_SHA256:
         raise ValueError('NSSM archive checksum does not match the pinned upstream build.')
     return data
+
+
+def download_nssm(archive: Path) -> None:
+    """Retry a short upstream outage; cache only a complete, verified archive."""
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(3):
+        temporary = None
+        try:
+            with urllib.request.urlopen(NSSM_URL, timeout=60) as response:
+                data = response.read()
+            with tempfile.NamedTemporaryFile(dir=archive.parent, prefix='nssm-download-', delete=False) as file:
+                temporary = Path(file.name)
+                file.write(data)
+            verified_nssm(temporary)
+            temporary.replace(archive)
+            return
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code not in (408, 429, 500, 502, 503, 504):
+                raise
+            if attempt == 2:
+                raise
+            print(f'NSSM server je dočasně nedostupný. Opakuji stažení ({attempt + 2}/3)…')
+            time.sleep(2 ** attempt)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
 
 def make_zip(stage: Path, output: Path) -> None:
@@ -97,10 +125,8 @@ def main() -> None:
     args = parser.parse_args()
     archive = args.nssm_archive or ROOT / 'build' / f'nssm-{NSSM_VERSION}.zip'
     if not archive.exists():
-        archive.parent.mkdir(parents=True, exist_ok=True)
         # Download only from the official upstream and verify before extracting.
-        with urllib.request.urlopen(NSSM_URL, timeout=60) as response:
-            archive.write_bytes(response.read())
+        download_nssm(archive)
     if args.install_nssm is not None:
         install_nssm(archive, args.install_nssm)
         print(args.install_nssm / 'nssm/win64/nssm.exe')
