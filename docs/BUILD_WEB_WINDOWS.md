@@ -1,6 +1,6 @@
 # DataShip – sestavení a spuštění na Windows (Git Bash)
 
-Aktuální postup pro verzi 1.0.0-rc.3, distribuční ZIPy s NSSM a GitHub Releases: [RELEASE_WINDOWS.md](RELEASE_WINDOWS.md).
+Aktuální postup pro verzi 1.0.0-rc.4, distribuční ZIPy s NSSM a GitHub Releases: [RELEASE_WINDOWS.md](RELEASE_WINDOWS.md).
 
 Tento návod platí pro větev `feat/dataship-design-integration` a nové **NiceGUI webové rozhraní**. Starý skript `build_windows.bat` sestavuje **Qt 12.8**, nikoliv tuto webovou verzi.
 

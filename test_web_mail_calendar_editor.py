@@ -38,7 +38,7 @@ async def test_new_task_requires_explicit_calendar_and_edit_copy_preserve_it(tmp
             with user:
                 field(user, ui.input, 'Název odesílání').value = 'Večerní přehled'
                 field(user, ui.input, 'E-mail příjemce').value = 'test@example.org'
-                mode = field(user, ui.select, 'Za který den?')
+                mode = field(user, ui.select, 'Za který den posílat?')
                 calendar = field(user, ui.select, 'Kalendář varných dnů')
                 assert not calendar.parent_slot.parent.visible
                 assert not lookup.called
@@ -79,7 +79,7 @@ async def test_legacy_calendar_is_visible_and_pinned_on_save(tmp_path):
          patch('services.web_mail_gui.available_cooking_calendars', return_value=('Oběd', 'Večeře')):
         async with user_simulation(lambda: build_mail_tasks_panel(tmp_path)) as user:
             await user.open('/')
-            await user.should_see('Datum sestavy: Následující varný den · kalendář: Oběd (dosavadní nastavení)')
+            await user.should_see('Den přehledu: Následující varný den · kalendář: Oběd (dosavadní nastavení)')
             user.find('Upravit').click()
             with user:
                 assert field(user, ui.select, 'Kalendář varných dnů').value == 'Oběd'

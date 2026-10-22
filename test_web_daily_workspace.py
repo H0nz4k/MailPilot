@@ -39,7 +39,7 @@ async def test_saved_profiles_switch_and_summary_uses_current_filters(tmp_path):
          patch.object(NiceGuiApp, "_send_mail_worker") as send:
         async with user_simulation(root) as user:
             await user.open("/")
-            await user.should_see("Moje přehledy")
+            await user.should_see("Co zobrazit")
             with user:
                 page = pages[0]
                 page.connection_ok = True

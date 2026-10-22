@@ -18,9 +18,9 @@ Text tlačítek se automaticky volí černý nebo bílý podle čitelnosti. Ovl�
 
 Rozhraní je určeno pro pracovnice jídelen, včetně uživatelek 55+. Hlavička obsahuje značku, název jídelny, hlavní nabídku a Nastavení jako jeden blok. Technické údaje o serveru a databázi se v běžné hlavičce nezobrazují. Výchozí text má 20 px a popisky 16 px při 100% přiblížení; i dříve uložená malá velikost nyní používá 18 px. Větší písmo a přiblížení zůstávají nastavitelné. Formulářové popisky se nezmenšují na obtížně čitelnou velikost po vyplnění pole, včetně dialogů mimo hlavní stránku.
 
-Denní stav ukazuje pojmenované přehledy, den, typ stravy, počet vybraných kategorií a počty porcí. Kategorie se mění jedním tlačítkem v samostatném výběru; nejsou zároveň podruhé vypsané ve formuláři. Úpravy názvu, tisku a cesty k PDF jsou zavřené pod volbou **Upravit přehled a vzhled PDF**. Nový přehled tuto část otevře. Ovládací tlačítka mají nejméně 44 px a ikona kalendáře je dostupná i klávesnicí.
+Stránka **Přehledy** ukazuje uložený přehled nebo vlastní výběr, datum náhledu, typ stravy, počet vybraných kategorií a počty porcí. Kategorie se mění jedním tlačítkem v samostatném výběru. Tiskové volby jsou zavřené pod **Vzhled a obsah PDF**; pojmenování se otevře až při ukládání. Označení **Prohlížení / Náhled změn** vysvětluje, zda jde o uložený výběr nebo jeho dočasnou úpravu. Ovládací tlačítka mají nejméně 44 px a ikona kalendáře je dostupná i klávesnicí.
 
-V nabídce **E-maily → Nové odesílání** se adresy přidávají tlačítkem **Přidat** nebo Enterem. Každá platná adresa se zobrazí jako samostatný štítek s fajfkou a tlačítkem pro odebrání. Lze vložit více adres oddělených čárkou, středníkem či mezerou; duplicity se nepřidávají. Neplatná adresa zůstane v poli k opravě a uložené adresy se neztratí. **Uložit** zpracuje i platnou rozepsanou adresu, která ještě nebyla potvrzena tlačítkem Přidat. Tato akce ukládá plán, nic neodesílá.
+V nabídce **Odesílání → Nové odesílání** se adresy přidávají tlačítkem **Přidat** nebo Enterem. Každá platná adresa se zobrazí jako samostatný štítek s fajfkou a tlačítkem pro odebrání. Lze vložit více adres oddělených čárkou, středníkem či mezerou; duplicity se nepřidávají. Neplatná adresa zůstane v poli k opravě a uložené adresy se neztratí. **Uložit** zpracuje i platnou rozepsanou adresu, která ještě nebyla potvrzena tlačítkem Přidat. Tato akce ukládá plán, nic neodesílá.
 
 Čas a den jsou vedle sebe. Delší popis přehledu je zavřený pod **Co přehled obsahuje?**. Dialog má samostatný obsah a pevnou spodní lištu, takže Zrušit a Uložit neodrolují mimo obrazovku.
 
@@ -55,11 +55,11 @@ Použije stejnou přednost provozních konfigurací jako vývojový spouštěč,
 
 ## Dva přehledy pro různé kategorie
 
-1. Proveďte TEST databáze v Administraci. Správce zde nadále určuje dostupné kategorie.
-2. V Denním stavu pojmenujte první přehled, zaškrtněte například dvě kategorie a zvolte **Uložit přehled**.
-3. Zvolte **Nový přehled**, pojmenujte jej, vyberte jiné čtyři kategorie a uložte.
-4. Mezi přehledy přepínáte tlačítky nad formulářem. Každý si pamatuje vlastní kategorie, typ stravy, oddělení kategorií, součty kategorií/norem a zapnutí seznamu strávníků.
-5. Platné rozpracované změny se při přepnutí uloží. Neplatný formulář se nezahodí; nejprve opravte název nebo výběr kategorií.
+1. Ověřte připojení k Jídelně; správce nadále určuje povolené kategorie.
+2. V **Přehledech** vyberte dvě kategorie a klikněte na **Uložit výběr…**. Zadejte název a potvrďte uložení.
+3. V nabídce **Uložený přehled** zvolte **Vlastní výběr**, vyberte jiné čtyři kategorie a znovu uložte pod jiným názvem.
+4. Mezi přehledy přepínáte nabídkou **Uložený přehled**. Každý si pamatuje vlastní kategorie, typ stravy, oddělení kategorií, součty kategorií/norem a zapnutí seznamu strávníků.
+5. Změna výběru upravuje pouze náhled. Přepínání ani tvorba nového výběru nepřepisují uložené přehledy. **Uložit změny…** výslovně aktualizuje vybraný přehled; **Uložit jako nový…** ponechá původní. **Vrátit uložený výběr** zahodí dočasné úpravy.
 
 Přehledy jsou v `daily_reports.json` vedle provozního `config.json`. Datum je pracovní volba pro ruční sestavu; po spuštění aplikace zůstává výchozí dnešní datum. První uložený přehled se načte při otevření. Nezakládají se žádné ukázkové kategorie ani ukázková data.
 
@@ -67,7 +67,9 @@ Při každém TESTu se uložený výběr protne s aktuálně dostupnými a povol
 
 ## Vlastní přehled v e-mailové úloze
 
-V **E-mailové úlohy → Nová úloha / Upravit → Který přehled odesílat?** vyberte požadovaný pojmenovaný přehled. Pod výběrem se ukazují jeho uložené kategorie, typ stravy a zapnutí seznamu strávníků. Přehledy se připravují v **Denní stav → Moje přehledy**; bez uloženého přehledu aplikace nejprve vysvětlí tento krok. Každá úloha může mít jiné kategorie, příjemce, čas a pravidlo data. Uložení úlohy samo nic neodesílá.
+Nejkratší cesta je **Přehledy → Nastavit odesílání**. Uložený přehled se přenese rovnou do editoru. Vlastní nebo upravený výběr se nejprve pojmenuje a uloží jako nový; do té doby se neotevře plánování. Datum náhledu se nepřenáší — pravidelné odesílání si datum určuje při každém spuštění podle vlastní volby.
+
+V **Odesílání → Nové odesílání / Upravit → Uložený přehled** je stejná nabídka názvů jako v Přehledech. Pole názvu odesílání je sbalené; název se předvyplní podle přehledu a lze ho změnit. Bez uloženého přehledu se nabídne návrat do Přehledů. Výběr profilu, otevření editoru ani uložení plánu samo nic neodesílá.
 
 Nové úlohy už nenabízejí dvě podobně pojmenované sestavy ani neurčité výchozí nastavení. Posun dnů a konkrétní datum se zobrazují jen při příslušné volbě data. Starší úloha bez přehledu ponechá volbu **Dosavadní společné nastavení**, aby pouhá úprava názvu nebo času nezměnila obsah PDF. Nezapojený původní souhrn je u starších úloh označen jako nepodporovaný; převod na pojmenovaný denní přehled vyžaduje výslovné zaškrtnutí v editoru.
 
@@ -110,3 +112,9 @@ CLI přepínače zůstávají na dosavadní implementaci. Opravu společného de
 Volba **Kalendář varných dnů** se ukazuje přímo u odesílání, pouze pro **Následující varný den**. Nabízí kalendáře z Jídelny pro letošní a příští rok, ne odhadnuté typy stravy. Nové odesílání vyžaduje výslovný výběr; chybějící volbu označí přímo u pole. Kalendář mění pouze datum přehledu. Výběr se ukládá s úlohou a zachová při kopírování.
 
 Starší úlohy zachovají původní společný kalendář, který se při úpravě předvyplní a při uložení přiřadí přímo úloze. Chybějící kalendář se nenahrazuje jiným. Pro tuto funkci je nutné aktualizovat také **DataShip-Worker.exe** a restartovat dosavadní službu. Testy ověřují nezávislé snídaně/obědy/večeře, uložení, editaci, kopírování a zachování starších úloh.
+
+## Jasný postup od náhledu k odesílání (rc.4)
+
+Navigace používá názvy **Přehledy** a **Odesílání**. Prohlížení počtů a výslovné ukládání jsou oddělené; automatické ukládání při přepínání bylo odstraněno. Datum náhledu platí pro zobrazení a ruční PDF. Jednorázové odeslání má samostatné tlačítko **Odeslat jednou…** s dosavadním potvrzením příjemců. Pravidelné odesílání vzniká přes **Nastavit odesílání** s předvybraným přehledem. Pokud správce nabídku Odesílání skryje, skryje se také tato návazná karta.
+
+Funkční kontrola zahrnuje nulové zápisy při prohlížení a přepínání, vrácení náhledu, výslovnou aktualizaci i kopii, odmítnutí prázdného názvu, přesné předání přehledu a zrušení bez vytvoření plánu. Chromium ověřil cestu od náhledu až po uložení plánu na šířkách 375, 768 a 1440 px, světlý i tmavý motiv a viditelné patičky dialogů. Data i příjemce byly izolované, žádný skutečný e-mail se neposílal.

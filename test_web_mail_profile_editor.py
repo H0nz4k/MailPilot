@@ -33,7 +33,7 @@ async def test_new_task_selects_a_named_profile_and_shows_its_contents(tmp_path)
             await user.open("/")
             user.find("Nové odesílání").click()
             with user:
-                choices = field(user, ui.select, "Který přehled odesílat?")
+                choices = field(user, ui.select, "Uložený přehled")
                 assert choices.options == {first.id: first.name, other.id: other.name}
                 assert choices.value is None
                 assert all(e.props.get("label") != "Sestava" for e in user.find(ui.select).elements)
@@ -45,7 +45,7 @@ async def test_new_task_selects_a_named_profile_and_shows_its_contents(tmp_path)
                 choices.value = first.id
                 assert not field(user, ui.number, "Posun od dneška (dní)").visible
                 assert not field(user, ui.input, "Vybraný den").visible
-                field(user, ui.select, "Za který den?").value = "offset"
+                field(user, ui.select, "Za který den posílat?").value = "offset"
                 assert field(user, ui.number, "Posun od dneška (dní)").visible
             user.find("Co přehled obsahuje?").click()
             await user.should_see("Uložené kategorie: Žáci, Zaměstnanci.")
@@ -70,7 +70,7 @@ async def test_editing_old_task_keeps_shared_settings_until_user_changes_them(tm
             await user.open("/")
             user.find("Upravit").click()
             with user:
-                choices = field(user, ui.select, "Který přehled odesílat?")
+                choices = field(user, ui.select, "Uložený přehled")
                 assert choices.value == ""
                 assert choices.options[""] == LEGACY_PROFILE_LABEL
             user.find("Uložit").click()

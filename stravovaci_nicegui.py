@@ -620,11 +620,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
         with ui.tabs().props("inline-label dense no-caps").classes(
             "app-nav"
         ) as self.tabs:
-            self.daily_tab = ui.tab("daily", label="Denní stav", icon="today")
+            self.daily_tab = ui.tab("daily", label="Přehledy", icon="today")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
-            self.mail_tasks_tab = ui.tab("mail_tasks", label="E-maily", icon="schedule_send")
+            self.mail_tasks_tab = ui.tab("mail_tasks", label="Odesílání", icon="schedule_send")
             self.admin_tab = ui.tab("admin", label="Nastavení", icon="settings")
         self.nav_tab_elements = {
             "daily": self.daily_tab, "closing": self.closing_tab,
@@ -648,9 +648,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
                 self._build_bulk_panel()
             with ui.tab_panel("mail_tasks"):
                 from services.web_mail_gui import build_mail_tasks_panel
-                build_mail_tasks_panel(
+                self.mail_tasks_editor = build_mail_tasks_panel(
                     self.config_path.parent, config_path=self.config_path,
                     category_names=lambda: dict(self.categories),
+                    on_open_reports=self.go_home,
                 )
             with ui.tab_panel("admin"):
                 self._build_admin_panel()
@@ -770,6 +771,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
     def _apply_navigation_visibility(self) -> None:
         """Apply persisted top-tab visibility immediately; admin remains protected."""
         settings = visible_tabs(self.raw)
+        if hasattr(self, "daily_schedule_card"):
+            self.daily_schedule_card.set_visibility(settings["mail_tasks"])
         for key, tab in getattr(self, "nav_tab_elements", {}).items():
             tab.set_visibility(settings[key])
         if getattr(self, "tabs", None) is not None:
@@ -1465,7 +1468,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
             ui.notify("Nejprve proveďte TEST připojení nebo nastavte povolené kategorie.", type="warning")
             return
         self._open_item_picker_dialog(
-            title="Kategorie pro tuto sestavu",
+            title="Kategorie přehledu",
             options=options,
             selected=[code for code, _ in options if code in self.selected_categories],
             on_confirm=self._apply_daily_categories,
@@ -1787,12 +1790,12 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
         w.section_header(
             "Hlavní nabídka",
             "Zvolte záložky viditelné pro běžného uživatele. "
-            "Denní stav a přístup k Administraci jsou vždy dostupné.",
+            "Přehledy a přístup k Nastavení jsou vždy dostupné.",
             "view_list",
         )
         saved = visible_tabs(self.raw)
         with w.card():
-            ui.label("Denní stav – vždy zobrazen").classes("ui-help")
+            ui.label("Přehledy – vždy zobrazeny").classes("ui-help")
             self.navigation_switches = {
                 key: ui.checkbox(label, value=saved[key]).props("dense")
                 for key, label in EDITABLE_TABS.items()
@@ -2406,8 +2409,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin):
                 on_click=self.generate_pdf,
             ).props("outline no-caps")
             self.send_button = ui.button(
-                "Poslat e-mailem", icon="send", on_click=self.send_mail
-            ).props("no-caps unelevated")
+                "Odeslat jednou…", icon="send", on_click=self.send_mail
+            ).props("outline no-caps")
             self.send_button.disable()
 
     def _build_mail_panel(self) -> None:

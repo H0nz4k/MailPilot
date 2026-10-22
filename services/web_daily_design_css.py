@@ -82,6 +82,7 @@ html.fields-husta .q-btn, .q-btn, .q-btn--dense { min-height: max(44px, var(--ap
 }
 .ds-page-heading { margin: 0 0 8px; gap: 8px; }
 .ds-page-title { font-size: max(24px, var(--app-heading)); font-weight: var(--app-weight-heading); line-height: 1.2; }
+.ds-preview-state { padding: 4px 8px; border-radius: 6px; background: var(--app-primary-soft); color: var(--app-ink); }
 .ds-daily-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; width: 100%; }
 .ds-daily-grid > * { min-width: 0; }
 .dataship-ui .ds-daily { padding: 0; border-left: 0; gap: 10px !important; }
@@ -89,7 +90,7 @@ html.fields-husta .q-btn, .q-btn, .q-btn--dense { min-height: max(44px, var(--ap
 html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 html.blocks-emphasized .dataship-ui .ds-daily .app-card { border: 2px solid var(--app-primary); }
 .ds-daily-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; width: 100%; }
-.ds-profile-choices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.ds-profile-choices { display: block; }
 .dataship-ui .ds-profile { min-height: 48px; width: 100%; padding: 6px 10px; text-align: left; justify-content: flex-start; }
 .ds-profile .q-btn__content { justify-content: flex-start; overflow-wrap: anywhere; }
 .ds-profile-active { color: var(--app-primary); background: var(--app-primary-soft); box-shadow: inset 0 0 0 1px var(--app-primary); }
@@ -113,6 +114,8 @@ html.blocks-emphasized .dataship-ui .ds-daily .app-card { border: 2px solid var(
 .dataship-ui .action-bar .inline-status:empty { display: none; }
 /* Short mail form, visible recipient chips and a footer that never scrolls away. */
 .ds-mail-dialog.q-card { width: 740px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 32px); padding: 0; gap: 0; display: flex; flex-direction: column; background: var(--app-surface); color: var(--app-ink); border-radius: 14px; }
+.ds-mail-dialog { --ds-on-primary: var(--custom-on-primary, #ffffff); }
+html.theme-tmave .ds-mail-dialog { --ds-on-primary: #101e3b; }
 .ds-dialog-title { font-size: var(--app-heading); font-weight: var(--app-weight-heading); padding: 14px 20px; flex-shrink: 0; }
 .ds-dialog-body { min-height: 0; overflow-y: auto; padding: 4px 20px 16px; gap: 12px; flex: 1 1 auto; }
 .ds-dialog-footer { padding: 12px 20px; border-top: 1px solid var(--app-border); background: var(--app-surface); flex-shrink: 0; }

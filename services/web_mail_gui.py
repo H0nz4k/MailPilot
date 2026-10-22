@@ -31,19 +31,20 @@ DATE_MODES = {
 def build_mail_tasks_panel(
     config_directory: Path, config_path: Path | None = None,
     category_names: Callable[[], dict[str, str]] | None = None,
-) -> None:
+    on_open_reports: Callable[[], None] | None = None,
+) -> Callable:
     """Mount task management as a tab in the existing NiceGUI application."""
     path = task_file(Path(config_directory))
     active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
-    ui.label("Pravidelné odesílání").classes("app-heading")
+    ui.label("Odesílání přehledů").classes("ds-page-title").props('role="heading" aria-level="1"')
     ui.label(
-        "Nastavte, komu a kdy se má přehled posílat."
+        "Použijte uložený přehled z Přehledů. Zde nastavíte, komu, kdy a za který den se má posílat."
     ).classes("ui-help")
     def read():
         try:
             return load_tasks(path)
         except (OSError, ValueError) as exc:
-            ui.notify(f"Nelze načíst úlohy: {exc}", type="negative")
+            ui.notify(f"Nelze načíst odesílání: {exc}", type="negative")
             return None
 
     def profile_options():
@@ -64,7 +65,7 @@ def build_mail_tasks_panel(
                     ui.label(task.name).classes("text-subtitle1")
                     ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá")
                 ui.label(f"{REPORTS[task.report]} · {task.send_time} · {', '.join(task.recipients)}")
-                date_label = f"Datum sestavy: {DATE_MODES[task.date_mode]}"
+                date_label = f"Den přehledu: {DATE_MODES[task.date_mode]}"
                 if task.date_mode == "next_cooking_day":
                     try:
                         calendar_name = task_calendar_type(active_config_path, task)
@@ -76,7 +77,7 @@ def build_mail_tasks_panel(
                 ui.label(date_label)
                 if task.profile_id:
                     try:
-                        label = profile_options().get(task.profile_id, "Chybějící přehled – upravte úlohu")
+                        label = profile_options().get(task.profile_id, "Chybějící přehled – upravte odesílání")
                     except (OSError, ValueError) as exc:
                         label = f"Přehled nelze načíst: {exc}"
                     ui.label(f"Odesílaný přehled: {label}")
@@ -86,11 +87,11 @@ def build_mail_tasks_panel(
                 if upcoming:
                     try:
                         report_date = resolve_task_date(active_config_path, task, upcoming.date())
-                        ui.label(f"Další běh: {upcoming:%d.%m.%Y %H:%M}; sestava za {report_date:%d.%m.%Y}")
+                        ui.label(f"Příští odeslání: {upcoming:%d.%m.%Y %H:%M}; přehled za {report_date:%d.%m.%Y}")
                     except Exception as exc:
                         ui.label(
-                            f"Další běh: {upcoming:%d.%m.%Y %H:%M}; "
-                            f"datum sestavy nelze určit: {exc}"
+                            f"Příští odeslání: {upcoming:%d.%m.%Y %H:%M}; "
+                            f"den přehledu nelze určit: {exc}"
                         )
                 with ui.row().classes("gap-2"):
                     ui.button("Upravit", on_click=lambda t=task: editor(t)).props("outline")
@@ -108,12 +109,12 @@ def build_mail_tasks_panel(
             ui.notify(f"Uložení selhalo: {exc}", type="negative")
             return False
         table.refresh()
-        ui.notify("Úlohy byly uloženy.", type="positive")
+        ui.notify("Odesílání bylo uloženo.", type="positive")
         return True
 
     def set_enabled(task):
         if task.report != "daily" and not task.enabled:
-            ui.notify("Nejprve úlohu upravte a vyberte přehled k odesílání.", type="warning")
+            ui.notify("Nejprve odesílání upravte a vyberte přehled k odesílání.", type="warning")
             return
         tasks = read()
         if tasks is None:
@@ -122,7 +123,7 @@ def build_mail_tasks_panel(
 
     def confirm_delete(task):
         with ui.dialog() as dialog, ui.card():
-            ui.label(f"Opravdu smazat úlohu „{task.name}“?")
+            ui.label(f"Opravdu smazat odesílání „{task.name}“?")
             with ui.row():
                 ui.button("Zrušit", on_click=dialog.close).props("flat")
                 def remove():
@@ -132,24 +133,34 @@ def build_mail_tasks_panel(
                 ui.button("Smazat", on_click=remove).props("color=negative")
         dialog.open()
 
-    def editor(task=None, duplicate=False):
+    def editor(task=None, duplicate=False, *, profile_id=None):
         try:
             saved_profiles = {p.id: p for p in load_profiles(profile_file(Path(config_directory)))}
         except (OSError, ValueError) as exc:
             ui.notify(f"Přehledy nelze načíst: {exc}", type="negative")
             return
         profiles = {key: p.name for key, p in saved_profiles.items()}
+        if profile_id is not None and profile_id not in profiles:
+            ui.notify("Tento přehled už není uložený. Vraťte se do Přehledů a uložte ho znovu.", type="warning")
+            return
         legacy_common = bool(task and task.report == "daily" and not task.profile_id)
         if legacy_common:
             profiles = {"": LEGACY_PROFILE_LABEL, **profiles}
         if task and task.profile_id and task.profile_id not in profiles:
             profiles[task.profile_id] = "Chybějící přehled – vyberte jiný"
         if not profiles:
-            ui.notify(
-                "Nejprve v Denní stav → Moje přehledy vyberte kategorie, "
-                "přehled pojmenujte a uložte. Potom ho zde vyberete k odesílání.",
-                type="info", timeout=8000,
-            )
+            with ui.dialog() as first_profile, ui.card().classes("ds-mail-dialog"):
+                ui.label("Nejprve připravte přehled").classes("ds-dialog-title")
+                with ui.column().classes("ds-dialog-body"):
+                    ui.label("V Přehledech vyberte požadované počty a klikněte na Nastavit odesílání. Výběr se uloží a přenese sem.").classes("ui-help")
+                with ui.row().classes("ds-dialog-footer w-full justify-end"):
+                    ui.button("Zrušit", on_click=first_profile.close).props("flat no-caps")
+                    if on_open_reports:
+                        def prepare():
+                            first_profile.close()
+                            on_open_reports()
+                        ui.button("Připravit přehled", on_click=prepare).props("no-caps unelevated").style("color: var(--ds-on-primary) !important")
+            first_profile.open()
             return
         calendar_value = task.cooking_meal_type if task else None
         if task and task.date_mode == "next_cooking_day" and calendar_value is None:
@@ -161,19 +172,19 @@ def build_mail_tasks_panel(
         with ui.dialog() as dialog, ui.card().classes("ds-mail-dialog"):
             ui.label("Kopírovat odesílání" if duplicate else "Upravit odesílání" if task else "Nové odesílání").classes("ds-dialog-title")
             with ui.column().classes("ds-dialog-body w-full"):
-                name = ui.input("Název odesílání", placeholder="např. Obědy pro školku", value=(task.name + " – kopie" if duplicate else task.name) if task else "").props("outlined dense").classes("w-full")
-                recipients = RecipientEditor(task.recipients if task else ())
                 convert = None
                 if task and task.report != "daily":
                     ui.label("Tato starší sestava se nedá odesílat. Vyberte uložený denní přehled.").classes("ui-help")
                     convert = ui.checkbox("Převést úlohu na odesílání vybraného přehledu")
                 selected = (task.profile_id or "") if task and task.report == "daily" else (
-                    next(iter(profiles)) if len(profiles) == 1 else None
+                    profile_id if profile_id is not None else next(iter(profiles)) if len(profiles) == 1 else None
                 )
-                profile = ui.select(profiles, label="Který přehled odesílat?", value=selected).props("outlined dense").classes("w-full")
+                profile = ui.select(profiles, label="Uložený přehled", value=selected).props("outlined dense").classes("w-full")
                 with ui.expansion("Co přehled obsahuje?", icon="info_outline").classes("w-full ds-profile-details"):
                     details = ui.label().classes("ui-help w-full")
-                    ui.label("Obsah změníte v Denní stav → Moje přehledy.").classes("ui-help")
+                    ui.label("Stejný přehled najdete v Přehledech. Tam můžete upravit jeho obsah.").classes("ui-help")
+
+                recipients = RecipientEditor(task.recipients if task else ())
 
                 def explain_profile():
                     chosen = saved_profiles.get(profile.value)
@@ -188,19 +199,26 @@ def build_mail_tasks_panel(
                         details.set_text(" ".join(parts))
                     elif profile.value == "" and legacy_common:
                         details.set_text(
-                            "Tato starší úloha používá společné nastavení aplikace: "
+                            "Toto starší odesílání používá společné nastavení aplikace: "
                             "kategorie, typ stravy a obsah PDF. Žádný uložený přehled nevybírá."
                         )
                     elif profile.value:
                         details.set_text("Tento přehled byl odstraněn. Vyberte jiný uložený přehled.")
                     else:
-                        details.set_text("Vyberte jeden z přehledů uložených v Denní stav → Moje přehledy.")
+                        details.set_text("Vyberte jeden z přehledů uložených v Přehledech.")
+                    if not task and (not name.value or name.value == automatic_name[0]):
+                        automatic_name[0] = (chosen.name + " – odesílání") if chosen else ""
+                        name.value = automatic_name[0]
 
+                automatic_name = [""]
+                with ui.expansion("Název odesílání", icon="edit").classes("w-full ds-profile-details"):
+                    name = ui.input("Název odesílání", placeholder="např. Obědy pro školku", value=(task.name + " – kopie" if duplicate else task.name) if task else "").props("outlined dense").classes("w-full")
                 profile.on_value_change(lambda _event: explain_profile())
                 explain_profile()
                 with ui.element("div").classes("ds-mail-schedule w-full"):
                     time = ui.input("V kolik hodin?", value=task.send_time if task else "08:00").props("outlined dense type=time").classes("w-full")
-                    mode = ui.select(DATE_MODES, label="Za který den?", value=task.date_mode if task else "today").props("outlined dense").classes("w-full")
+                    mode = ui.select(DATE_MODES, label="Za který den posílat?", value=task.date_mode if task else "today").props("outlined dense").classes("w-full")
+                ui.label("Datum se při každém odeslání určí podle této volby. Datum náhledu z Přehledů se nepřebírá.").classes("ui-help")
                 catalog = {"names": None, "busy": False}
                 with ui.column().classes("w-full gap-1").bind_visibility_from(
                     mode, "value", backward=lambda value: value == "next_cooking_day"
@@ -292,17 +310,20 @@ def build_mail_tasks_panel(
                         if new.profile_id and new.profile_id not in profile_options():
                             raise ValueError("Vyberte existující uložený přehled.")
                     except (OSError, ValueError, TypeError) as exc:
-                        ui.notify(f"Neplatná úloha: {exc}", type="negative")
+                        ui.notify(f"Odesílání nelze uložit: {exc}", type="negative")
                         return
                     items = [t for t in tasks if t.id != new.id] + [new]
                     if persist(items):
                         dialog.close()
-                ui.button("Uložit", on_click=save).props("color=primary")
+                ui.button("Uložit", on_click=save).props("color=primary").style("color: var(--ds-on-primary) !important").mark("mail-task-save")
         dialog.open()
         request_calendars()
 
     with ui.row():
         ui.button("Nové odesílání", icon="add", on_click=lambda: editor()).props("color=primary")
         ui.button("Obnovit", icon="refresh", on_click=table.refresh).props("outline")
+        if on_open_reports:
+            ui.button("Přejít do Přehledů", icon="today", on_click=on_open_reports).props("flat no-caps")
     table()
+    return editor
 
