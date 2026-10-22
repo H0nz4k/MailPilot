@@ -1444,8 +1444,10 @@ html.cards-zadne .stat-card {
 }
 
 html.blocks-emphasized .app-card,
-html.blocks-emphasized .ui-block {
-    border-left: 3px solid var(--app-primary);
+html.blocks-emphasized .ui-block,
+html.blocks-emphasized .app-note {
+    border: 2px solid var(--app-primary);
+    border-radius: var(--app-radius);
     padding: var(--app-block-pad);
 }
 

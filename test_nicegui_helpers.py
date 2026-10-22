@@ -18,7 +18,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("font-size: var(--app-text)", gui.UI_CSS)
         self.assertIn(".q-tab--active", gui.UI_CSS)
         self.assertIn("blocks-emphasized", gui.UI_CSS)
-        self.assertIn("border-left: 3px solid var(--app-primary)", gui.UI_CSS)
+        self.assertIn("border: 2px solid var(--app-primary)", gui.UI_CSS)
         self.assertIn("min-height: var(--app-control-min)", gui.UI_CSS)
 
     def test_admin_can_choose_ui_text_size(self):

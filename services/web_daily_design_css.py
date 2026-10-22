@@ -86,6 +86,8 @@ html.fields-husta .q-btn, .q-btn, .q-btn--dense { min-height: max(44px, var(--ap
 .ds-daily-grid > * { min-width: 0; }
 .dataship-ui .ds-daily { padding: 0; border-left: 0; gap: 10px !important; }
 .dataship-ui .ds-daily .app-card { padding: var(--ds-space); border-radius: 12px; gap: 12px; border: 1px solid var(--app-border); }
+html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
+html.blocks-emphasized .dataship-ui .ds-daily .app-card { border: 2px solid var(--app-primary); }
 .ds-daily-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; width: 100%; }
 .ds-profile-choices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .dataship-ui .ds-profile { min-height: 48px; width: 100%; padding: 6px 10px; text-align: left; justify-content: flex-start; }
