@@ -83,13 +83,13 @@ def build_web_settings_panel(directory: Path) -> None:
         refresh_state()
         ui.label("Pozor: odstranění smaže i případné aktuální produkční upozornění.").classes("text-caption")
 
-    with ui.card().classes("w-full"):
-        ui.label("Varné dny – JídelnaSQL").classes("text-subtitle1")
+    with ui.expansion("Kalendář starších odesílání", icon="history").classes("w-full app-note"):
+        ui.label("Platí pouze pro starší odesílání bez vlastního kalendáře. U každého nového odesílání vyberete kalendář přímo v jeho úpravě.").classes("ui-help")
         cooking_meal_type = ui.input(
-            "Typ služby v public.varnedny",
+            "Dosavadní kalendář varných dnů",
             value=values["cooking_meal_type"],
         ).classes("w-full")
-        ui.label("Například Oběd. A = vaří, N = nevaří; víkendy ani svátky se nefiltrují.").classes("text-caption")
+        ui.label("Po uložení vlastního kalendáře u odesílání se toto společné nastavení pro něj už nepoužije.").classes("ui-help")
 
     with ui.card().classes("w-full"):
         ui.label("Odchozí e-mail").classes("text-subtitle1")

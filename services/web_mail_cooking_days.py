@@ -70,12 +70,43 @@ def cooking_day_lookup(
             yield is_cooking_day
 
 
+def task_calendar_type(config_path: Path, task: MailTask) -> str:
+    """An explicit task calendar wins; only old tasks inherit the former setting."""
+    if task.cooking_meal_type is not None:
+        return task.cooking_meal_type
+    settings = load_settings(settings_path(Path(config_path).parent))
+    meal_type = settings["cooking_meal_type"]
+    if not isinstance(meal_type, str) or not meal_type.strip():
+        raise ValueError("U staršího odesílání není nastaven kalendář. Otevřete ho a vyberte kalendář varných dnů.")
+    return meal_type.strip()
+
+
+def available_cooking_calendars(config_path: Path) -> tuple[str, ...]:
+    """Offer real calendars for this and the coming year, not guessed meal names."""
+    today = date.today()
+    config = load_config(Path(config_path), date_override=today.strftime("%d.%m.%Y"))
+    import psycopg
+    with psycopg.connect(**config.database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT DISTINCT BTRIM(typsluzby) FROM public.varnedny "
+                "WHERE rok IN (%s, %s) AND NULLIF(BTRIM(typsluzby), '') IS NOT NULL "
+                "ORDER BY 1", (today.year, today.year + 1),
+            )
+            names = {}
+            for (name,) in cursor.fetchall():
+                if isinstance(name, str) and name.strip():
+                    names.setdefault(name.strip().casefold(), name.strip())
+    return tuple(names.values())
+
+
 def resolve_task_date(config_path: Path, task: MailTask, sent_on: date) -> date:
     """Resolve a task date; only next_cooking_day needs a DB lookup."""
     if task.date_mode != "next_cooking_day":
         return target_date(task, sent_on)
     config_path = Path(config_path)
-    settings = load_settings(settings_path(config_path.parent))
+    meal_type = task_calendar_type(config_path, task)
     config = load_config(config_path, date_override=sent_on.strftime("%d.%m.%Y"))
-    with cooking_day_lookup(config.database, settings["cooking_meal_type"]) as is_day:
+    with cooking_day_lookup(config.database, meal_type) as is_day:
         return target_date(task, sent_on, is_cooking_day=is_day)
+

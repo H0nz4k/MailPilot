@@ -1,4 +1,4 @@
-# MailPilot v12.8 / DataShip 1.0.0-rc.2
+# MailPilot v12.8 / DataShip 1.0.0-rc.3
 
 > **Build a první Release:** [EXE, balíček s NSSM a postup vydání](docs/RELEASE_WINDOWS.md). [Kontrola funkcí před nasazením](docs/RELEASE_TEST_CHECKLIST.md).
 

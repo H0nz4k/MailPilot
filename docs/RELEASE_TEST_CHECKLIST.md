@@ -1,4 +1,4 @@
-# DataShip 1.0.0-rc.2 – kontrola před vydáním
+# DataShip 1.0.0-rc.3 – kontrola před vydáním
 
 Automatické testy používají izolované soubory a nahrazené DB/e-mailové transporty. Windows smoke kontrola ověřuje start skutečných sestavených EXE a HTTP odpověď GUI. Úspěšný build nepotvrzuje funkci zákaznické databáze ani účtu Windows služby.
 
@@ -14,7 +14,7 @@ Doplň datum, počítač, verzi z `BUILD_INFO.json` a výsledek každého bodu. 
 | PDF | Správná jídelna, datum, čeština/diakritika, počty kategorií/menu/norem; změny orientace a seznamu strávníků. | ☐ |
 | Ruční e-mail | Odešli jeden PDF jen na vlastní adresu; zkontroluj přílohu, datum a předmět; vyzkoušej chybnou adresu i chybu transportu. | ☐ |
 | Pravidelné odesílání | Přidání adresy ji označí, duplicita nevznikne, odebrání funguje; uložená úloha zachová správný přehled, čas, datum a aktivitu. | ☐ |
-| Varné dny | Dnes, zítra, posun, konkrétní datum a další varný den odpovídají skutečnému public.varnedny. Chybějící data oznámí chybu. | ☐ |
+| Varné dny | Dnes, zítra, posun, konkrétní datum a další varný den odpovídají skutečnému public.varnedny. Dvě odesílání s různými kalendáři (např. Oběd a Večeře) nezávisle určí datum; výběr se zachová při úpravě, kopírování i restartu. Starší úloha zachová dosavadní kalendář. Chybějící data oznámí chybu. | ☐ |
 | Uzávěrka | Zvol měsíc, vytvoř všechny používané výstupy FKSP/arch/rekapitulace, zkontroluj částky a ZIP proti stávajícím ověřeným sestavám. | ☐ |
 | Volitelné nabídky | Pokud je klient používá, zapni a ověř Speciál Z 17-01, hromadné zprávy a režimy bez GUI. | ☐ |
 | Vzhled | Světlé/tmavé/vlastní barvy, celá rámování, zoom, velikosti a všechny tři volby tučného písma přežijí restart; formuláře a dialogy jsou čitelné při 100 %. | ☐ |

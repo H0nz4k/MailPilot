@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from nicegui import ui
+from nicegui import run, ui
 
 from services.web_mail_task_store import load_tasks, save_tasks, task_file
 from services.web_mail_tasks import MailTask, next_send_at
-from services.web_mail_cooking_days import resolve_task_date
+from services.web_mail_cooking_days import (
+    available_cooking_calendars, resolve_task_date, task_calendar_type,
+)
 from services.web_daily_profiles import load_profiles, profile_file
 from services.web_recipient_editor import RecipientEditor
 
@@ -62,7 +64,16 @@ def build_mail_tasks_panel(
                     ui.label(task.name).classes("text-subtitle1")
                     ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá")
                 ui.label(f"{REPORTS[task.report]} · {task.send_time} · {', '.join(task.recipients)}")
-                ui.label(f"Datum sestavy: {DATE_MODES[task.date_mode]}")
+                date_label = f"Datum sestavy: {DATE_MODES[task.date_mode]}"
+                if task.date_mode == "next_cooking_day":
+                    try:
+                        calendar_name = task_calendar_type(active_config_path, task)
+                        date_label += f" · kalendář: {calendar_name}"
+                        if task.cooking_meal_type is None:
+                            date_label += " (dosavadní nastavení)"
+                    except (OSError, ValueError):
+                        date_label += " · vyberte kalendář v úpravě odesílání"
+                ui.label(date_label)
                 if task.profile_id:
                     try:
                         label = profile_options().get(task.profile_id, "Chybějící přehled – upravte úlohu")
@@ -140,6 +151,13 @@ def build_mail_tasks_panel(
                 type="info", timeout=8000,
             )
             return
+        calendar_value = task.cooking_meal_type if task else None
+        if task and task.date_mode == "next_cooking_day" and calendar_value is None:
+            try:
+                calendar_value = task_calendar_type(active_config_path, task)
+            except (OSError, ValueError) as exc:
+                ui.notify(f"Dosavadní kalendář nelze načíst: {exc}", type="negative")
+                return
         with ui.dialog() as dialog, ui.card().classes("ds-mail-dialog"):
             ui.label("Kopírovat odesílání" if duplicate else "Upravit odesílání" if task else "Nové odesílání").classes("ds-dialog-title")
             with ui.column().classes("ds-dialog-body w-full"):
@@ -183,6 +201,55 @@ def build_mail_tasks_panel(
                 with ui.element("div").classes("ds-mail-schedule w-full"):
                     time = ui.input("V kolik hodin?", value=task.send_time if task else "08:00").props("outlined dense type=time").classes("w-full")
                     mode = ui.select(DATE_MODES, label="Za který den?", value=task.date_mode if task else "today").props("outlined dense").classes("w-full")
+                catalog = {"names": None, "busy": False}
+                with ui.column().classes("w-full gap-1").bind_visibility_from(
+                    mode, "value", backward=lambda value: value == "next_cooking_day"
+                ):
+                    calendar = ui.select(
+                        {calendar_value: calendar_value} if calendar_value else {},
+                        label="Kalendář varných dnů", value=calendar_value,
+                    ).props("outlined dense").classes("w-full")
+                    ui.label("Podle této stravy určíme další varný den. Obsah vybraného přehledu se tím nemění.").classes("ui-help")
+                    calendar_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
+
+                    async def load_calendars():
+                        if catalog["busy"] or not dialog.value:
+                            return
+                        catalog["busy"] = True
+                        reload_calendars.disable()
+                        calendar_status.set_text("Načítám kalendáře z Jídelny…")
+                        try:
+                            names = await run.io_bound(available_cooking_calendars, active_config_path)
+                            if not dialog.value:
+                                return
+                            catalog["names"] = {name.casefold() for name in names}
+                            current = calendar.value
+                            canonical = next((name for name in names if current and name.casefold() == current.casefold()), current)
+                            options = {name: name for name in names}
+                            if canonical and canonical not in options:
+                                options[canonical] = f"{canonical} – kalendář nenalezen"
+                            calendar.set_options(options, value=canonical)
+                            calendar_status.set_text("" if names else "V Jídelně nejsou pro letošní ani příští rok nastavené varné dny. Doplňte je v Jídelně a načtěte nabídku znovu.")
+                        except Exception:
+                            if dialog.value:
+                                calendar_status.set_text("Kalendáře se nepodařilo načíst. Ověřte připojení k Jídelně a zkuste načtení znovu.")
+                        finally:
+                            catalog["busy"] = False
+                            reload_calendars.enable()
+
+                    reload_calendars = ui.button("Načíst kalendáře", icon="refresh", on_click=load_calendars).props("flat no-caps dense")
+                    def clear_calendar_error(_event):
+                        if calendar.props.get("error"):
+                            calendar.props(remove="error error-message")
+                            calendar_status.set_text("")
+
+                    calendar.on_value_change(clear_calendar_error)
+
+                def request_calendars(_event=None):
+                    if mode.value == "next_cooking_day" and catalog["names"] is None:
+                        ui.timer(0.01, load_calendars, once=True)
+
+                mode.on_value_change(request_calendars)
                 offset = ui.number("Posun od dneška (dní)", value=task.day_offset if task else 0, step=1).props("outlined dense").classes("w-full")
                 fixed = ui.input("Vybraný den", value=task.fixed_date or "" if task else date.today().isoformat()).props("outlined dense type=date").classes("w-full")
                 offset.bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
@@ -201,6 +268,18 @@ def build_mail_tasks_panel(
                             raise ValueError("Potvrďte převod na odesílání vybraného přehledu.")
                         if not profile.value and not (legacy_common and profile.value == ""):
                             raise ValueError("Vyberte přehled k odesílání.")
+                        if mode.value == "next_cooking_day":
+                            problem = ""
+                            if not calendar.value:
+                                problem = "Vyberte kalendář varných dnů pro toto odesílání."
+                            elif catalog["names"] is not None and calendar.value.casefold() not in catalog["names"]:
+                                problem = "Pro vybranou stravu není v Jídelně nastavený kalendář. Vyberte jiný nebo ho doplňte v Jídelně."
+                            if problem:
+                                calendar.props["error"] = True
+                                calendar.props["error-message"] = problem
+                                calendar_status.set_text(problem)
+                                calendar.run_method("focus")
+                                return
                         new = MailTask.from_dict({
                             "id": str(uuid4()) if duplicate or task is None else task.id,
                             "name": name.value, "recipients": recipients.addresses,
@@ -208,6 +287,7 @@ def build_mail_tasks_panel(
                             "date_mode": mode.value, "day_offset": offset.value,
                             "fixed_date": fixed.value, "enabled": enabled.value,
                             "profile_id": profile.value or None,
+                            "cooking_meal_type": calendar.value or None,
                         })
                         if new.profile_id and new.profile_id not in profile_options():
                             raise ValueError("Vyberte existující uložený přehled.")
@@ -219,6 +299,7 @@ def build_mail_tasks_panel(
                         dialog.close()
                 ui.button("Uložit", on_click=save).props("color=primary")
         dialog.open()
+        request_calendars()
 
     with ui.row():
         ui.button("Nové odesílání", icon="add", on_click=lambda: editor()).props("color=primary")

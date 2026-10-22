@@ -1,6 +1,6 @@
 # DataShip – sestavení a spuštění na Windows (Git Bash)
 
-Aktuální postup pro verzi 1.0.0-rc.2, distribuční ZIPy s NSSM a GitHub Releases: [RELEASE_WINDOWS.md](RELEASE_WINDOWS.md).
+Aktuální postup pro verzi 1.0.0-rc.3, distribuční ZIPy s NSSM a GitHub Releases: [RELEASE_WINDOWS.md](RELEASE_WINDOWS.md).
 
 Tento návod platí pro větev `feat/dataship-design-integration` a nové **NiceGUI webové rozhraní**. Starý skript `build_windows.bat` sestavuje **Qt 12.8**, nikoliv tuto webovou verzi.
 
@@ -94,7 +94,7 @@ Poté spusť nové `dist-web/DataShip/START_WEB.cmd`. Build zachovává `config.
 V Nastavení odesílání vyplň cestu k `nssm.exe`. Po kliknutí na **Instalovat** se služba nastaví na samostatný `DataShip-Worker.exe`, nikoliv na webové GUI. Instalace a spuštění vyžaduje administrátorská práva. Nezapínej službu dřív, než ověříš cílové e-mailové adresy a nastavení odesílání; může odeslat skutečné zprávy.
 
 ## Omezení vývojové verze
-- Datum `následující varný den` se čte z `public.varnedny` dle roku, měsíce, typu služby a `d01`…`d31`; `A` je varný, `N` nevarný. Víkendy a svátky se nefiltrují.
+- Datum `následující varný den` se čte z `public.varnedny` dle roku, měsíce, kalendáře zvoleného u konkrétního odesílání a `d01`…`d31`; `A` je varný, `N` nevarný. Víkendy a svátky se nefiltrují.
 - Chybějící data znamenají chybu, nikoliv odhad data sestavy.
 - `meal_summary` a spolehlivé opakování neúspěšných odeslání ještě nejsou dokončené.
 - Testy Windows EXE, skutečné DB, NSSM a odeslání e-mailu je nutné provést na cílovém počítači; build samotný není potvrzením funkčnosti v produkci.

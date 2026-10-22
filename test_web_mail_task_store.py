@@ -40,3 +40,13 @@ def test_reject_invalid_config(tmp_path):
     path.write_text('{"tasks":{}}', encoding="utf-8")
     with pytest.raises(ValueError, match="pole"):
         load_tasks(path)
+
+
+def test_calendar_survives_copy_disable_and_restart(tmp_path):
+    from dataclasses import replace
+    original = replace(example_task(), cooking_meal_type='Večeře')
+    copied = replace(original, id='copy', name='Kopie', enabled=False)
+    path = task_file(tmp_path)
+    save_tasks(path, [original, copied])
+    assert load_tasks(path) == [original, copied]
+    assert [row['cooking_meal_type'] for row in json.loads(path.read_text(encoding='utf-8'))['tasks']] == ['Večeře', 'Večeře']

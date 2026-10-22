@@ -103,4 +103,10 @@ Build zachovává i `daily_reports.json`, vedle dosavadní konfigurace a e-mailo
 - Windows build, skutečná zákaznická DB, přihlašovací údaje a NSSM vyžadují ověření na cílovém počítači. V rámci implementace neproběhlo skutečné odeslání e-mailu.
 - Regrese hromadných denních objednávek ověřuje referenční součet 695, shodu menu/kategorií/norem, filtr dne a kategorií předávaný SQL, typ stravy, neplatnou variantu, zachování individuálních počtů i množství v textu a PDF. Používá přepsané referenční hodnoty a nahrazené DB připojení, nikoliv přístup k zákaznické DB. Související sada denních sestav, PDF, uložených přehledů a e-mailových úloh: **83 testů a 14 podtestů prošlo**.
 
-CLI přepínače a kalendář varných dnů zůstávají na dosavadní implementaci. Opravu společného denního výpočtu využije také původní Qt MailPilot při spuštění s aktualizovanými zdroji.
+CLI přepínače zůstávají na dosavadní implementaci. Opravu společného denního výpočtu využije také původní Qt MailPilot při spuštění s aktualizovanými zdroji.
+
+## Vlastní kalendář varných dnů (rc.3)
+
+Volba **Kalendář varných dnů** se ukazuje přímo u odesílání, pouze pro **Následující varný den**. Nabízí kalendáře z Jídelny pro letošní a příští rok, ne odhadnuté typy stravy. Nové odesílání vyžaduje výslovný výběr; chybějící volbu označí přímo u pole. Kalendář mění pouze datum přehledu. Výběr se ukládá s úlohou a zachová při kopírování.
+
+Starší úlohy zachovají původní společný kalendář, který se při úpravě předvyplní a při uložení přiřadí přímo úloze. Chybějící kalendář se nenahrazuje jiným. Pro tuto funkci je nutné aktualizovat také **DataShip-Worker.exe** a restartovat dosavadní službu. Testy ověřují nezávislé snídaně/obědy/večeře, uložení, editaci, kopírování a zachování starších úloh.

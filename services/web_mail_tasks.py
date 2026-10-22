@@ -27,6 +27,7 @@ class MailTask:
     fixed_date: str | None = None
     enabled: bool = True
     profile_id: str | None = None
+    cooking_meal_type: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "MailTask":
@@ -76,11 +77,17 @@ class MailTask:
             raise ValueError("Neplatné ID denního přehledu.")
         if profile_id and report != "daily":
             raise ValueError("Uložený přehled lze přiřadit pouze k Dennímu stavu.")
+        cooking_meal_type = raw.get("cooking_meal_type")
+        if cooking_meal_type is not None:
+            if not isinstance(cooking_meal_type, str) or not cooking_meal_type.strip():
+                raise ValueError("Kalendář varných dnů musí být neprázdný název stravy.")
+            cooking_meal_type = cooking_meal_type.strip()
         return cls(
             id=str(raw.get("id") or uuid4()), name=name, recipients=recipients,
             report=report, send_time=send_time, date_mode=mode,
             day_offset=offset, fixed_date=str(fixed) if fixed else None,
             enabled=enabled, profile_id=profile_id,
+            cooking_meal_type=cooking_meal_type,
         )
 
     def to_dict(self) -> dict:
@@ -90,6 +97,7 @@ class MailTask:
             "date_mode": self.date_mode, "day_offset": self.day_offset,
             "fixed_date": self.fixed_date, "enabled": self.enabled,
             "profile_id": self.profile_id,
+            "cooking_meal_type": self.cooking_meal_type,
         }
 
 
