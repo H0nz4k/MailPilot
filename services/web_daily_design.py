@@ -19,8 +19,6 @@ class DailyDesignMixin:
         self._applying_daily_profile = False
         self._daily_summary_revision = 0
         self._daily_summary_timer = None
-        self.daily_checkboxes = {}
-        self._daily_category_options = None
         try:
             self.daily_profiles = load_profiles(self.daily_profiles_path)
         except (OSError, ValueError) as exc:
@@ -30,24 +28,22 @@ class DailyDesignMixin:
             with ui.row().classes("ds-page-heading w-full items-center justify-between"):
                 with ui.column().classes("gap-1"):
                     ui.label("Denní stav").classes("ds-page-title").props('role="heading" aria-level="1"')
-            self._build_daily_overview()
             with ui.element("div").classes("ds-daily-grid"):
                 with w.card().classes("ds-editor"):
                     with ui.row().classes("w-full items-center justify-between"):
                         ui.label("Moje přehledy").classes("app-heading")
                         self.daily_profile_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
                     self.daily_profile_choices = ui.row().classes("ds-profile-choices w-full")
-                    self.daily_profile_name = ui.input("Název přehledu", value="Denní přehled").props("outlined dense maxlength=80").classes("w-full")
-                    self.daily_profile_name.on_value_change(lambda _e: self._mark_daily_dirty())
                     with ui.element("div").classes("ds-daily-fields"):
                         self._build_date_field()
                         self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
                         self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined dense options-dense").classes("w-full")
                         self.meal_type_select.on_value_change(lambda _e: self._daily_filters_changed())
                     self._build_category_panel()
-                    self.daily_category_grid = ui.element("div").classes("ds-category-grid")
-                    ui.label("Každý přehled má vlastní výběr z kategorií povolených správcem.").classes("ui-help")
-                    with ui.expansion("Pokročilé nastavení PDF", icon="tune").classes("w-full app-note"):
+                    self.daily_edit_expansion = ui.expansion("Upravit přehled a vzhled PDF", icon="tune").classes("w-full app-note")
+                    with self.daily_edit_expansion:
+                        self.daily_profile_name = ui.input("Název přehledu", value="Denní přehled").props("outlined dense maxlength=80").classes("w-full")
+                        self.daily_profile_name.on_value_change(lambda _e: self._mark_daily_dirty())
                         self._build_pdf_settings_section()
                     for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list):
                         field.on_value_change(lambda _e: self._mark_daily_dirty())
@@ -57,7 +53,7 @@ class DailyDesignMixin:
                 with ui.column().classes("w-full gap-4 min-w-0"):
                     with w.card().classes("ds-summary"):
                         with ui.row().classes("w-full items-center justify-between"):
-                            ui.label("Souhrn sestavy").classes("app-heading")
+                            ui.label("Počty porcí").classes("app-heading")
                             ui.button(icon="refresh", on_click=self.refresh_daily_summary).props('flat round aria-label="Obnovit souhrn"')
                         self.daily_summary_name = ui.label("Denní přehled").classes("ds-summary-name")
                         self.daily_summary_meta = ui.label("").classes("ui-help")
@@ -67,12 +63,9 @@ class DailyDesignMixin:
                             {"name": "name", "label": "Kategorie", "field": "name", "align": "left"},
                             {"name": "portions", "label": "Porce", "field": "portions", "align": "right"},
                         ], rows=[], row_key="code").props('flat dense hide-bottom wrap-cells aria-label="Souhrn počtu porcí podle kategorií"').classes("w-full ds-summary-table")
-                        self.daily_summary_status = ui.label("Souhrn se načte po úspěšném TESTu připojení.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
-                    with ui.row().classes("ds-next-step w-full"):
-                        ui.button("E-mailové úlohy", icon="schedule_send", on_click=lambda: setattr(self.tabs, "value", "mail_tasks")).props("flat no-caps")
+                        self.daily_summary_status = ui.label("Počty se zobrazí po připojení k Jídelně.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
             self._build_pdf_panel()
         self._render_daily_profile_choices()
-        self._render_daily_category_grid()
         if self.daily_profiles:
             self._load_daily_profile(self.daily_profiles[0])
 
@@ -89,7 +82,7 @@ class DailyDesignMixin:
 
     def _current_daily_profile(self) -> DailyProfile:
         if not self.categories:
-            raise ValueError("Nejprve proveďte TEST připojení k databázi.")
+            raise ValueError("Jídelna ještě není připojena. Požádejte správce o nastavení připojení.")
         return DailyProfile.from_dict({
             "id": self.daily_profile_id or str(uuid4()), "name": self.daily_profile_name.value,
             "categories": self._selected_category_order(),
@@ -123,6 +116,7 @@ class DailyDesignMixin:
         self._render_daily_selection()
         self._mark_daily_dirty()
         self._render_daily_profile_choices()
+        self.daily_edit_expansion.open()
 
     def _render_daily_profile_choices(self) -> None:
         self.daily_profile_choices.clear()
@@ -131,7 +125,8 @@ class DailyDesignMixin:
                 ui.label("Vyberte kategorie a uložte svůj první přehled.").classes("ui-help")
             for profile in self.daily_profiles:
                 count = len(set(profile.categories) & self.allowed_categories) if self.categories else len(profile.categories)
-                button = ui.button(f"{profile.name} · {count} kat.", on_click=lambda _e, p=profile: self._choose_daily_profile(p)).props("no-caps outline").classes("ds-profile")
+                button = ui.button(profile.name, icon="check_circle" if profile.id == self.daily_profile_id else "description", on_click=lambda _e, p=profile: self._choose_daily_profile(p)).props("no-caps outline").classes("ds-profile")
+                button.tooltip(f"Vybraných kategorií: {count}")
                 button.props(f'aria-pressed="{str(profile.id == self.daily_profile_id).lower()}"')
                 if profile.id == self.daily_profile_id:
                     button.classes(add="ds-profile-active")
@@ -168,38 +163,6 @@ class DailyDesignMixin:
         self._render_daily_profile_choices()
         self._queue_daily_summary()
 
-    def _render_daily_category_grid(self) -> None:
-        if not hasattr(self, "daily_category_grid"):
-            return
-        options = tuple((code, name) for code, name in self.categories if code in self.allowed_categories)
-        self._syncing_daily_checks = True
-        try:
-            if options != self._daily_category_options:
-                self.daily_category_grid.clear()
-                self.daily_checkboxes = {}
-                self._daily_category_options = options
-                with self.daily_category_grid:
-                    if not options:
-                        ui.label("Kategorie se zobrazí po TESTu připojení.").classes("ui-help")
-                    for code, name in options:
-                        self.daily_checkboxes[code] = ui.checkbox(name or code, value=code in self.selected_categories,
-                            on_change=lambda e, c=code: self._toggle_daily_category(c, bool(e.value))).props("dense").classes("ds-category")
-            else:
-                for code, checkbox in self.daily_checkboxes.items():
-                    checkbox.value = code in self.selected_categories
-        finally:
-            self._syncing_daily_checks = False
-
-    def _toggle_daily_category(self, code: str, checked: bool) -> None:
-        if self._syncing_daily_checks:
-            return
-        if checked and code in self.allowed_categories:
-            self.selected_categories.add(code)
-        else:
-            self.selected_categories.discard(code)
-        self._render_daily_selection()
-        self._daily_filters_changed()
-
     def _queue_daily_summary(self) -> None:
         if not hasattr(self, "daily_summary_status"):
             return
@@ -210,7 +173,7 @@ class DailyDesignMixin:
         if self._daily_summary_timer is not None:
             self._daily_summary_timer.deactivate()
         if not self.connection_ok:
-            self.daily_summary_status.set_text("Souhrn se načte po úspěšném TESTu připojení.")
+            self.daily_summary_status.set_text("Počty se zobrazí po připojení k Jídelně.")
             return
         self.daily_summary_status.set_text("Aktualizuji souhrn…")
         self._daily_summary_timer = ui.timer(0.45, self.refresh_daily_summary, once=True)
@@ -229,7 +192,7 @@ class DailyDesignMixin:
             self.daily_summary_table.rows = []
             self.daily_summary_table.update()
             self.daily_summary_meta.set_text(f"{day:%d.%m.%Y} · {self.meal_type_select.options.get(meal_type or '__all__', meal_type)}")
-            self.daily_summary_status.set_text("Načítám aktuální počty z databáze…")
+            self.daily_summary_status.set_text("Načítám počty porcí…")
             config = AppConfig(database=database, report_date=day, categories=categories,
                 meal_type=meal_type, language=str(self.language_input.value or "česky"),
                 menu_list_number=int(self.menu_number.value or 1), show_diner_list=False)
@@ -248,7 +211,7 @@ class DailyDesignMixin:
         self.daily_summary_total.set_text(f"{total:,}".replace(",", " "))
         self.daily_summary_table.rows = list(rows.values())
         self.daily_summary_table.update()
-        self.daily_summary_status.set_text(f"Aktuální data · {len(categories)} kategorií · {total} porcí")
+        self.daily_summary_status.set_text(f"Vybraných kategorií: {len(categories)}")
 
     @staticmethod
     def _fetch_daily_summary(config):

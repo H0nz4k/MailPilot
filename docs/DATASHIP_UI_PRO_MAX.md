@@ -2,6 +2,18 @@
 
 Implementace schváleného konceptu ui-ux-pro-max do existující NiceGUI aplikace.
 
+### Zákaznické ovládání a čitelnost (22. 10. 2026)
+
+Rozhraní je určeno pro pracovnice jídelen, včetně uživatelek 55+. Hlavička obsahuje značku, název jídelny, hlavní nabídku a Nastavení jako jeden blok. Technické údaje o serveru a databázi se v běžné hlavičce nezobrazují. Výchozí text má 20 px a popisky 16 px při 100% přiblížení; i dříve uložená malá velikost nyní používá 18 px. Větší písmo a přiblížení zůstávají nastavitelné. Formulářové popisky se nezmenšují na obtížně čitelnou velikost po vyplnění pole, včetně dialogů mimo hlavní stránku.
+
+Denní stav ukazuje pojmenované přehledy, den, typ stravy, počet vybraných kategorií a počty porcí. Kategorie se mění jedním tlačítkem v samostatném výběru; nejsou zároveň podruhé vypsané ve formuláři. Úpravy názvu, tisku a cesty k PDF jsou zavřené pod volbou **Upravit přehled a vzhled PDF**. Nový přehled tuto část otevře. Ovládací tlačítka mají nejméně 44 px a ikona kalendáře je dostupná i klávesnicí.
+
+V nabídce **E-maily → Nové odesílání** se adresy přidávají tlačítkem **Přidat** nebo Enterem. Každá platná adresa se zobrazí jako samostatný štítek s fajfkou a tlačítkem pro odebrání. Lze vložit více adres oddělených čárkou, středníkem či mezerou; duplicity se nepřidávají. Neplatná adresa zůstane v poli k opravě a uložené adresy se neztratí. **Uložit** zpracuje i platnou rozepsanou adresu, která ještě nebyla potvrzena tlačítkem Přidat. Tato akce ukládá plán, nic neodesílá.
+
+Čas a den jsou vedle sebe. Delší popis přehledu je zavřený pod **Co přehled obsahuje?**. Dialog má samostatný obsah a pevnou spodní lištu, takže Zrušit a Uložit neodrolují mimo obrazovku.
+
+Kontrola změny zahrnuje skutečné NiceGUI formuláře a prohlížeč Chromium na šířkách 375, 768, 1024, 1280 a 1440 px, světlý i tmavý motiv, čitelnost při 100 %, přidání/neplatnou adresu/duplicitu/odebrání a viditelnou spodní lištu dialogu. Pro vizuální kontrolu jsou použita izolovaná ukázková data. Zákaznická DB, Windows sestavení a skutečné odeslání nebyly při této úpravě spouštěny.
+
 ### Úprava hustoty a kontrola chybějících počtů (21. 10. 2026)
 
 Pracovní plocha má nejvýše 1240 px, kompaktnější hlavičku, menší mezery, nižší tlačítka přehledů a tabulku s 26px řádky. Horní slogan a velká pomocná karta byly odstraněny. Kategorie zůstávají všechny viditelné, písmo a přiblížení nejsou zmenšeny. Dotykové ovládání zachovává větší cíle.

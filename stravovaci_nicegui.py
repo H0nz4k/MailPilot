@@ -418,14 +418,14 @@ def shutdown_when_last_client_closes(current_client: Any) -> None:
 
 
 class NiceGuiApp(DailyDesignMixin):
-    """Stav a obslužné funkce lokálního technického UI."""
+    """Stav a obslužné funkce zákaznické aplikace."""
 
     def __init__(self, config_path: Path) -> None:
         self.config_path = config_path.resolve()
         self.raw = load_ui_config(self.config_path)
         self.connection_ok = False
-        self.connection_caption = "BEZ SPOJENÍ"
-        self.connection_name = "Databáze není připojena"
+        self.connection_caption = "Nepřipojeno"
+        self.connection_name = "Jídelna zatím není připojena"
         self.connection_details = "Kliknutím otevřete TEST připojení"
         self.categories: list[tuple[str, str]] = []
         self.all_categories = all_client_categories(self.raw)
@@ -545,6 +545,29 @@ class NiceGuiApp(DailyDesignMixin):
     def _build_topbar(self) -> None:
         """Kompaktní hlavička: DataShip | provozovna | stav DB | období | Administrace."""
         with ui.element("div").classes("app-topbar no-wrap"):
+            self._build_header_identity()
+            self._build_navigation()
+            self.lock_admin_button = (
+                ui.button(icon="lock_open", on_click=self.lock_admin)
+                .props('outline dense no-caps aria-label="Uzamknout nastavení"')
+                .classes("shrink-0")
+            )
+            self.lock_admin_button.tooltip("Uzamknout nastavení")
+            self.admin_button = (
+                ui.button("Nastavení", icon="settings", on_click=self.open_admin_dialog)
+                .props("outline dense no-caps")
+                .classes("shrink-0")
+            )
+            self.lock_admin_button.set_visibility(False)
+            ui.button(icon="contrast", on_click=self.toggle_color_mode).props(
+                'flat round aria-label="Přepnout světlý a tmavý režim"'
+            ).classes("ds-theme-toggle")
+            self.brand_home.on("keydown.enter", self.go_home)
+            self.brand_home.on("keydown.space", self.go_home)
+            self._build_admin_dialog()
+
+    def _build_header_identity(self) -> None:
+        with ui.column().classes("ds-identity gap-1 min-w-0"):
             with ui.row().classes(
                 "brand-mark items-center no-wrap shrink-0 cursor-pointer"
             ).on("click", self.go_home).props(
@@ -552,7 +575,6 @@ class NiceGuiApp(DailyDesignMixin):
             ) as self.brand_home:
                 ui.icon(BRAND_ICON, size="1.25rem")
                 ui.label(APP_TITLE).classes("app-title")
-                ui.label(APP_VERSION).classes("ui-help")
             with ui.row().classes(
                 "db-chip items-center gap-2 no-wrap px-2 py-1 flex-grow min-w-0"
             ).on("click", self.open_database_settings) as self.connection_strip:
@@ -568,25 +590,8 @@ class NiceGuiApp(DailyDesignMixin):
                 self.connection_details_label = ui.label(
                     self.connection_details
                 ).classes("connection-details truncate")
-                self.connection_tooltip = ui.tooltip(self.connection_details)
-            self.lock_admin_button = (
-                ui.button(icon="lock_open", on_click=self.lock_admin)
-                .props("outline dense no-caps")
-                .classes("shrink-0")
-            )
-            self.lock_admin_button.tooltip("Uzamknout administraci")
-            self.admin_button = (
-                ui.button("Administrace", icon="lock", on_click=self.open_admin_dialog)
-                .props("outline dense no-caps")
-                .classes("shrink-0")
-            )
-            self.lock_admin_button.set_visibility(False)
-            ui.button(icon="contrast", on_click=self.toggle_color_mode).props(
-                'flat round aria-label="Přepnout světlý a tmavý režim"'
-            ).classes("ds-theme-toggle")
-            self.brand_home.on("keydown.enter", self.go_home)
-            self.brand_home.on("keydown.space", self.go_home)
-            self._build_admin_dialog()
+                self.connection_details_label.set_visibility(False)
+                self.connection_tooltip = ui.tooltip("Připojení k Jídelně")
 
     def go_home(self) -> None:
         """Logo vždy vrací na hlavní obrazovku bez změny admin oprávnění."""
@@ -605,7 +610,6 @@ class NiceGuiApp(DailyDesignMixin):
     def _build_workspace(self) -> None:
         """Navigace a obsah. Umístění navigace řídí CSS podle zvolené šablony."""
         with ui.element("div").classes("app-shell workspace w-full mt-1"):
-            self._build_navigation()
             self._build_panels()
 
     def _build_navigation(self) -> None:
@@ -616,8 +620,8 @@ class NiceGuiApp(DailyDesignMixin):
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
-            self.mail_tasks_tab = ui.tab("mail_tasks", label="E-mailové úlohy", icon="schedule_send")
-            self.admin_tab = ui.tab("admin", label="Administrace", icon="settings")
+            self.mail_tasks_tab = ui.tab("mail_tasks", label="E-maily", icon="schedule_send")
+            self.admin_tab = ui.tab("admin", label="Nastavení", icon="settings")
         self.nav_tab_elements = {
             "daily": self.daily_tab, "closing": self.closing_tab,
             "special": self.special_tab, "bulk": self.bulk_tab,
@@ -980,7 +984,7 @@ class NiceGuiApp(DailyDesignMixin):
         # A new GUI session starts today; config.json may contain an old report date.
         selected = initial_report_date()
         with ui.input(
-            "Datum exportu", value=selected.strftime(CZECH_DATE_FORMAT)
+            "Datum přehledu", value=selected.strftime(CZECH_DATE_FORMAT)
         ).props(
             'dense mask="##.##.####" placeholder="DD.MM.RRRR" inputmode="numeric"'
         ).classes(
@@ -996,8 +1000,8 @@ class NiceGuiApp(DailyDesignMixin):
                     CZECH_DATE_LOCALE, ensure_ascii=False,
                 )
             with self.date_input.add_slot("append"):
-                ui.icon("event").classes("cursor-pointer").on(
-                    "click", self.date_menu.open
+                ui.button(icon="event", on_click=self.date_menu.open).props(
+                    'flat round aria-label="Vybrat datum přehledu"'
                 )
         self.date_input.on("change", self._on_date_changed)
 
@@ -1394,8 +1398,8 @@ class NiceGuiApp(DailyDesignMixin):
         total = len(self._allowed_category_order())
         selected = len(self.selected_categories)
         if not self.categories:
-            return "po TESTu připojení"
-        return f"vybráno {selected} / {total} povolených"
+            return "Po připojení"
+        return f"Vybráno kategorií: {selected}"
 
     def _render_daily_selection(self) -> None:
         if hasattr(self, "daily_expansion_label"):
@@ -1414,7 +1418,6 @@ class NiceGuiApp(DailyDesignMixin):
             options=self.categories,
             selected=self._allowed_category_order(),
         )
-        self._render_daily_category_grid()
         self._queue_daily_summary()
 
     def _render_z17_selection(self) -> None:
@@ -2283,16 +2286,17 @@ class NiceGuiApp(DailyDesignMixin):
         """Sticky lišta hlavních akcí denního stavu."""
         with w.action_bar():
             with ui.column().classes("gap-0 min-w-0 flex-grow"):
-                self.pdf_status = ui.label("PDF zatím nebylo vytvořeno.").classes(
+                self.pdf_status = ui.label("").classes(
                     "inline-status truncate"
                 )
                 with ui.row().classes("items-center gap-2 no-wrap min-w-0"):
-                    self.mail_status = ui.label("Mail zatím nebyl odeslán.").classes(
+                    self.mail_status = ui.label("").classes(
                         "inline-status shrink-0"
                     )
                     self.mail_subject_label = ui.label(
                         mail_subject(self._selected_date())
                     ).classes("inline-status truncate")
+                    self.mail_subject_label.set_visibility(False)
                     ui.tooltip(
                         "Příjemce denního stavu přiřadíte v Administraci → E-maily."
                     )
@@ -2306,7 +2310,7 @@ class NiceGuiApp(DailyDesignMixin):
                 on_click=self.generate_pdf,
             ).props("outline no-caps")
             self.send_button = ui.button(
-                "Vytvořit a odeslat", icon="send", on_click=self.send_mail
+                "Poslat e-mailem", icon="send", on_click=self.send_mail
             ).props("no-caps unelevated")
             self.send_button.disable()
 
@@ -2448,14 +2452,14 @@ class NiceGuiApp(DailyDesignMixin):
         """Aktualizuje tlačítko stavu databáze v hlavičce."""
         self.connection_ok = connected
         if connected:
-            self.connection_caption = "DB OK"
+            self.connection_caption = "Připojeno"
             self.connection_name = name or "Název provozovny není nastaven"
             self.connection_details = details or "Databáze je připojená."
             self.connection_strip.classes(add="connection-ready")
             self.connection_icon.props("name=check_circle color=positive")
         else:
-            self.connection_caption = "BEZ SPOJENÍ"
-            self.connection_name = "Databáze není připojena"
+            self.connection_caption = "Nepřipojeno"
+            self.connection_name = "Jídelna zatím není připojena"
             self.connection_details = details or "Kliknutím otevřete TEST připojení"
             self.connection_strip.classes(remove="connection-ready")
             self.connection_icon.props("name=cloud_off color=negative")
@@ -2464,7 +2468,7 @@ class NiceGuiApp(DailyDesignMixin):
         self.connection_name_label.set_text(self.connection_name)
         self.connection_details_label.set_text(self.connection_details)
         if hasattr(self, "connection_tooltip"):
-            self.connection_tooltip.set_text(self.connection_details)
+            self.connection_tooltip.set_text("Připojení k Jídelně je v pořádku." if connected else "Připojení pomůže nastavit správce aplikace.")
             self.connection_tooltip.update()
         self._refresh_overview_tiles()
 
@@ -2765,14 +2769,14 @@ class NiceGuiApp(DailyDesignMixin):
                     "ui-help p-2"
                 )
             for address in self.mail_recipients:
-                with ui.row().classes("w-full items-center gap-2"):
-                    ui.icon("mail_outline", color="secondary")
-                    ui.label(address).classes("app-text")
+                with ui.row().classes("ds-recipient-chip items-center no-wrap"):
+                    ui.icon("check_circle").props('aria-hidden="true"')
+                    ui.label(address).classes("app-text min-w-0")
                     ui.space()
                     ui.button(
                         icon="delete_outline",
                         on_click=lambda _event=None, item=address: self.delete_recipient(item),
-                    ).props("flat round dense color=negative")
+                    ).props("flat round").props(f'aria-label="Odebrat příjemce {address}"')
 
     def add_recipient(self) -> None:
         try:

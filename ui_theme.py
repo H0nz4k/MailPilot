@@ -22,9 +22,9 @@ UI_TEXT_SIZE_LABELS = {
     "extra": "Extra velká",
 }
 UI_TEXT_SIZE_PX = {
-    "text": {"mala": 13, "stredni": 16, "velka": 18, "extra": 20},
-    "nadpis": {"mala": 15, "stredni": 16, "velka": 19, "extra": 22},
-    "popis": {"mala": 11, "stredni": 12, "velka": 14, "extra": 16},
+    "text": {"mala": 18, "stredni": 20, "velka": 22, "extra": 24},
+    "nadpis": {"mala": 20, "stredni": 24, "velka": 26, "extra": 28},
+    "popis": {"mala": 16, "stredni": 16, "velka": 18, "extra": 20},
 }
 DEFAULT_UI_TEXT_SIZE = "stredni"
 
@@ -724,9 +724,9 @@ _CSS_TOKENS = """
     --app-warn-bg: #fdf4e6;
     --app-bad: #b42318;
     --app-bad-bg: #fdf0ef;
-    --app-text: 14px;
-    --app-heading: 16px;
-    --app-help: 12px;
+    --app-text: 20px;
+    --app-heading: 24px;
+    --app-help: 16px;
     --app-line: 1.4;
     --app-zoom: 1.00;
     --app-weight-heading: 650;

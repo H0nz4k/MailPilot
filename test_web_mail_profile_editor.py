@@ -14,7 +14,7 @@ from services.web_mail_tasks import MailTask
 
 def field(user, kind, label):
     return next(e for e in user.client.elements.values()
-                if isinstance(e, kind) and e.props.get("label") == label)
+                if isinstance(e, kind) and (e.props.get("label") or e.props.get("aria-label")) == label)
 
 
 @pytest.mark.asyncio
@@ -31,22 +31,23 @@ async def test_new_task_selects_a_named_profile_and_shows_its_contents(tmp_path)
     with patch("services.web_mail_gui.resolve_task_date", return_value=date(2026, 10, 22)):
         async with user_simulation(root) as user:
             await user.open("/")
-            user.find("Nová úloha").click()
+            user.find("Nové odesílání").click()
             with user:
                 choices = field(user, ui.select, "Který přehled odesílat?")
                 assert choices.options == {first.id: first.name, other.id: other.name}
                 assert choices.value is None
                 assert all(e.props.get("label") != "Sestava" for e in user.find(ui.select).elements)
-                field(user, ui.input, "Název").value = "Ranní přehled"
-                field(user, ui.textarea, "E-mailové adresy (čárka nebo nový řádek)").value = "test@example.org"
+                field(user, ui.input, "Název odesílání").value = "Ranní přehled"
+                field(user, ui.input, "E-mail příjemce").value = "test@example.org"
             user.find("Uložit").click()
             assert not load_tasks(task_file(tmp_path))
             with user:
                 choices.value = first.id
-                assert not field(user, ui.number, "Posun (dní)").visible
-                assert not field(user, ui.input, "Konkrétní datum (YYYY-MM-DD)").visible
-                field(user, ui.select, "Datum sestavy").value = "offset"
-                assert field(user, ui.number, "Posun (dní)").visible
+                assert not field(user, ui.number, "Posun od dneška (dní)").visible
+                assert not field(user, ui.input, "Vybraný den").visible
+                field(user, ui.select, "Za který den?").value = "offset"
+                assert field(user, ui.number, "Posun od dneška (dní)").visible
+            user.find("Co přehled obsahuje?").click()
             await user.should_see("Uložené kategorie: Žáci, Zaměstnanci.")
             await user.should_see("Bez seznamu strávníků.")
             user.find("Uložit").click()

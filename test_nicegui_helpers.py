@@ -25,9 +25,9 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertEqual(gui.peek_ui_text_size({}), "stredni")
         self.assertEqual(gui.peek_ui_text_size({"ui_velikost_textu": "velka"}), "velka")
         self.assertEqual(gui.peek_ui_text_size({"ui_velikost_textu": "obri"}), "stredni")
-        self.assertEqual(gui.UI_TEXT_SIZE_PX["text"]["mala"], 13)
-        self.assertEqual(gui.UI_TEXT_SIZE_PX["nadpis"]["extra"], 22)
-        self.assertEqual(gui.UI_TEXT_SIZE_PX["popis"]["stredni"], 12)
+        self.assertEqual(gui.UI_TEXT_SIZE_PX["text"]["mala"], 18)
+        self.assertEqual(gui.UI_TEXT_SIZE_PX["nadpis"]["extra"], 28)
+        self.assertEqual(gui.UI_TEXT_SIZE_PX["popis"]["stredni"], 16)
         appearance = gui.peek_ui_appearance(
             {
                 "ui_velikost_textu": "mala",
@@ -120,7 +120,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         overview_source = inspect.getsource(gui.NiceGuiApp._build_daily_overview)
         self.assertIn("overview-row", overview_source)
         daily_source = inspect.getsource(gui.NiceGuiApp._build_daily_panel)
-        self.assertIn("_build_daily_overview", daily_source)
+        self.assertNotIn("_build_daily_overview", daily_source)
         appearance_source = inspect.getsource(gui.NiceGuiApp._build_appearance_panel)
         self.assertIn("UI_LAYOUT_LABELS", appearance_source)
         self.assertIn("template-card", appearance_source)
@@ -162,7 +162,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         init_source = inspect.getsource(gui.NiceGuiApp.__init__)
         build_source = inspect.getsource(gui.NiceGuiApp.build)
         invalidate_source = inspect.getsource(gui.NiceGuiApp.invalidate_connection)
-        self.assertIn("BEZ SPOJENÍ", init_source)
+        self.assertIn("Nepřipojeno", init_source)
         self.assertIn("open_database_settings", inspect.getsource(gui.NiceGuiApp))
         admin_source = inspect.getsource(gui.NiceGuiApp._build_admin_dialog)
         self.assertIn("keydown.enter", admin_source)
@@ -175,8 +175,8 @@ class NiceGuiHelperTests(unittest.TestCase):
 
     def test_connection_display_explicitly_updates_nicegui_elements(self):
         source = inspect.getsource(gui.NiceGuiApp.set_connection_display)
-        self.assertIn("DB OK", source)
-        self.assertIn("BEZ SPOJENÍ", source)
+        self.assertIn("Připojeno", source)
+        self.assertIn("Nepřipojeno", source)
         self.assertIn("element.update()", source)
 
     def test_scheduler_help_points_to_jidelna_flags(self):
@@ -307,7 +307,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("admin_unlocked", inspect.getsource(gui.NiceGuiApp.open_allowed_category_dialog))
         self.assertIn("_manual_daily_categories", inspect.getsource(gui.NiceGuiApp.generate_pdf))
         self.assertIn("_manual_daily_categories", inspect.getsource(gui.NiceGuiApp.send_mail))
-        self.assertIn("go_home", inspect.getsource(gui.NiceGuiApp._build_topbar))
+        self.assertIn("go_home", inspect.getsource(gui.NiceGuiApp._build_header_identity))
         self.assertIn('self.tabs.value = "daily"', inspect.getsource(gui.NiceGuiApp.go_home))
         self.assertIn("width: 246px", gui.UI_CSS)
 
@@ -320,7 +320,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("save_closing_settings", closing_source)
         daily_panel = inspect.getsource(gui.NiceGuiApp._build_daily_panel)
         self.assertNotIn("my-6", daily_panel)
-        self.assertIn("Pokročilé nastavení PDF", daily_panel)
+        self.assertIn("Upravit přehled a vzhled PDF", daily_panel)
         self.assertIn("_build_pdf_settings_section", daily_panel)
         self.assertIn("_build_pdf_panel", daily_panel)
         self.assertIn("_build_date_field", daily_panel)
@@ -329,7 +329,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("tooltip", inspect.getsource(w.setting_switch))
         pdf_actions = inspect.getsource(gui.NiceGuiApp._build_pdf_panel)
         self.assertIn("Vytvořit PDF", pdf_actions)
-        self.assertIn("Vytvořit a odeslat", pdf_actions)
+        self.assertIn("Poslat e-mailem", pdf_actions)
         self.assertIn("action_bar", pdf_actions)
         self.assertIn("grow=True", special_picker)
         self.assertIn("padding: var(--app-panel-pad)", gui.UI_CSS)
@@ -345,7 +345,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn(".chip-row", gui.UI_CSS)
         self.assertIn("form-grid-4", gui.UI_CSS)
         self.assertIn("@media (max-width: 1180px)", gui.UI_CSS)
-        topbar = inspect.getsource(gui.NiceGuiApp._build_topbar)
+        topbar = inspect.getsource(gui.NiceGuiApp._build_topbar) + inspect.getsource(gui.NiceGuiApp._build_header_identity)
         self.assertIn("app-topbar", topbar)
         self.assertIn("connection_tooltip", topbar)
         self.assertIn("open_database_settings", topbar)
