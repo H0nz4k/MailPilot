@@ -58,6 +58,7 @@ echo "[3/3] Sestavuji bezobsluznou sluzbu pro NSSM..."
   --workpath "$ROOT/build/web-worker" \
   --specpath "$ROOT/build/web-spec" \
   --collect-submodules psycopg \
+  --add-data "$WIN_ROOT\\assets;assets" \
   "$WIN_ROOT\\web_mail_worker_main.py"
 
 cp "$ROOT/dist-web-worker/DataShip-Worker.exe" "$APP/"

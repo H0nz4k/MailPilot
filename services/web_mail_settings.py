@@ -26,7 +26,11 @@ def settings_path(directory: Path) -> Path:
 
 def load_settings(path: Path) -> dict:
     if not path.exists():
-        return dict(DEFAULTS)
+        values = dict(DEFAULTS)
+        bundled_nssm = path.parent / "nssm" / "nssm.exe"
+        if bundled_nssm.is_file():
+            values["nssm_path"] = str(bundled_nssm.resolve())
+        return values
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("Nastavení musí být JSON objekt.")
@@ -66,3 +70,4 @@ def save_settings(path: Path, data: dict) -> None:
         os.replace(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
+

@@ -16,3 +16,7 @@ dist-web/
 dist-web-worker/
 daily_reports.json
 
+
+.venv-test/
+release-dist/
+core

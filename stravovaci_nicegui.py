@@ -112,7 +112,7 @@ from services.config_io import (
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
 from services.web_branding import (
-    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON,
+    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION,
 )
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
@@ -172,7 +172,7 @@ from stravovaci_sestava import (
 
 
 APP_TITLE = BRAND_NAME
-APP_VERSION = BRAND_STAGE
+APP_VERSION = WEB_VERSION
 NATIVE_WINDOW_SIZE = (1280, 860)
 SCHEDULER_HELP_TEXT = (
     "Úlohu přiřaďte k funkci: Denní stav (--poctyemailem, "

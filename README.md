@@ -1,4 +1,6 @@
-# MailPilot v12.8
+# MailPilot v12.8 / DataShip 1.0.0-rc.1
+
+> **Build a první Release:** [EXE, balíček s NSSM a postup vydání](docs/RELEASE_WINDOWS.md). [Kontrola funkcí před nasazením](docs/RELEASE_TEST_CHECKLIST.md).
 
 > **DataShip – nové rozhraní a uložené přehledy:** [návod a spuštění](docs/DATASHIP_UI_PRO_MAX.md). Denní stav nově ukládá více výběrů kategorií a jednotlivé e-mailové úlohy si mohou zvolit vlastní přehled.
 

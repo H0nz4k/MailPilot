@@ -22,6 +22,7 @@ from services.jidelnasql_warning import (
 )
 from services.web_mail_task_store import load_tasks, task_file
 from services.web_mail_settings import load_settings, settings_path
+from services.web_branding import WEB_VERSION
 from services.web_mail_smtp import smtp_send
 from services.jidelnasql_warning import JidelnaWarningSettings
 from services.web_mail_cooking_days import resolve_task_date
@@ -143,6 +144,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version=f"DataShip Worker {WEB_VERSION}")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--interval", type=int, default=30)
     args = parser.parse_args()
