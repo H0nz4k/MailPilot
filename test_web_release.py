@@ -27,7 +27,7 @@ def test_release_packages_only_program_and_clean_sample(tmp_path, monkeypatch):
     for path in paths[:2]:
         with ZipFile(path) as z:
             assert 'DataShip/_internal/runtime.dll' in z.namelist()
-            assert json.loads(z.read('DataShip/config.json')) == json.loads((release.ROOT / 'config.example.json').read_text())
+            assert json.loads(z.read('DataShip/config.json')) == json.loads((release.ROOT / 'config.example.json').read_text(encoding="utf-8"))
             assert json.loads(z.read('DataShip/BUILD_INFO.json'))['commit'] == '0123456789abcdef'
             assert all(b'PRIVATE-DO-NOT-SHIP' not in z.read(name) for name in z.namelist())
     with ZipFile(paths[0]) as z:
@@ -35,7 +35,7 @@ def test_release_packages_only_program_and_clean_sample(tmp_path, monkeypatch):
     with ZipFile(paths[1]) as z:
         assert 'DataShip/nssm/nssm.exe' in z.namelist()
         assert 'DataShip/INSTALOVAT_SLUZBU.sh' in z.namelist()
-    for line in paths[2].read_text().splitlines():
+    for line in paths[2].read_text(encoding="utf-8").splitlines():
         digest, name = line.split('  ')
         assert digest == hashlib.sha256((paths[2].parent / name).read_bytes()).hexdigest()
     with pytest.raises(FileExistsError):

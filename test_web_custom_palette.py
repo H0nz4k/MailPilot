@@ -67,20 +67,20 @@ async def test_editor_updates_saves_retains_and_resets_colors(tmp_path):
             with user:
                 page.ui_custom_colors["primary"].value = "#facc15"
                 page.ui_custom_colors["page"].value = "#111111"
-            saved = json.loads(config.read_text())
+            saved = json.loads(config.read_text(encoding="utf-8"))
             assert saved["ui_barevne_schema"] == "vlastni"
             assert saved["ui_vlastni_barvy"]["primary"] == "#facc15"
             assert appearance_theme(peek_ui_appearance(saved))["dark"]
             with user:
                 page.ui_custom_colors["primary"].value = "not-a-color"
             assert page.ui_custom_colors["primary"].props["error"]
-            assert json.loads(config.read_text())["ui_vlastni_barvy"]["primary"] == "#facc15"
+            assert json.loads(config.read_text(encoding="utf-8"))["ui_vlastni_barvy"]["primary"] == "#facc15"
             with user:
                 page.ui_theme.value = "svetle"
                 page.save_ui_appearance()
             assert not page.ui_palette_panel.visible
-            assert json.loads(config.read_text())["ui_vlastni_barvy"]["primary"] == "#facc15"
+            assert json.loads(config.read_text(encoding="utf-8"))["ui_vlastni_barvy"]["primary"] == "#facc15"
             user.find("Upravit vlastní barvy").click()
             user.find("Obnovit výchozí barvy").click()
-            assert json.loads(config.read_text())["ui_vlastni_barvy"] == DEFAULT_CUSTOM_PALETTE
+            assert json.loads(config.read_text(encoding="utf-8"))["ui_vlastni_barvy"] == DEFAULT_CUSTOM_PALETTE
             assert not page.ui_custom_colors["primary"].props.get("error")
