@@ -50,7 +50,7 @@ def download_nssm(archive: Path) -> None:
                 raise
             if attempt == 2:
                 raise
-            print(f'NSSM server je dočasně nedostupný. Opakuji stažení ({attempt + 2}/3)…')
+            print(f'NSSM server je docasne nedostupny. Opakuji stazeni ({attempt + 2}/3)...')
             time.sleep(2 ** attempt)
         finally:
             if temporary is not None:
