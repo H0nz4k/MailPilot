@@ -13,6 +13,9 @@ jobs:
   windows-web:
     runs-on: windows-latest
     timeout-minutes: 45
+    # Draft release assets are visible only to repository writers.
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
     defaults:
@@ -23,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Prepare verified NSSM before compiling
+        run: python scripts/package_web_release.py --install-nssm build/nssm-verified
       - name: Full regression suite (isolated test environment)
         run: bash scripts/test_windows.sh
       - name: Build Windows EXEs (isolated web environment)

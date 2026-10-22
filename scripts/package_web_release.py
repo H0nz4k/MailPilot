@@ -41,11 +41,15 @@ def download_nssm_fallback(archive: Path) -> None:
     try:
         with tempfile.NamedTemporaryFile(dir=archive.parent, prefix='nssm-fallback-', delete=False) as file:
             temporary = Path(file.name)
-            subprocess.run(
-                ['gh', 'api', '--hostname', 'github.com', NSSM_FALLBACK_ASSET,
-                 '--header', 'Accept: application/octet-stream'],
-                stdout=file, stderr=subprocess.PIPE, check=True,
-            )
+            try:
+                subprocess.run(
+                    ['gh', 'api', '--hostname', 'github.com', NSSM_FALLBACK_ASSET,
+                     '--header', 'Accept: application/octet-stream'],
+                    stdout=file, stderr=subprocess.PIPE, check=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                detail = (exc.stderr or b'').decode('utf-8', errors='replace').strip()
+                raise RuntimeError(f'GitHub NSSM fallback failed: {detail}') from None
         # Require the whole known bundle, even if an API error returned JSON.
         if hashlib.sha256(temporary.read_bytes()).hexdigest() != NSSM_FALLBACK_SHA256:
             raise ValueError('Fallback NSSM bundle checksum does not match the pinned release.')
