@@ -1,4 +1,5 @@
 """Bounded, persistent worker activity shared with the GUI (no mail credentials)."""
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 import logging
@@ -29,7 +30,7 @@ def record_event(directory, kind, message, *, task_id=None, task_name='', report
     try:
         folder = Path(directory) / 'logy'
         folder.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(folder / 'activity.sqlite3', timeout=5) as db:
+        with closing(sqlite3.connect(folder / 'activity.sqlite3', timeout=5)) as db, db:
             db.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, time TEXT, kind TEXT, task_id TEXT, task_name TEXT, message TEXT, report_date TEXT)')
             db.execute('INSERT INTO events(time,kind,task_id,task_name,message,report_date) VALUES(?,?,?,?,?,?)',
                        (datetime.now().isoformat(timespec='seconds'), kind, task_id, task_name, message,
@@ -43,7 +44,7 @@ def read_events(directory, limit=200):
     path = Path(directory) / 'logy/activity.sqlite3'
     if not path.exists():
         return []
-    with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=5) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
         db.row_factory = sqlite3.Row
         return [dict(row) for row in db.execute('SELECT * FROM events ORDER BY id DESC LIMIT ?', (min(max(limit, 1), 2000),))]
 

@@ -86,7 +86,10 @@ jobs:
           else
             gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA"
           fi
+          release_flags=(--draft)
+          # Explicitly requested release; other versions remain drafts.
+          if [[ "$version" == "1.0.0-rc.8" ]]; then release_flags=(); fi
           gh release create "$tag" \
             build-artifacts/release-dist/"$version"/* \
-            --verify-tag --title "DataShip $version" \
-            --notes-file "docs/releases/$version.md" --draft --prerelease --latest=false
+            --verify-tag --title "MailShip $version" \
+            --notes-file "docs/releases/$version.md" "${release_flags[@]}" --prerelease --latest=false

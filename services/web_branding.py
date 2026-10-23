@@ -3,8 +3,8 @@
 Keep legacy Qt MailPilot/AutoReport branding and file formats unchanged.
 """
 BRAND_NAME = "MailShip"
-BRAND_STAGE = "rc.7"
-WEB_VERSION = "1.0.0-rc.7"
+BRAND_STAGE = "rc.8"
+WEB_VERSION = "1.0.0-rc.8"
 BRAND_FOOTER = "MailShip by HanzG"
 BRAND_ICON = "sailing"
 BRAND_FAVICON = "🚢"
