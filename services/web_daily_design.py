@@ -34,9 +34,9 @@ class DailyDesignMixin:
                 self.daily_profile_choices = ui.row().classes("ds-profile-choices")
                 self.daily_profile_status = ui.label("").classes("ui-help ds-preview-state").props('role="status" aria-live="polite"')
                 with ui.row().classes("ds-editor-actions"):
-                    self.daily_new_button = ui.button("Uložit výběr…", icon="bookmark_border", on_click=lambda: self.open_daily_save_dialog(as_new=True)).props("outline no-caps").mark("daily-save-new")
-                    self.daily_update_button = ui.button("Uložit změny…", on_click=lambda: self.open_daily_save_dialog(as_new=False)).props("outline no-caps").mark("daily-save-update")
-                    self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("flat no-caps")
+                    self.daily_new_button = ui.button("Uložit výběr…", on_click=lambda: self.open_daily_save_dialog(as_new=True)).props("outline no-caps").style("width: 240px; min-height: 44px; max-width: 100%").mark("daily-save-new")
+                    self.daily_update_button = ui.button("Uložit změny…", on_click=lambda: self.open_daily_save_dialog(as_new=False)).props("outline no-caps").style("width: 240px; min-height: 44px; max-width: 100%").mark("daily-save-update")
+                    self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("outline no-caps").style("width: 240px; min-height: 44px; max-width: 100%")
             with ui.element("div").classes("ds-daily-grid"):
                 with w.card().classes("ds-editor"):
                     with ui.row().classes("w-full items-center justify-between"):
@@ -314,3 +314,4 @@ class DailyDesignMixin:
         # The verified session password is already in the snapshot. Reading the
         # credential store here would fail on a first TEST before PDF saves it.
         return fetch_report(config)
+

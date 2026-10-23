@@ -1702,6 +1702,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         )
 
     ADMIN_SECTIONS = (
+        ("logs", "Logy", "history"),
         ("db", "Databáze", "storage"),
         ("categories", "Kategorie denního stavu", "checklist"),
         ("mail", "E-maily", "mail"),
@@ -1738,6 +1739,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
                     self._build_appearance_panel()
+                with ui.tab_panel("logs"):
+                    from services.web_activity_gui import build_activity_panel
+                    build_activity_panel(self.config_path.parent, self._require_admin, self._admin_before_lock)
                 with ui.tab_panel("cli"):
                     self._build_cli_help_panel()
 
@@ -3317,4 +3321,5 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
 

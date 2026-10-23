@@ -29,6 +29,8 @@ from services.web_mail_cooking_days import resolve_task_date
 from services.web_daily_profiles import task_report_config
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
+from services.web_activity import record_event, friendly_error
+
 LOG = logging.getLogger("mailpilot.web_worker")
 STOP = False
 
@@ -68,6 +70,7 @@ def deliver_daily(config_path: Path, task, report_date: date) -> None:
             api_key=api_key, sender_email=sender,
         )
         result = sent.recipients
+    record_event(config_path.parent, "sent", "Odesláno.", task_id=task.id, task_name=getattr(task, "name", ""), report_date=report_date)
     LOG.info("Sent task=%s date=%s recipients=%s", task.id, report_date, result)
 
 def dispatch(config_path: Path, task, sent_on: date) -> None:
@@ -119,6 +122,8 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
             dispatch(config_path, task, now.date())
         except Exception as exc:
             LOG.exception("Task %s failed", task.name)
+            summary = friendly_error(exc)
+            record_event(config_path.parent, "error", "Neodesláno: " + summary + " Další automatický pokus bude nejdříve zítra.", task_id=task.id, task_name=task.name)
             # The warning only adds information; it must not mask delivery errors.
             try:
                 web_settings = load_settings(settings_path(config_path.parent))
@@ -127,7 +132,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
                     template_path=Path(web_settings["dashboard_path"]),
                 )
                 warning_error = show_jidelnasql_mail_warning(
-                    settings, message=f"DataShip: neodeslána úloha {task.name}: {exc}"
+                    settings, message=f"MailShip: neodeslána úloha {task.name}. {summary}"
                 )
                 if warning_error:
                     LOG.error("Dashboard warning: %s", warning_error)
@@ -164,16 +169,20 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
     LOG.info("DataShip scheduler started: %s", config_path)
+    record_event(config_path.parent, "started", "Plánovač byl spuštěn.")
     while not STOP:
         try:
             tick(config_path)
         except Exception:
             LOG.exception("Scheduler tick failed")
+            record_event(config_path.parent, "error", "Plánovač nemohl načíst nebo zpracovat úlohy. Zkontrolujte konfiguraci a technický log.")
         time.sleep(args.interval)
     LOG.info("DataShip scheduler stopped")
+    record_event(config_path.parent, "stopped", "Plánovač byl zastaven.")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

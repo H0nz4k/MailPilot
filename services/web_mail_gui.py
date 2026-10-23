@@ -52,6 +52,8 @@ def build_mail_tasks_panel(
             p.id: p.name for p in load_profiles(profile_file(Path(config_directory)))
         }
 
+    from services.web_activity import activity_rows
+
     @ui.refreshable
     def table():
         tasks = read()
@@ -59,6 +61,10 @@ def build_mail_tasks_panel(
             return
         if not tasks:
             ui.label("Zatím nemáte nastavené žádné odesílání.").classes("ui-help")
+        latest = {}
+        for event in activity_rows(config_directory):
+            if event["task_id"]:
+                latest.setdefault(event["task_id"], event)
         for task in tasks:
             with ui.card().classes("ds-mail-task w-full"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -94,6 +100,15 @@ def build_mail_tasks_panel(
                             f"Příští odeslání: {upcoming:%d.%m.%Y %H:%M}; "
                             f"den přehledu nelze určit: {exc}"
                         )
+                event = latest.get(task.id)
+                if event:
+                    with ui.row().classes("w-full items-center gap-2").props('role="status"'):
+                        ui.icon('error_outline' if event['kind'] == 'error' else 'check_circle', color='negative' if event['kind'] == 'error' else 'positive')
+                        ui.label(f"{event['time'].replace('T', ' ')} · {event['message']}").style('overflow-wrap:anywhere')
+                    if event['report_date']:
+                        ui.label(f"Poslední přehled za {event['report_date']}").classes('ui-help')
+                else:
+                    ui.label('Poslední výsledek zatím není zaznamenán.').classes('ui-help')
                 with ui.row().classes("ds-task-actions gap-2"):
                     ui.button("Upravit", on_click=lambda t=task: editor(t)).props("outline")
                     ui.button("Kopírovat", on_click=lambda t=task: editor(t, duplicate=True)).props("outline")
@@ -327,4 +342,5 @@ def build_mail_tasks_panel(
             ui.button("Přejít do Přehledů", icon="today", on_click=on_open_reports).props("flat no-caps")
     table()
     return editor
+
 

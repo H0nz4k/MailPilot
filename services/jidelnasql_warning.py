@@ -201,7 +201,7 @@ def _build_error_block(message: str, when_text: str) -> str:
         <span style="color:#ff3030; font-weight:normal;">{message}</span>
     </p>
     <p style="margin:0; padding:0;">
-        <span style="color:#ff3030; font-weight:normal;">Zkontrolujte MailPilot.</span>
+        <span style="color:#ff3030; font-weight:normal;">Zkontrolujte MailShip.</span>
     </p>
     <p style="margin:0; padding:0;">
         <span style="color:#ff3030; font-weight:normal;">{when_text}</span>
@@ -220,3 +220,4 @@ def _contains_marker_pair(text: str, begin: str, end: str) -> bool:
         return True
     # Poškozený blok (jen BEGIN) stále bereme jako aktivní warning.
     return begin in text
+
