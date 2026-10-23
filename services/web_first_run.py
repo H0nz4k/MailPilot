@@ -62,7 +62,7 @@ class FirstRunMixin:
             self.open_admin_dialog()
 
     def _open_database_setup(self) -> None:
-        if not self.admin_unlocked:
+        if not self._require_admin(silent=True):
             self._database_setup_pending = True
             self.open_admin_dialog()
             return
@@ -77,7 +77,7 @@ class FirstRunMixin:
     async def _verify_database_setup(self, _event: Any = None) -> None:
         if self._setup_busy:
             return
-        if not self.admin_unlocked:
+        if not self._require_admin(silent=True):
             self.database_setup_dialog.close()
             self._database_setup_pending = True
             self.open_admin_dialog()

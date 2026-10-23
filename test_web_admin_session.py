@@ -1,7 +1,7 @@
 """An expired admin session cannot be revived by activity or save callbacks."""
 import shutil
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from nicegui import ui
@@ -53,6 +53,10 @@ async def test_idle_expiry_closes_admin_dialogs_and_rejects_late_writes(tmp_path
                 page.save_planned_jobs()
                 save_jobs.assert_not_called()
                 assert "10 minutách" in page.status_label.text
+                with patch.object(page, "test_connection", new_callable=AsyncMock) as probe:
+                    assert not await page._test_admin_connection()
+                    await page._verify_database_setup()
+                    probe.assert_not_awaited()
                 # Login is the only way back in, with a fresh deadline.
                 page.admin_password_input.value = "secret"
                 page.confirm_admin()

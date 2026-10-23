@@ -847,7 +847,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             with w.toolbar():
                 self.test_button = (
                     ui.button(
-                        "TEST připojení", icon="cable", on_click=self.test_connection
+                        "TEST připojení", icon="cable", on_click=self._test_admin_connection
                     )
                     .props("no-caps unelevated")
                     .classes("shrink-0")
@@ -2714,6 +2714,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             info.subject_name,
             info.period,
         )
+
+    async def _test_admin_connection(self) -> bool:
+        if not self._require_admin():
+            return False
+        return await self.test_connection()
 
     async def test_connection(self) -> bool:
         try:
