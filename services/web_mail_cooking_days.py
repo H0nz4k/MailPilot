@@ -70,8 +70,14 @@ def cooking_day_lookup(
             yield is_cooking_day
 
 
-def task_calendar_type(config_path: Path, task: MailTask) -> str:
-    """An explicit task calendar wins; only old tasks inherit the former setting."""
+def task_calendar_type(config_path: Path, task: MailTask) -> str | None:
+    """Saved reports derive their calendar from meal_type; legacy tasks keep theirs."""
+    if getattr(task, "profile_id", None):
+        from services.web_daily_profiles import load_profiles, profile_file
+        profile = next((p for p in load_profiles(profile_file(Path(config_path).parent)) if p.id == task.profile_id), None)
+        if profile is None:
+            raise ValueError("Uložený přehled této úlohy neexistuje.")
+        return profile.meal_type
     if task.cooking_meal_type is not None:
         return task.cooking_meal_type
     settings = load_settings(settings_path(Path(config_path).parent))
@@ -107,6 +113,38 @@ def resolve_task_date(config_path: Path, task: MailTask, sent_on: date) -> date:
     config_path = Path(config_path)
     meal_type = task_calendar_type(config_path, task)
     config = load_config(config_path, date_override=sent_on.strftime("%d.%m.%Y"))
-    with cooking_day_lookup(config.database, meal_type) as is_day:
+    lookup = any_cooking_day_lookup if meal_type is None else cooking_day_lookup
+    args = (config.database,) if meal_type is None else (config.database, meal_type)
+    with lookup(*args) as is_day:
         return target_date(task, sent_on, is_cooking_day=is_day)
 
+
+
+
+@contextmanager
+def any_cooking_day_lookup(database):
+    """Find the first day marked A for any calendar in the requested month."""
+    import psycopg
+    with psycopg.connect(**database) as connection:
+        with connection.cursor() as cursor:
+            cache = {}
+            def is_day(day):
+                key = (day.year, day.month)
+                if key not in cache:
+                    cursor.execute(
+                        f"SELECT LOWER(BTRIM(typsluzby)), {', '.join(DAY_COLUMNS)} FROM public.varnedny WHERE rok = %s AND mesic = %s",
+                        key,
+                    )
+                    rows = cursor.fetchall()
+                    names = [row[0] for row in rows]
+                    if not rows or any(not name for name in names) or len(names) != len(set(names)):
+                        raise ValueError(f"Chybí nebo je duplicitní kalendář varných dnů pro {day.month:02d}/{day.year}.")
+                    if any(len(row) != 32 for row in rows):
+                        raise ValueError("Tabulka varnedny nemá očekávané sloupce d01–d31.")
+                    cache[key] = rows
+                values = [row[day.day] for row in cache[key]]
+                statuses = [v.strip().upper() if isinstance(v, str) else "" for v in values]
+                if any(v not in ("A", "N") for v in statuses):
+                    raise ValueError(f"Neplatný stav varného dne {day:%d.%m.%Y}.")
+                return "A" in statuses
+            yield is_day
