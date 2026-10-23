@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from nicegui import ui
+from services.web_custom_palette import normalize_palette, palette_tokens, luminance, contrast
 
 # ---------------------------------------------------------------------------
 # Písmo: tři styly pro celou aplikaci
@@ -22,9 +23,9 @@ UI_TEXT_SIZE_LABELS = {
     "extra": "Extra velká",
 }
 UI_TEXT_SIZE_PX = {
-    "text": {"mala": 13, "stredni": 14, "velka": 16, "extra": 18},
-    "nadpis": {"mala": 15, "stredni": 16, "velka": 19, "extra": 22},
-    "popis": {"mala": 11, "stredni": 12, "velka": 14, "extra": 16},
+    "text": {"mala": 18, "stredni": 20, "velka": 22, "extra": 24},
+    "nadpis": {"mala": 20, "stredni": 24, "velka": 26, "extra": 28},
+    "popis": {"mala": 16, "stredni": 16, "velka": 18, "extra": 20},
 }
 DEFAULT_UI_TEXT_SIZE = "stredni"
 
@@ -168,40 +169,41 @@ UI_THEME_LABELS = {
     "les": "Les",
     "pisek": "Písek",
     "burgund": "Burgund",
+    "vlastni": "Vlastní barvy",
 }
 UI_THEMES: dict[str, dict[str, Any]] = {
     "svetle": {
         "dark": False,
-        "primary": "#1769aa",
+        "primary": "#00236f",
         "secondary": "#455a64",
         "accent": "#00897b",
         "vars": {
-            "--app-ink": "#17243d",
-            "--app-muted": "#5b6b80",
-            "--app-border": "#cfd8e3",
+            "--app-ink": "#131b2e",
+            "--app-muted": "#444651",
+            "--app-border": "#c5c5d3",
             "--app-surface": "#ffffff",
             "--app-page-from": "#eef2f7",
             "--app-page-mid": "#f3f6fa",
-            "--app-page-to": "#f7f9fc",
-            "--app-primary": "#1769aa",
-            "--app-primary-soft": "#eaf4ff",
-            "--app-tab": "#5b6b80",
-            "--app-tab-active-bg": "#eaf4ff",
-            "--app-tab-active": "#0b63ad",
-            "--app-brand": "#0b4f86",
+            "--app-page-to": "#faf8ff",
+            "--app-primary": "#00236f",
+            "--app-primary-soft": "#eaedff",
+            "--app-tab": "#444651",
+            "--app-tab-active-bg": "#eaedff",
+            "--app-tab-active": "#00236f",
+            "--app-brand": "#00236f",
             "--app-brand-shadow": "rgba(11, 79, 134, 0.22)",
             "--app-shell-border": "#d3dce7",
             "--app-shell-shadow": "rgba(22, 42, 66, 0.10)",
             "--app-status-border": "#bcd7ef",
-            "--app-status-accent": "#1769aa",
+            "--app-status-accent": "#00236f",
             "--app-status-bg": "#f2f8ff",
-            "--app-status-ink": "#17243d",
+            "--app-status-ink": "#131b2e",
             "--app-field": "#101828",
-            "--app-field-label": "#5b6b80",
-            "--app-block": "#f7f9fc",
-            "--app-note": "#f4f7fb",
-            "--app-table-head": "#e7edf4",
-            "--app-hover": "#f0f6fd",
+            "--app-field-label": "#444651",
+            "--app-block": "#faf8ff",
+            "--app-note": "#f2f3ff",
+            "--app-table-head": "#eaedff",
+            "--app-hover": "#eaedff",
             "--app-separator": "#e2e8f0",
             "--app-ok": "#0f7b3d",
             "--app-ok-bg": "#eaf7ef",
@@ -446,7 +448,7 @@ def peek_ui_text_size(raw: dict[str, Any] | None) -> str:
 
 def peek_ui_theme(raw: dict[str, Any] | None) -> str:
     value = raw.get("ui_barevne_schema") if isinstance(raw, dict) else None
-    return str(value) if value in UI_THEMES else DEFAULT_UI_THEME
+    return str(value) if value in UI_THEME_LABELS else DEFAULT_UI_THEME
 
 
 def peek_ui_layout(raw: dict[str, Any] | None) -> str:
@@ -484,6 +486,13 @@ def peek_ui_blocks(raw: dict[str, Any] | None) -> bool:
         return value
     if isinstance(value, (int, float)):
         return bool(value)
+    return str(value or "").strip().casefold() in {"1", "true", "ano", "on"}
+
+
+def _peek_bold(data: dict[str, Any], key: str) -> bool:
+    value = data.get(key, data.get(f"ui_{key}"))
+    if isinstance(value, bool):
+        return value
     return str(value or "").strip().casefold() in {"1", "true", "ano", "on"}
 
 
@@ -563,6 +572,9 @@ def peek_ui_appearance(raw: dict[str, Any] | None) -> dict[str, Any]:
         "text": peek_ui_size(mapped, "ui_velikost_textu"),
         "nadpis": peek_ui_size(mapped, "ui_velikost_nadpisu"),
         "popis": peek_ui_size(mapped, "ui_velikost_popisu"),
+        "tucne_nadpisy": _peek_bold(data, "tucne_nadpisy"),
+        "tucny_text": _peek_bold(data, "tucny_text"),
+        "tucne_popisy": _peek_bold(data, "tucne_popisy"),
         "schema": peek_ui_theme(mapped),
         "zvyrazneni": peek_ui_blocks(mapped),
         "zoom": peek_ui_zoom(mapped),
@@ -570,6 +582,7 @@ def peek_ui_appearance(raw: dict[str, Any] | None) -> dict[str, Any]:
         "rozestupy": peek_ui_spacing(mapped),
         "radkovani": peek_ui_line(mapped),
         "hustota": peek_ui_density(mapped),
+        "vlastni_barvy": normalize_palette(data.get("vlastni_barvy", data.get("ui_vlastni_barvy"))),
     }
 
 
@@ -581,6 +594,9 @@ def appearance_config(appearance: dict[str, Any]) -> dict[str, Any]:
         "ui_velikost_textu": peeked["text"],
         "ui_velikost_nadpisu": peeked["nadpis"],
         "ui_velikost_popisu": peeked["popis"],
+        "ui_tucne_nadpisy": peeked["tucne_nadpisy"],
+        "ui_tucny_text": peeked["tucny_text"],
+        "ui_tucne_popisy": peeked["tucne_popisy"],
         "ui_barevne_schema": peeked["schema"],
         "ui_zvyrazneni_bloku": bool(peeked["zvyrazneni"]),
         "ui_zoom": int(peeked["zoom"]),
@@ -588,6 +604,7 @@ def appearance_config(appearance: dict[str, Any]) -> dict[str, Any]:
         "ui_rozestupy": peeked["rozestupy"],
         "ui_radkovani": peeked["radkovani"],
         "ui_hustota_poli": peeked["hustota"],
+        "ui_vlastni_barvy": peeked["vlastni_barvy"],
     }
 
 
@@ -596,18 +613,39 @@ def layout_tokens(appearance: dict[str, Any]) -> dict[str, Any]:
     return dict(UI_LAYOUTS[peek_ui_appearance(appearance)["layout"]])
 
 
+def appearance_theme(appearance: dict[str, Any]) -> dict[str, Any]:
+    peeked = peek_ui_appearance(appearance)
+    if peeked["schema"] != "vlastni":
+        return UI_THEMES[peeked["schema"]]
+    palette = peeked["vlastni_barvy"]
+    dark = luminance(palette["page"]) < 0.18
+    base = UI_THEMES["tmave" if dark else "svetle"]
+    return {**base, "dark": dark, "primary": palette["primary"],
+            "secondary": palette["primary"], "accent": palette["primary"],
+            "vars": {**base["vars"], **palette_tokens(palette)}}
+
+
 def appearance_css_vars(appearance: dict[str, Any]) -> dict[str, str]:
     """Design tokeny pro CSS z uloženého vzhledu."""
     peeked = peek_ui_appearance(appearance)
-    theme = UI_THEMES[peeked["schema"]]
+    theme = appearance_theme(peeked)
     layout = UI_LAYOUTS[peeked["layout"]]
     space = UI_SPACING_PX[peeked["rozestupy"]]
     variables = dict(theme["vars"])
+    variables.setdefault("--app-field-border", variables["--app-border"])
+    variables.setdefault("--custom-on-primary", "#ffffff")
+    variables.setdefault("--ds-on-primary", "#ffffff")
+    badge_background = variables["--app-primary-soft"]
+    variables["--ds-badge-background"] = badge_background
+    variables["--ds-badge-ink"] = max(("#000000", "#ffffff"), key=lambda color: contrast(color, badge_background))
     variables.update(
         {
             "--app-text": f"{UI_TEXT_SIZE_PX['text'][peeked['text']]}px",
             "--app-heading": f"{UI_TEXT_SIZE_PX['nadpis'][peeked['nadpis']]}px",
             "--app-help": f"{UI_TEXT_SIZE_PX['popis'][peeked['popis']]}px",
+            "--app-weight-heading": "700" if peeked["tucne_nadpisy"] else "650",
+            "--app-weight-text": "700" if peeked["tucny_text"] else "400",
+            "--app-weight-help": "700" if peeked["tucne_popisy"] else "400",
             "--app-line": UI_LINE_HEIGHT[peeked["radkovani"]],
             "--app-zoom": f"{peeked['zoom'] / 100:.2f}",
             "--app-gap": f"{space['gap']}px",
@@ -645,7 +683,7 @@ def appearance_html_classes(appearance: dict[str, Any]) -> str:
 
 
 def _removable_html_classes() -> str:
-    names = [f"theme-{name}" for name in UI_THEMES]
+    names = [f"theme-{name}" for name in UI_THEME_LABELS]
     names += [f"layout-{name}" for name in UI_LAYOUTS]
     names += [f"cards-{name}" for name in ("jemne", "vyrazne", "zadne")]
     names += [f"nav-{name}" for name in (NAV_TOP, NAV_SIDE)]
@@ -662,7 +700,7 @@ def apply_ui_appearance(
 ) -> None:
     """Nastaví design tokeny a šablonu v běžícím okně."""
     peeked = peek_ui_appearance(appearance)
-    theme = UI_THEMES[peeked["schema"]]
+    theme = appearance_theme(peeked)
     variables = appearance_css_vars(peeked)
     inline = "; ".join(f"{key}: {value}" for key, value in variables.items())
     ui.query(":root").style(inline)
@@ -724,13 +762,14 @@ _CSS_TOKENS = """
     --app-warn-bg: #fdf4e6;
     --app-bad: #b42318;
     --app-bad-bg: #fdf0ef;
-    --app-text: 14px;
-    --app-heading: 16px;
-    --app-help: 12px;
+    --app-text: 20px;
+    --app-heading: 24px;
+    --app-help: 16px;
     --app-line: 1.4;
     --app-zoom: 1.00;
     --app-weight-heading: 650;
     --app-weight-text: 400;
+    --app-weight-help: 400;
     --app-gap: 10px;
     --app-stack: 10px;
     --app-panel-pad: 10px;
@@ -809,10 +848,12 @@ _CSS_TYPOGRAPHY = """
 .inline-status,
 .app-footer,
 .connection-details,
-.connection-caption {
+.connection-caption,
+.q-field__messages,
+.q-tooltip {
     color: var(--app-muted);
     font-size: var(--app-help);
-    font-weight: var(--app-weight-text);
+    font-weight: var(--app-weight-help);
     line-height: var(--app-line);
 }
 
@@ -840,7 +881,7 @@ _CSS_FORMS = """
 .q-field__label {
     color: var(--app-field-label);
     font-size: var(--app-help);
-    font-weight: var(--app-weight-text);
+    font-weight: var(--app-weight-help);
 }
 
 .q-field--dense .q-field__control,
@@ -911,6 +952,7 @@ pre, code {
 .field-hint {
     color: var(--app-muted);
     font-size: var(--app-help);
+    font-weight: var(--app-weight-help);
     cursor: help;
 }
 """
@@ -920,7 +962,7 @@ _CSS_BUTTONS = """
     min-height: var(--app-control-min);
     border-radius: var(--app-radius);
     font-size: var(--app-text);
-    font-weight: var(--app-weight-heading);
+    font-weight: max(var(--app-weight-heading), var(--app-weight-text));
     letter-spacing: 0;
     text-transform: none;
 }
@@ -1241,6 +1283,7 @@ html.overview-on .overview-row {
 .stat-card-label {
     color: var(--app-muted);
     font-size: var(--app-help);
+    font-weight: var(--app-weight-help);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -1321,7 +1364,7 @@ html.layout-dashboard .chip-row {
     border-radius: 999px;
     padding: 1px 8px;
     font-size: var(--app-help);
-    font-weight: var(--app-weight-text);
+    font-weight: var(--app-weight-help);
     line-height: 1.4;
 }
 
@@ -1444,8 +1487,11 @@ html.cards-zadne .stat-card {
 }
 
 html.blocks-emphasized .app-card,
-html.blocks-emphasized .ui-block {
-    border-left: 3px solid var(--app-primary);
+html.blocks-emphasized .ui-block,
+html.blocks-emphasized .app-note {
+    border: 2px solid var(--app-primary);
+    border-radius: var(--app-radius);
+    padding: var(--app-block-pad);
 }
 
 html.blocks-emphasized .section-header {
@@ -1485,3 +1531,4 @@ UI_CSS = "\n".join(
         _CSS_LAYOUTS,
     )
 )
+

@@ -18,7 +18,7 @@ EDITABLE_TABS: dict[str, str] = {
     "closing": "Uzávěrka",
     "special": "Speciál",
     "bulk": "Hromadná zpráva",
-    "mail_tasks": "E-mailové úlohy",
+    "mail_tasks": "Odesílání",
 }
 
 
@@ -34,3 +34,4 @@ def visible_tabs(config: Mapping[str, object]) -> dict[str, bool]:
         value = stored.get(tab, default)
         visibility[tab] = value if isinstance(value, bool) else default
     return visibility
+

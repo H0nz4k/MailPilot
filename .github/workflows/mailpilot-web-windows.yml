@@ -1,30 +1,92 @@
 name: Build DataShip Web (Windows)
 on:
   push:
-    branches: [feat/web-mail-scheduler]
+    branches: [feat/web-mail-scheduler, feat/dataship-design-integration]
+    tags: ['dataship-v*']
   workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dataship-windows-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   windows-web:
     runs-on: windows-latest
+    timeout-minutes: 45
+    # Draft release assets are visible only to repository writers.
     permissions:
-      contents: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build Windows EXEs
-        shell: bash
+      - name: Prepare verified NSSM before compiling
+        run: python scripts/package_web_release.py --install-nssm build/nssm-verified
+      - name: Full regression suite (isolated test environment)
+        run: bash scripts/test_windows.sh
+      - name: Build Windows EXEs (isolated web environment)
         run: bash scripts/build_web_windows.sh
-      - name: Check Python syntax and report regressions
-        shell: bash
-        run: |
-          .venv-web/Scripts/python.exe -m compileall -q stravovaci_nicegui.py stravovaci_sestava.py mail_service.py pocty_nastaveni.py
-          .venv-web/Scripts/python.exe -m unittest -q test_pocty_nastaveni test_stravovaci_sestava test_mail_service
-      - name: Upload Windows distribution
+      - name: Smoke-test actual frozen GUI and worker
+        run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
+      - name: Package clean portable and NSSM distributions
+        run: .venv-web/Scripts/python.exe scripts/package_web_release.py --commit "$GITHUB_SHA"
+      - name: Upload distribution and test evidence
         uses: actions/upload-artifact@v4
         with:
-          name: DataShip-Windows
-          path: dist-web/DataShip/
+          name: DataShip-Windows-${{ github.sha }}
+          path: |
+            release-dist/
+            build/test-results/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DataShip-diagnostics-${{ github.sha }}
+          path: |
+            build/test-results/
+            build/web-gui/**/warn-*.txt
+            build/web-worker/**/warn-*.txt
+          if-no-files-found: ignore
+  draft-release:
+    needs: windows-web
+    if: github.ref == 'refs/heads/feat/dataship-design-integration' || startsWith(github.ref, 'refs/tags/dataship-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: DataShip-Windows-${{ github.sha }}
+          path: build-artifacts
+      - name: Create draft prerelease once for this version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          tag="dataship-v$version"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; its files and commit will not be replaced. Download this run's artifact for the new build."
+            exit 0
+          fi
+          if gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha' > /tmp/dataship-tag-sha 2>/dev/null; then
+            [[ "$(cat /tmp/dataship-tag-sha)" == "$GITHUB_SHA" ]] || { echo 'Tag already points to a different commit; refusing to replace it.' >&2; exit 1; }
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA"
+          fi
+          gh release create "$tag" \
+            build-artifacts/release-dist/"$version"/* \
+            --verify-tag --title "DataShip $version" \
+            --notes-file "docs/releases/$version.md" --draft --prerelease --latest=false

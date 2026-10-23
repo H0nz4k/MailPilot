@@ -66,3 +66,19 @@ def test_invalid_time_rejected():
 def test_roundtrip():
     original = task()
     assert MailTask.from_dict(original.to_dict()) == original
+
+
+def test_each_task_roundtrips_its_own_calendar():
+    a = task(cooking_meal_type='  Oběd  ')
+    b = task(cooking_meal_type='Večeře')
+    assert a.cooking_meal_type == 'Oběd'
+    assert b.cooking_meal_type == 'Večeře'
+    assert MailTask.from_dict(a.to_dict()) == a
+    assert MailTask.from_dict(b.to_dict()) == b
+    assert task().cooking_meal_type is None  # Legacy tasks keep the previous rule.
+
+
+@pytest.mark.parametrize('value', ['', '   ', 1, True, [], {}])
+def test_calendar_must_be_a_real_name(value):
+    with pytest.raises(ValueError, match='Kalendář'):
+        task(cooking_meal_type=value)

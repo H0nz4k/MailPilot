@@ -16,7 +16,7 @@ if [[ ! -f "$PY" ]]; then
   command -v py >/dev/null 2>&1 || { echo "CHYBA: nainstaluj Python 3.12 pro Windows (py launcher)." >&2; exit 2; }
   py -3.12 -m venv "$VENV" || { echo "CHYBA: nainstaluj Python 3.12 x64 a zopakuj build." >&2; exit 2; }
 fi
-echo "[1/3] Instaluji zavislosti webove verze..."
+echo "[1/4] Instaluji zavislosti webove verze..."
 "$PY" -m pip install --disable-pip-version-check -r "$ROOT/requirements-web-build.txt"
 
 WIN_ROOT="$(cygpath -w "$ROOT")"
@@ -28,7 +28,7 @@ mkdir -p "$DIST" "$ROOT/build" "$PRESERVE"
 # Keep config, scheduled tasks and mail preferences across upgrades. On the
 # first DataShip build, import from the former MailPilot-Web install without
 # deleting/moving it. Future builds prefer the existing DataShip files.
-for name in config.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
+for name in config.json daily_reports.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
   rm -f "$PRESERVE/$name"
   if [[ -f "$APP/$name" ]]; then
     cp "$APP/$name" "$PRESERVE/$name"
@@ -36,7 +36,7 @@ for name in config.json web_mail_settings.json web_mail_tasks.json web_mail_work
     cp "$LEGACY_APP/$name" "$PRESERVE/$name"
   fi
 done
-echo "[2/3] Sestavuji webovou aplikaci pro prohlizec..."
+echo "[2/4] Sestavuji webovou aplikaci pro prohlizec..."
 "$PY" -m PyInstaller --noconfirm --clean --onedir --console --noupx \
   --name DataShip \
   --distpath "$DIST" \
@@ -51,13 +51,14 @@ echo "[2/3] Sestavuji webovou aplikaci pro prohlizec..."
   --add-data "$WIN_ROOT\\config.example.json;." \
   "$WIN_ROOT\\stravovaci_nicegui.py"
 
-echo "[3/3] Sestavuji bezobsluznou sluzbu pro NSSM..."
+echo "[3/4] Sestavuji bezobsluznou sluzbu pro NSSM..."
 "$PY" -m PyInstaller --noconfirm --clean --onefile --console --noupx \
   --name DataShip-Worker \
   --distpath "$ROOT/dist-web-worker" \
   --workpath "$ROOT/build/web-worker" \
   --specpath "$ROOT/build/web-spec" \
   --collect-submodules psycopg \
+  --add-data "$WIN_ROOT\\assets;assets" \
   "$WIN_ROOT\\web_mail_worker_main.py"
 
 cp "$ROOT/dist-web-worker/DataShip-Worker.exe" "$APP/"
@@ -67,7 +68,7 @@ if [[ -f "$PRESERVE/config.json" ]]; then
 else
   cp "$APP/config.example.json" "$APP/config.json"
 fi
-for name in web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
+for name in daily_reports.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
   if [[ -f "$PRESERVE/$name" ]]; then
     cp "$PRESERVE/$name" "$APP/$name"
   fi
@@ -84,6 +85,9 @@ cd /d "%~dp0"
 "%~dp0DataShip-Worker.exe" --config "%~dp0config.json"
 if errorlevel 1 pause
 CMD
+echo "[4/4] Pridavam overeny NSSM pro Windows sluzbu..."
+"$PY" "$ROOT/scripts/package_web_release.py" --install-nssm "$APP"
 echo "HOTOVO: $APP/DataShip.exe"
 echo "OTEVRENI: v Git Bash spust ./dist-web/DataShip/DataShip.exe --browser"
 echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."
+

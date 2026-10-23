@@ -208,3 +208,53 @@ def test_user_provided_example_does_not_invent_missing_november(monkeypatch):
             calendar.target_date(
                 task(), date(2010, 10, 26), is_cooking_day=is_cooking,
             )
+
+
+def test_worker_dispatch_uses_each_tasks_calendar_instead_of_global_setting(monkeypatch, tmp_path):
+    from dataclasses import replace
+    from services import web_mail_worker as worker
+    rows = {
+        (2026, 10, 'Snídaně'): [month_row(d24='A')],
+        (2026, 10, 'Oběd'): [month_row(d26='A')],
+        (2026, 10, 'Večeře'): [month_row(d25='A')],
+    }
+    cursor = fake_database(monkeypatch, rows)
+    monkeypatch.setattr(calendar, 'load_config', lambda *_a, **_k: SimpleNamespace(database={'dbname': 'jidelna'}))
+    def no_global(_):
+        pytest.fail('Explicit task calendars must not depend on the old shared setting')
+    monkeypatch.setattr(calendar, 'load_settings', no_global)
+    delivered = []
+    monkeypatch.setattr(worker, 'deliver_daily', lambda path, job, day: delivered.append((job.cooking_meal_type, day)))
+    for meal in ('Snídaně', 'Oběd', 'Večeře'):
+        worker.dispatch(tmp_path / 'config.json', replace(task(), cooking_meal_type=meal), date(2026, 10, 23))
+    assert delivered == [('Snídaně', date(2026, 10, 24)), ('Oběd', date(2026, 10, 26)), ('Večeře', date(2026, 10, 25))]
+    assert cursor.calls == [(2026, 10, meal) for meal in ('Snídaně', 'Oběd', 'Večeře')]
+
+
+def test_missing_explicit_calendar_never_falls_back_to_lunch(monkeypatch, tmp_path):
+    from dataclasses import replace
+    cursor = fake_database(monkeypatch, {(2026, 10, 'Oběd'): [month_row(d24='A')]})
+    monkeypatch.setattr(calendar, 'load_config', lambda *_a, **_k: SimpleNamespace(database={'dbname': 'jidelna'}))
+    monkeypatch.setattr(calendar, 'load_settings', lambda _: {'cooking_meal_type': 'Oběd'})
+    with pytest.raises(ValueError, match='Večeře'):
+        calendar.resolve_task_date(tmp_path / 'config.json', replace(task(), cooking_meal_type='Večeře'), date(2026, 10, 23))
+    assert cursor.calls == [(2026, 10, 'Večeře')]
+
+
+def test_calendar_choices_come_only_from_actual_calendar_rows(monkeypatch, tmp_path):
+    today = date.today()
+    queries = []
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def execute(self, sql, args): queries.append((sql, args))
+        def fetchall(self): return [('Oběd',), (' oběd ',), ('Večeře',), ('',)]
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def cursor(self): return Cursor()
+    monkeypatch.setitem(sys.modules, 'psycopg', SimpleNamespace(connect=lambda **_: Connection()))
+    monkeypatch.setattr(calendar, 'load_config', lambda *_a, **_k: SimpleNamespace(database={}))
+    assert calendar.available_cooking_calendars(tmp_path / 'config.json') == ('Oběd', 'Večeře')
+    assert 'FROM public.varnedny' in queries[0][0]
+    assert queries[0][1] == (today.year, today.year + 1)

@@ -22,9 +22,11 @@ from services.jidelnasql_warning import (
 )
 from services.web_mail_task_store import load_tasks, task_file
 from services.web_mail_settings import load_settings, settings_path
+from services.web_branding import WEB_VERSION
 from services.web_mail_smtp import smtp_send
 from services.jidelnasql_warning import JidelnaWarningSettings
 from services.web_mail_cooking_days import resolve_task_date
+from services.web_daily_profiles import task_report_config
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
 LOG = logging.getLogger("mailpilot.web_worker")
@@ -40,8 +42,16 @@ def deliver_daily(config_path: Path, task, report_date: date) -> None:
     raw = read_saved_settings(config_path)
     settings = load_settings(settings_path(config_path.parent))
     config = load_config(config_path, date_override=report_date.strftime("%d.%m.%Y"))
+    config = task_report_config(config, raw, task, config_path.parent)
     report = fetch_report(config)
-    pdf = create_pdf(config, report)
+    if getattr(task, "profile_id", None):
+        # Profile outputs must not overwrite a global or other profile's PDF.
+        from hashlib import sha256
+        suffix = sha256(task.profile_id.encode("utf-8")).hexdigest()[:12]
+        output = config.pdf_output.with_name(f"{config.pdf_output.stem}_prehled_{suffix}{config.pdf_output.suffix}")
+        pdf = create_pdf(config, report, output_path=output)
+    else:
+        pdf = create_pdf(config, report)
     report_label = "Denní stav"
     data = {"report": report_label, "date": report_date.strftime("%d.%m.%Y")}
     subject = settings["subject_template"].format(**data)
@@ -134,6 +144,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version=f"DataShip Worker {WEB_VERSION}")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--interval", type=int, default=30)
     args = parser.parse_args()
@@ -165,3 +176,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

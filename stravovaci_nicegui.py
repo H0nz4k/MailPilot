@@ -112,11 +112,16 @@ from services.config_io import (
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
 from services.web_branding import (
-    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON,
+    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION,
 )
+from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
+from services.web_daily_design import DailyDesignMixin
+from services.web_daily_design_css import DATASHIP_CSS
+from services.web_closing_design import ClosingDesignMixin
+from services.web_admin_session import AdminSessionMixin
 from ui_theme import (
     DEFAULT_UI_LAYOUT,
     DEFAULT_UI_TEMPLATE,
@@ -140,6 +145,7 @@ from ui_theme import (
     UI_ZOOM_MIN,
     UI_ZOOM_STEP,
     appearance_config,
+    appearance_theme,
     appearance_css_vars,
     appearance_html_classes,
     apply_ui_appearance,
@@ -169,7 +175,7 @@ from stravovaci_sestava import (
 
 
 APP_TITLE = BRAND_NAME
-APP_VERSION = BRAND_STAGE
+APP_VERSION = WEB_VERSION
 NATIVE_WINDOW_SIZE = (1280, 860)
 SCHEDULER_HELP_TEXT = (
     "Úlohu přiřaďte k funkci: Denní stav (--poctyemailem, "
@@ -415,15 +421,15 @@ def shutdown_when_last_client_closes(current_client: Any) -> None:
         app.shutdown()
 
 
-class NiceGuiApp:
-    """Stav a obslužné funkce lokálního technického UI."""
+class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessionMixin):
+    """Stav a obslužné funkce zákaznické aplikace."""
 
     def __init__(self, config_path: Path) -> None:
         self.config_path = config_path.resolve()
         self.raw = load_ui_config(self.config_path)
         self.connection_ok = False
-        self.connection_caption = "BEZ SPOJENÍ"
-        self.connection_name = "Databáze není připojena"
+        self.connection_caption = "Nepřipojeno"
+        self.connection_name = "Jídelna zatím není připojena"
         self.connection_details = "Kliknutím otevřete TEST připojení"
         self.categories: list[tuple[str, str]] = []
         self.all_categories = all_client_categories(self.raw)
@@ -522,12 +528,14 @@ class NiceGuiApp:
             lambda: shutdown_when_last_client_closes(current_client)
         )
         ui.add_css(UI_CSS)
+        ui.add_css(DATASHIP_CSS)
         self._dark_mode = ui.dark_mode(False)
         appearance = peek_ui_appearance(self.raw)
         apply_ui_appearance(appearance, dark_mode=self._dark_mode)
         self.layout = layout_tokens(appearance)
+        self._install_admin_session()
 
-        with ui.column().classes("app-page gap-0 px-3 py-2"):
+        with ui.column().classes("app-page dataship-ui gap-0 px-3 py-2"):
             self._build_topbar()
             self.status_label = ui.label("").classes(
                 "status-strip w-full px-2 py-1 mt-1"
@@ -538,10 +546,35 @@ class NiceGuiApp:
             self._build_workspace()
             with ui.row().classes("w-full justify-end pt-1"):
                 ui.label(BRAND_FOOTER).classes("app-footer")
+        self._build_database_setup_dialog()
+        current_client.on_connect(self._schedule_first_run)
 
     def _build_topbar(self) -> None:
         """Kompaktní hlavička: DataShip | provozovna | stav DB | období | Administrace."""
         with ui.element("div").classes("app-topbar no-wrap"):
+            self._build_header_identity()
+            self._build_navigation()
+            self.lock_admin_button = (
+                ui.button(icon="lock_open", on_click=self.lock_admin)
+                .props('outline dense no-caps aria-label="Uzamknout nastavení"')
+                .classes("shrink-0")
+            )
+            self.lock_admin_button.tooltip("Uzamknout nastavení")
+            self.admin_button = (
+                ui.button("Nastavení", icon="settings", on_click=self.open_admin_dialog)
+                .props("outline dense no-caps")
+                .classes("shrink-0")
+            )
+            self.lock_admin_button.set_visibility(False)
+            ui.button(icon="contrast", on_click=self.toggle_color_mode).props(
+                'flat round aria-label="Přepnout světlý a tmavý režim"'
+            ).classes("ds-theme-toggle")
+            self.brand_home.on("keydown.enter", self.go_home)
+            self.brand_home.on("keydown.space", self.go_home)
+            self._build_admin_dialog()
+
+    def _build_header_identity(self) -> None:
+        with ui.column().classes("ds-identity gap-1 min-w-0"):
             with ui.row().classes(
                 "brand-mark items-center no-wrap shrink-0 cursor-pointer"
             ).on("click", self.go_home).props(
@@ -549,7 +582,6 @@ class NiceGuiApp:
             ) as self.brand_home:
                 ui.icon(BRAND_ICON, size="1.25rem")
                 ui.label(APP_TITLE).classes("app-title")
-                ui.label(APP_VERSION).classes("ui-help")
             with ui.row().classes(
                 "db-chip items-center gap-2 no-wrap px-2 py-1 flex-grow min-w-0"
             ).on("click", self.open_database_settings) as self.connection_strip:
@@ -565,43 +597,38 @@ class NiceGuiApp:
                 self.connection_details_label = ui.label(
                     self.connection_details
                 ).classes("connection-details truncate")
-                self.connection_tooltip = ui.tooltip(self.connection_details)
-            self.lock_admin_button = (
-                ui.button(icon="lock_open", on_click=self.lock_admin)
-                .props("outline dense no-caps")
-                .classes("shrink-0")
-            )
-            self.lock_admin_button.tooltip("Uzamknout administraci")
-            self.admin_button = (
-                ui.button("Administrace", icon="lock", on_click=self.open_admin_dialog)
-                .props("outline dense no-caps")
-                .classes("shrink-0")
-            )
-            self.lock_admin_button.set_visibility(False)
-            self.brand_home.on("keydown.enter", self.go_home)
-            self.brand_home.on("keydown.space", self.go_home)
-            self._build_admin_dialog()
+                self.connection_details_label.set_visibility(False)
+                self.connection_tooltip = ui.tooltip("Připojení k Jídelně")
 
     def go_home(self) -> None:
         """Logo vždy vrací na hlavní obrazovku bez změny admin oprávnění."""
         self.tabs.value = "daily"
 
+    def toggle_color_mode(self) -> None:
+        current = self._appearance_from_widgets()["schema"]
+        if appearance_theme(self._appearance_from_widgets())["dark"]:
+            target = getattr(self, "_last_light_schema", "svetle")
+        else:
+            self._last_light_schema = current
+            target = "tmave"
+        self.ui_theme.value = target
+        self.save_ui_appearance()
+
     def _build_workspace(self) -> None:
         """Navigace a obsah. Umístění navigace řídí CSS podle zvolené šablony."""
         with ui.element("div").classes("app-shell workspace w-full mt-1"):
-            self._build_navigation()
             self._build_panels()
 
     def _build_navigation(self) -> None:
         with ui.tabs().props("inline-label dense no-caps").classes(
             "app-nav"
         ) as self.tabs:
-            self.daily_tab = ui.tab("daily", label="Denní stav", icon="today")
+            self.daily_tab = ui.tab("daily", label="Přehledy", icon="today")
+            self.mail_tasks_tab = ui.tab("mail_tasks", label="Odesílání", icon="schedule_send")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
-            self.mail_tasks_tab = ui.tab("mail_tasks", label="E-mailové úlohy", icon="schedule_send")
-            self.admin_tab = ui.tab("admin", label="Administrace", icon="settings")
+            self.admin_tab = ui.tab("admin", label="Nastavení", icon="settings")
         self.nav_tab_elements = {
             "daily": self.daily_tab, "closing": self.closing_tab,
             "special": self.special_tab, "bulk": self.bulk_tab,
@@ -624,30 +651,34 @@ class NiceGuiApp:
                 self._build_bulk_panel()
             with ui.tab_panel("mail_tasks"):
                 from services.web_mail_gui import build_mail_tasks_panel
-                build_mail_tasks_panel(self.config_path.parent, config_path=self.config_path)
+                self.mail_tasks_editor = build_mail_tasks_panel(
+                    self.config_path.parent, config_path=self.config_path,
+                    category_names=lambda: dict(self.categories),
+                    on_open_reports=self.go_home,
+                )
             with ui.tab_panel("admin"):
                 self._build_admin_panel()
 
     def _build_admin_dialog(self) -> None:
         with ui.dialog() as self.admin_dialog, ui.card().classes("w-[420px] gap-2"):
-            self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
-            self.admin_dialog_help = ui.label(
-                "Zadejte heslo pro databázi, maily a úlohy."
-            ).classes("ui-help")
-            self.admin_password_input = ui.input("Heslo", password=True).classes(
-                "w-full"
-            )
-            self.admin_password_input.on("keydown.enter", self._submit_admin_dialog)
-            self.admin_password_repeat = ui.input(
-                "Heslo znovu", password=True
-            ).classes("w-full")
-            self.admin_password_repeat.on("keydown.enter", self._submit_admin_dialog)
-            self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
-            with ui.row().classes("w-full justify-end gap-2 pt-2"):
-                ui.button("Zrušit", on_click=self.admin_dialog.close).props(
-                    "outline no-caps"
+            with ui.element("form").classes("w-full flex flex-col gap-2").on("submit.prevent", self._submit_admin_dialog):
+                self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
+                self.admin_dialog_help = ui.label(
+                    "Zadejte heslo pro databázi, maily a úlohy."
+                ).classes("ui-help")
+                self.admin_password_input = ui.input("Heslo", password=True).classes(
+                    "w-full"
                 )
-                ui.button("Potvrdit", on_click=self.confirm_admin).props("no-caps")
+                self.admin_password_repeat = ui.input(
+                    "Heslo znovu", password=True
+                ).classes("w-full")
+                self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
+                ui.label("Administrace se po 10 minutách nečinnosti automaticky uzamkne.").classes("ui-help")
+                with ui.row().classes("w-full justify-end gap-2 pt-2"):
+                    ui.button("Zrušit", on_click=self.admin_dialog.close).props(
+                        "type=button outline no-caps"
+                    )
+                    ui.button("Potvrdit").props("type=submit no-caps").style("color: var(--ds-on-primary) !important")
 
     def _admin_password_is_set(self) -> bool:
         try:
@@ -664,7 +695,7 @@ class NiceGuiApp:
         if first_setup:
             self.admin_dialog_title.set_text("Nastavit heslo administrátora")
             self.admin_dialog_help.set_text(
-                "Heslo se uloží do Windows Credential Manageru, nikoli do config.json."
+                "Zvolte si heslo pro nastavení DataShipu. V dalším kroku připojíme Jídelnu."
             )
             self.admin_password_repeat.set_visibility(True)
         else:
@@ -678,6 +709,8 @@ class NiceGuiApp:
 
     def _submit_admin_dialog(self, _event: Any = None) -> None:
         """Enter v poli hesla potvrdí dialog; při prvním nastavení skočí na kontrolu."""
+        if not self.admin_dialog.value:
+            return
         if not self._admin_password_is_set() and not str(
             self.admin_password_repeat.value or ""
         ).strip():
@@ -703,27 +736,34 @@ class NiceGuiApp:
         except CredentialStoreError as exc:
             self.admin_dialog_error.set_text(str(exc))
             return
-        self.admin_unlocked = True
+        self._start_admin_session()
+        self.admin_password_input.value = ""
+        self.admin_password_repeat.value = ""
         self._apply_admin_visibility()
         self.admin_dialog.close()
         self._open_admin_section(self._admin_target_section)
         self.set_status("")
+        if getattr(self, "_database_setup_pending", False):
+            self._open_database_setup()
 
     def lock_admin(self) -> None:
-        self.admin_unlocked = False
+        self._close_admin_session()
         self._apply_admin_visibility()
-        self.tabs.value = "daily"
+        if self.tabs.value == "admin":
+            self.tabs.value = "daily"
         self.set_status("")
 
     def _open_admin_section(self, section: str = "db") -> None:
         """Přepne na administraci a vybere v jejím sidebaru konkrétní sekci."""
+        if not self._require_admin():
+            return
         self.tabs.value = "admin"
         if hasattr(self, "admin_sections"):
             self.admin_sections.value = section
 
     def open_database_settings(self) -> None:
         """Otevře sekci Databáze; při zamčené administraci nejdřív heslo."""
-        if self.admin_unlocked:
+        if self._require_admin(silent=True):
             self._open_admin_section("db")
             return
         self._admin_target_section = "db"
@@ -741,6 +781,8 @@ class NiceGuiApp:
     def _apply_navigation_visibility(self) -> None:
         """Apply persisted top-tab visibility immediately; admin remains protected."""
         settings = visible_tabs(self.raw)
+        if hasattr(self, "daily_schedule_card"):
+            self.daily_schedule_card.set_visibility(settings["mail_tasks"])
         for key, tab in getattr(self, "nav_tab_elements", {}).items():
             tab.set_visibility(settings[key])
         if getattr(self, "tabs", None) is not None:
@@ -805,7 +847,7 @@ class NiceGuiApp:
             with w.toolbar():
                 self.test_button = (
                     ui.button(
-                        "TEST připojení", icon="cable", on_click=self.test_connection
+                        "TEST připojení", icon="cable", on_click=self._test_admin_connection
                     )
                     .props("no-caps unelevated")
                     .classes("shrink-0")
@@ -887,7 +929,7 @@ class NiceGuiApp:
         self._render_daily_selection()
 
     def save_category_settings(self) -> None:
-        if not self.admin_unlocked:
+        if not self._require_admin(silent=True):
             ui.notify("Nejprve odemkněte Administraci.", type="warning")
             return
         all_categories = str(self.category_mode.value) == "all"
@@ -920,36 +962,15 @@ class NiceGuiApp:
         self.raw = raw
         self.all_categories = all_categories
         self.allowed_categories = set(chosen)
-        self.selected_categories = set(chosen)
+        self.selected_categories = (self.selected_categories & self.allowed_categories
+                                    if getattr(self, "daily_profile_id", None) else set(chosen))
         self._render_daily_selection()
         self.category_settings_status.set_text(
             "Uloženo: všechny kategorie." if all_categories
             else f"Uloženo: {len(chosen)} vybraných kategorií."
         )
 
-    def _build_daily_panel(self) -> None:
-        with ui.column().classes("ui-block w-full"):
-            w.section_header(
-                "Denní stav",
-                "Sestava počtů strávníků k vybranému dni pro zvolené kategorie.",
-                "today",
-            )
-            self._build_daily_overview()
-            with w.card():
-                with w.toolbar():
-                    self._build_date_field()
-                    self._build_category_panel()
-                    self.meal_type_select = ui.select(
-                        {"__all__": "Všechny typy stravy"},
-                        value="__all__",
-                        label="Typ stravy",
-                    ).props("dense options-dense").classes("w-48")
-                    # Volba služby musí zůstat viditelná i při jediném typu.
-                with ui.expansion(
-                    "Pokročilé nastavení PDF", icon="tune"
-                ).props("dense dense-toggle").classes("w-full app-note"):
-                    self._build_pdf_settings_section()
-            self._build_pdf_panel()
+    _build_daily_panel = DailyDesignMixin._build_daily_workspace
 
     def _build_daily_overview(self) -> None:
         """Přehledové dlaždice; zobrazí je jen šablona s přehledem (CSS)."""
@@ -982,7 +1003,7 @@ class NiceGuiApp:
         # A new GUI session starts today; config.json may contain an old report date.
         selected = initial_report_date()
         with ui.input(
-            "Datum exportu", value=selected.strftime(CZECH_DATE_FORMAT)
+            "Datum přehledu", value=selected.strftime(CZECH_DATE_FORMAT)
         ).props(
             'dense mask="##.##.####" placeholder="DD.MM.RRRR" inputmode="numeric"'
         ).classes(
@@ -998,13 +1019,14 @@ class NiceGuiApp:
                     CZECH_DATE_LOCALE, ensure_ascii=False,
                 )
             with self.date_input.add_slot("append"):
-                ui.icon("event").classes("cursor-pointer").on(
-                    "click", self.date_menu.open
+                ui.button(icon="event", on_click=self.date_menu.open).props(
+                    'flat round aria-label="Vybrat datum přehledu"'
                 )
         self.date_input.on("change", self._on_date_changed)
 
     async def _on_date_changed(self) -> None:
         self.update_mail_subject()
+        self._queue_daily_summary()
         await self._reload_meal_types()
 
     async def _reload_meal_types(self) -> None:
@@ -1032,71 +1054,15 @@ class NiceGuiApp:
             return
         options = {"__all__": "Všechny typy stravy", **normalized}
         selected = str(self.meal_type_select.value or "__all__")
+        if selected != "__all__" and selected not in normalized:
+            options[selected] = f"{selected} (bez objednávek v tomto dni)"
         self.meal_type_select.options = options
-        self.meal_type_select.value = (
-            selected if selected in normalized else "__all__"
-        )
+        self.meal_type_select.value = selected
         self.meal_type_select.set_visibility(True)
         self.meal_type_select.update()
+        self._queue_daily_summary()
 
-    def _build_closing_panel(self) -> None:
-        closing = peek_closing_ui(self.raw)
-        with ui.column().classes("ui-block w-full"):
-            w.section_header(
-                "Uzávěrka",
-                "Volby pro DataShip.exe --zaverka_MMRRRR nebo --zaverka_am.",
-                "print",
-            )
-            with w.card():
-                with w.toolbar():
-                    w.field_label(
-                        "Generovat sestavy",
-                        "Zaškrtnuté sestavy se vytvoří při každé uzávěrce.",
-                    )
-                    selected = set(closing["sestavy"])
-                    self.closing_arch = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_ARCH],
-                        value=SESTAVA_ARCH in selected,
-                    ).props("dense")
-                    self.closing_fksp = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_FKSP],
-                        value=SESTAVA_FKSP in selected,
-                    ).props("dense")
-                    self.closing_recap = ui.checkbox(
-                        REPORT_LABELS[SESTAVA_REKAPITULACE],
-                        value=SESTAVA_REKAPITULACE in selected,
-                    ).props("dense")
-                with w.toolbar():
-                    self.closing_output = self._output_path_field(
-                        "Složka pro uložení",
-                        str(closing["vystup"]),
-                        "Relativní cesta je vůči složce aplikace. {rok} a {mesic} "
-                        "se za vybranou složku doplní, aby se měsíce nepřepisovaly.",
-                        on_change=self.save_closing_settings,
-                    )
-                    self.closing_zip = ui.checkbox(
-                        "ZIP",
-                        value=bool(closing["zip"]),
-                    ).props("dense")
-                    self.closing_zip.tooltip("Zabalit sestavy do jednoho ZIP archivu.")
-                    self.closing_mail = ui.checkbox(
-                        "Odeslat e-mailem",
-                        value=bool(closing["odeslat_mail"]),
-                    ).props("dense")
-                    self.closing_mail.tooltip(
-                        "Příjemce nastavíte v Administraci → E-maily, funkce Uzávěrka."
-                    )
-                self.closing_status = ui.label(
-                    "Nastavení se ukládá automaticky."
-                ).classes("inline-status")
-        for element in (
-            self.closing_fksp,
-            self.closing_arch,
-            self.closing_recap,
-            self.closing_zip,
-            self.closing_mail,
-        ):
-            element.on("update:model-value", lambda: self.save_closing_settings())
+    _build_closing_panel = ClosingDesignMixin._build_closing_workspace
 
     def _selected_closing_reports(self) -> list[str]:
         selected: list[str] = []
@@ -1394,10 +1360,11 @@ class NiceGuiApp:
         total = len(self._allowed_category_order())
         selected = len(self.selected_categories)
         if not self.categories:
-            return "po TESTu připojení"
-        return f"vybráno {selected} / {total} povolených"
+            return "Po připojení"
+        return f"Vybráno kategorií: {selected}"
 
     def _render_daily_selection(self) -> None:
+        self._render_daily_preview_categories()
         if hasattr(self, "daily_expansion_label"):
             self.daily_expansion_label.set_text(self._daily_category_caption())
         if hasattr(self, "admin_category_count"):
@@ -1414,6 +1381,7 @@ class NiceGuiApp:
             options=self.categories,
             selected=self._allowed_category_order(),
         )
+        self._queue_daily_summary()
 
     def _render_z17_selection(self) -> None:
         self._update_z17_expansion_caption()
@@ -1454,7 +1422,7 @@ class NiceGuiApp:
             ui.notify("Nejprve proveďte TEST připojení nebo nastavte povolené kategorie.", type="warning")
             return
         self._open_item_picker_dialog(
-            title="Kategorie pro tuto sestavu",
+            title="Kategorie přehledu",
             options=options,
             selected=[code for code, _ in options if code in self.selected_categories],
             on_confirm=self._apply_daily_categories,
@@ -1463,6 +1431,7 @@ class NiceGuiApp:
     def _apply_daily_categories(self, codes: list[str]) -> None:
         self.selected_categories = set(codes) & self.allowed_categories
         self._render_daily_selection()
+        self._mark_daily_dirty()
 
     def open_allowed_category_dialog(self) -> None:
         """Globální omezení kategorií vyžaduje odemčeného správce."""
@@ -1480,6 +1449,8 @@ class NiceGuiApp:
         )
 
     def _apply_allowed_categories(self, codes: list[str]) -> None:
+        if not self._require_admin():
+            return
         known = {code for code, _ in self.categories}
         self.allowed_categories = set(codes) & known
         self._render_daily_selection()
@@ -1735,7 +1706,7 @@ class NiceGuiApp:
         ("categories", "Kategorie denního stavu", "checklist"),
         ("mail", "E-maily", "mail"),
         ("scheduler", "Plánovač", "schedule"),
-        ("mail_settings", "Nastavení odesílání", "outgoing_mail"),
+        ("mail_settings", "Služba a odesílání", "outgoing_mail"),
         ("navigation", "Hlavní nabídka", "view_list"),
         ("appearance", "Vzhled", "palette"),
         ("cli", "Bez GUI", "terminal"),
@@ -1743,9 +1714,9 @@ class NiceGuiApp:
 
     def _build_admin_panel(self) -> None:
         """Administrace se sidebarem; každá sekce se vejde bez dlouhého scrollování."""
-        with ui.row().classes("w-full items-stretch no-wrap gap-0"):
-            with ui.tabs().props("vertical dense no-caps inline-label").classes(
-                "side-nav admin-nav shrink-0"
+        with ui.column().classes("ds-admin-layout w-full gap-3"):
+            with ui.tabs().props("dense no-caps inline-label").classes(
+                "ds-admin-nav w-full"
             ) as self.admin_sections:
                 for name, label, icon in self.ADMIN_SECTIONS:
                     ui.tab(name, label=label, icon=icon)
@@ -1762,7 +1733,7 @@ class NiceGuiApp:
                     self._build_scheduler_panel()
                 with ui.tab_panel("mail_settings"):
                     from services.web_mail_settings_gui import build_web_settings_panel
-                    build_web_settings_panel(self.config_path.parent)
+                    build_web_settings_panel(self.config_path.parent, require_admin=self._require_admin, before_lock=self._admin_before_lock)
                 with ui.tab_panel("navigation"):
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
@@ -1775,12 +1746,12 @@ class NiceGuiApp:
         w.section_header(
             "Hlavní nabídka",
             "Zvolte záložky viditelné pro běžného uživatele. "
-            "Denní stav a přístup k Administraci jsou vždy dostupné.",
+            "Přehledy a přístup k Nastavení jsou vždy dostupné.",
             "view_list",
         )
         saved = visible_tabs(self.raw)
         with w.card():
-            ui.label("Denní stav – vždy zobrazen").classes("ui-help")
+            ui.label("Přehledy – vždy zobrazeny").classes("ui-help")
             self.navigation_switches = {
                 key: ui.checkbox(label, value=saved[key]).props("dense")
                 for key, label in EDITABLE_TABS.items()
@@ -1796,6 +1767,8 @@ class NiceGuiApp:
             self.navigation_status = ui.label("").classes("inline-status")
 
     def save_navigation_settings(self) -> None:
+        if not self._require_admin():
+            return
         raw = sanitize_config(self.raw)
         raw["ui_visible_tabs"] = {
             "daily": True,
@@ -1898,6 +1871,8 @@ class NiceGuiApp:
                     self.ui_zoom_value = ui.label(f"{appearance['zoom']} %").classes(
                         "app-label w-12 text-right shrink-0"
                     )
+            ui.button("Upravit vlastní barvy", icon="palette", on_click=self._use_custom_colors).props("outline no-caps")
+            self._build_custom_palette(appearance)
 
         with ui.expansion("Doladění hustoty a písma", icon="tune").props(
             "dense"
@@ -1927,29 +1902,36 @@ class NiceGuiApp:
                     appearance["hustota"],
                     "Výška vstupních polí a selectů.",
                 )
-                self.ui_heading_size = w.setting_select(
-                    "Nadpisy",
-                    UI_TEXT_SIZE_LABELS,
-                    appearance["nadpis"],
-                    "Velikost nadpisů sekcí.",
-                )
-                self.ui_text_size = w.setting_select(
-                    "Běžný text",
-                    UI_TEXT_SIZE_LABELS,
-                    appearance["text"],
-                    "Velikost hodnot, tlačítek a seznamů.",
-                )
-                self.ui_help_size = w.setting_select(
-                    "Popisy",
-                    UI_TEXT_SIZE_LABELS,
-                    appearance["popis"],
-                    "Velikost nápověd a stavových hlášek.",
-                )
-                self.ui_blocks = w.setting_switch(
-                    "Zvýraznit rámování",
-                    bool(appearance["zvyrazneni"]),
-                    "Orámuje sekce výrazněji a podbarví nadpisy.",
-                )
+            with w.form_grid(3):
+                with ui.column().classes("w-full gap-0"):
+                    self.ui_heading_size = w.setting_select(
+                        "Nadpisy", UI_TEXT_SIZE_LABELS, appearance["nadpis"],
+                        "Velikost nadpisů sekcí.",
+                    )
+                    self.ui_heading_bold = w.setting_switch(
+                        "Tučné nadpisy", appearance["tucne_nadpisy"],
+                    )
+                with ui.column().classes("w-full gap-0"):
+                    self.ui_text_size = w.setting_select(
+                        "Běžný text", UI_TEXT_SIZE_LABELS, appearance["text"],
+                        "Velikost hodnot, tlačítek a seznamů.",
+                    )
+                    self.ui_text_bold = w.setting_switch(
+                        "Tučný běžný text", appearance["tucny_text"],
+                    )
+                with ui.column().classes("w-full gap-0"):
+                    self.ui_help_size = w.setting_select(
+                        "Popisy", UI_TEXT_SIZE_LABELS, appearance["popis"],
+                        "Velikost popisků polí, nápověd a stavových hlášek.",
+                    )
+                    self.ui_help_bold = w.setting_switch(
+                        "Tučné popisy a nápověda", appearance["tucne_popisy"],
+                    )
+            self.ui_blocks = w.setting_switch(
+                "Zvýraznit rámování",
+                bool(appearance["zvyrazneni"]),
+                "Orámuje sekce výrazněji a podbarví nadpisy.",
+            )
             with ui.column().classes("w-full app-note p-2 gap-0"):
                 ui.label("Nadpis sekce").classes("app-heading")
                 ui.label("Běžný text, tlačítka a hodnoty ve formulářích.").classes(
@@ -1964,17 +1946,109 @@ class NiceGuiApp:
             self.ui_heading_size,
             self.ui_help_size,
             self.ui_text_size,
+            self.ui_heading_bold,
+            self.ui_text_bold,
+            self.ui_help_bold,
             self.ui_zoom,
             self.ui_spacing,
             self.ui_line,
             self.ui_density,
         ):
-            element.on("update:model-value", lambda: self.save_ui_appearance())
-        self.ui_blocks.on("update:model-value", lambda: self.save_ui_appearance())
+            element.on("update:model-value", lambda: self._save_admin_appearance())
+        self.ui_blocks.on("update:model-value", lambda: self._save_admin_appearance())
         self._highlight_layout_card(appearance["layout"])
+
+    def _build_custom_palette(self, appearance: dict[str, Any]) -> None:
+        from services.web_custom_palette import CUSTOM_COLOR_LABELS, normalize_palette
+
+        self.custom_palette = normalize_palette(appearance["vlastni_barvy"])
+        self._updating_palette = False
+        self.ui_palette_panel = ui.column().classes("ds-palette-editor w-full")
+        self.ui_palette_panel.bind_visibility_from(self.ui_theme, "value", backward=lambda value: value == "vlastni")
+        self.ui_custom_colors = {}
+        with self.ui_palette_panel:
+            ui.label("Vlastní barevné schéma").classes("app-heading")
+            ui.label("Klikněte na barevné kolečko. Změny se projeví ihned a uloží automaticky.").classes("ui-help")
+            with w.form_grid(3):
+                for key, label in CUSTOM_COLOR_LABELS.items():
+                    field = ui.color_input(label, value=self.custom_palette[key], preview=True,
+                        on_change=lambda event, name=key: self._save_palette_color(name, event.value)).props("outlined dense").classes("w-full")
+                    field.button.props(f'aria-label="Vybrat barvu: {label}"')
+                    field.picker.classes("ds-palette-picker")
+                    field.picker.q_color.props("format-model=hex")
+                    field.picker.q_color.props["dark"] = False
+                    self.ui_custom_colors[key] = field
+            self.custom_palette_preview = ui.column().classes("ds-palette-preview w-full")
+            with self.custom_palette_preview:
+                ui.label("Náhled barev").classes("app-label")
+                with ui.column().classes("ds-palette-sample w-full"):
+                    ui.label("Takto bude vypadat váš přehled.").classes("app-text")
+                    ui.label("Doplňkový text a vysvětlení.").classes("ui-help")
+                    ui.label("Ukázka tlačítka").classes("ds-palette-button")
+            self.custom_palette_contrast = ui.label().classes("ui-help").props('role="status" aria-live="polite"')
+            ui.button("Obnovit výchozí barvy", icon="restart_alt", on_click=self._reset_custom_colors).props("flat no-caps")
+        self._refresh_custom_preview()
+
+    def _use_custom_colors(self) -> None:
+        if not self._require_admin():
+            return
+        self.ui_theme.value = "vlastni"
+        self.save_ui_appearance()
+
+    def _save_palette_color(self, key: str, value: object) -> None:
+        if not self._require_admin():
+            return
+        from services.web_custom_palette import hex_color
+
+        if self._updating_palette:
+            return
+        field = self.ui_custom_colors[key]
+        color = hex_color(value)
+        if color is None:
+            field.props["error"] = True
+            field.props["error-message"] = "Vyberte barvu kolečkem nebo zadejte kód #RRGGBB."
+            field.update()
+            return
+        field.props(remove="error error-message")
+        field.update()
+        self.custom_palette[key] = color
+        self._refresh_custom_preview()
+        self.save_ui_appearance()
+
+    def _refresh_custom_preview(self) -> None:
+        from services.web_custom_palette import palette_tokens, contrast
+
+        palette = self.custom_palette
+        self.custom_palette_preview.style("; ".join(f"{key}: {value}" for key, value in palette_tokens(palette).items()))
+        readable = min(contrast(palette[key], palette[background])
+                       for key in ("text", "muted") for background in ("page", "surface")) >= 4.5
+        readable = readable and min(contrast(palette["primary"], palette[background])
+                                    for background in ("surface", "soft")) >= 3
+        self.custom_palette_contrast.set_text(
+            "Text má dobrý kontrast vůči pozadí." if readable else
+            "Text a pozadí jsou si příliš podobné. Pro lepší čitelnost upravte jejich barvy."
+        )
+
+    def _reset_custom_colors(self) -> None:
+        if not self._require_admin():
+            return
+        from services.web_custom_palette import DEFAULT_CUSTOM_PALETTE
+
+        self._updating_palette = True
+        try:
+            self.custom_palette = dict(DEFAULT_CUSTOM_PALETTE)
+            for key, field in self.ui_custom_colors.items():
+                field.props(remove="error error-message")
+                field.value = self.custom_palette[key]
+        finally:
+            self._updating_palette = False
+        self._refresh_custom_preview()
+        self.save_ui_appearance()
 
     def _pick_layout(self, name: str) -> None:
         """Výběr šablony z dlaždice; hustotu předvolí podle šablony."""
+        if not self._require_admin():
+            return
         if name not in UI_LAYOUTS:
             return
         self.ui_layout.value = name
@@ -1994,6 +2068,8 @@ class NiceGuiApp:
                 card.classes(remove="template-card-active")
 
     def _apply_style_template(self) -> None:
+        if not self._require_admin():
+            return
         name = peek_ui_template(
             {"ui_sablona": getattr(self, "ui_template", None) and self.ui_template.value}
         )
@@ -2020,7 +2096,11 @@ class NiceGuiApp:
                 and self.ui_heading_size.value,
                 "ui_velikost_popisu": getattr(self, "ui_help_size", None)
                 and self.ui_help_size.value,
+                "ui_tucne_nadpisy": self.ui_heading_bold.value,
+                "ui_tucny_text": self.ui_text_bold.value,
+                "ui_tucne_popisy": self.ui_help_bold.value,
                 "ui_barevne_schema": self.ui_theme.value,
+                "ui_vlastni_barvy": getattr(self, "custom_palette", self.raw.get("ui_vlastni_barvy")),
                 "ui_zvyrazneni_bloku": bool(self.ui_blocks.value),
                 "ui_zoom": None if zoom_widget is None else zoom_widget.value,
                 "ui_sablona": getattr(self, "ui_template", None)
@@ -2032,6 +2112,10 @@ class NiceGuiApp:
                 and self.ui_density.value,
             }
         )
+
+    def _save_admin_appearance(self) -> None:
+        if self._require_admin():
+            self.save_ui_appearance()
 
     def save_ui_appearance(self) -> None:
         appearance = self._appearance_from_widgets()
@@ -2060,15 +2144,8 @@ class NiceGuiApp:
         if hasattr(self, "ui_zoom_value"):
             self.ui_zoom_value.set_text(f"{appearance['zoom']} %")
         if hasattr(self, "ui_text_status"):
-            layout = UI_LAYOUT_LABELS[appearance["layout"]]
             theme = UI_THEME_LABELS[appearance["schema"]]
-            blocks = "zapnuto" if appearance["zvyrazneni"] else "vypnuto"
-            self.ui_text_status.set_text(
-                f"Uloženo do config.json: šablona {layout}, "
-                f"{theme.casefold()} schéma, rozestupy "
-                f"{UI_SPACING_LABELS[appearance['rozestupy']].casefold()}, "
-                f"rámování {blocks}, přiblížení {appearance['zoom']} %."
-            )
+            self.ui_text_status.set_text(f"Vzhled uložen. Barevné schéma: {theme}.")
 
     def _build_scheduler_panel(self) -> None:
         w.section_header(
@@ -2159,6 +2236,8 @@ class NiceGuiApp:
                     ).props("flat round dense color=negative")
 
     def add_planned_job(self) -> None:
+        if not self._require_admin():
+            return
         schedule_type = str(self.job_schedule_type.value or "daily")
         payload: dict[str, Any] = {
             "name": str(self.job_name_input.value or "").strip(),
@@ -2186,12 +2265,16 @@ class NiceGuiApp:
         self.scheduler_status.set_text(f"Přidána úloha '{job.name}'. Nezapomeňte uložit.")
 
     def delete_planned_job(self, index: int) -> None:
+        if not self._require_admin():
+            return
         if 0 <= index < len(self.planned_jobs):
             removed = self.planned_jobs.pop(index)
             self.render_planned_jobs()
             self.scheduler_status.set_text(f"Odebrána úloha '{removed.name}'. Uložte změny.")
 
     def save_planned_jobs(self) -> None:
+        if not self._require_admin():
+            return
         try:
             save_jobs(self.scheduler_path, self.planned_jobs)
         except OSError as exc:
@@ -2280,16 +2363,17 @@ class NiceGuiApp:
         """Sticky lišta hlavních akcí denního stavu."""
         with w.action_bar():
             with ui.column().classes("gap-0 min-w-0 flex-grow"):
-                self.pdf_status = ui.label("PDF zatím nebylo vytvořeno.").classes(
+                self.pdf_status = ui.label("").classes(
                     "inline-status truncate"
                 )
                 with ui.row().classes("items-center gap-2 no-wrap min-w-0"):
-                    self.mail_status = ui.label("Mail zatím nebyl odeslán.").classes(
+                    self.mail_status = ui.label("").classes(
                         "inline-status shrink-0"
                     )
                     self.mail_subject_label = ui.label(
                         mail_subject(self._selected_date())
                     ).classes("inline-status truncate")
+                    self.mail_subject_label.set_visibility(False)
                     ui.tooltip(
                         "Příjemce denního stavu přiřadíte v Administraci → E-maily."
                     )
@@ -2303,8 +2387,8 @@ class NiceGuiApp:
                 on_click=self.generate_pdf,
             ).props("outline no-caps")
             self.send_button = ui.button(
-                "Vytvořit a odeslat", icon="send", on_click=self.send_mail
-            ).props("no-caps unelevated")
+                "Odeslat jednou…", icon="send", on_click=self.send_mail
+            ).props("outline no-caps")
             self.send_button.disable()
 
     def _build_mail_panel(self) -> None:
@@ -2411,6 +2495,8 @@ class NiceGuiApp:
         self.save_mail_assignment()
 
     def save_mail_assignment(self) -> None:
+        if not self._require_admin():
+            return
         try:
             self._flush_mail_editor()
             raw = sanitize_config(self.raw)
@@ -2445,14 +2531,14 @@ class NiceGuiApp:
         """Aktualizuje tlačítko stavu databáze v hlavičce."""
         self.connection_ok = connected
         if connected:
-            self.connection_caption = "DB OK"
+            self.connection_caption = "Připojeno"
             self.connection_name = name or "Název provozovny není nastaven"
             self.connection_details = details or "Databáze je připojená."
             self.connection_strip.classes(add="connection-ready")
             self.connection_icon.props("name=check_circle color=positive")
         else:
-            self.connection_caption = "BEZ SPOJENÍ"
-            self.connection_name = "Databáze není připojena"
+            self.connection_caption = "Nepřipojeno"
+            self.connection_name = "Jídelna zatím není připojena"
             self.connection_details = details or "Kliknutím otevřete TEST připojení"
             self.connection_strip.classes(remove="connection-ready")
             self.connection_icon.props("name=cloud_off color=negative")
@@ -2461,7 +2547,7 @@ class NiceGuiApp:
         self.connection_name_label.set_text(self.connection_name)
         self.connection_details_label.set_text(self.connection_details)
         if hasattr(self, "connection_tooltip"):
-            self.connection_tooltip.set_text(self.connection_details)
+            self.connection_tooltip.set_text("Připojení k Jídelně je v pořádku." if connected else "Připojení pomůže nastavit správce aplikace.")
             self.connection_tooltip.update()
         self._refresh_overview_tiles()
 
@@ -2486,7 +2572,8 @@ class NiceGuiApp:
         self._connection_password = None
         if hasattr(self, "meal_type_select"):
             self.meal_type_select.value = "__all__"
-            self.meal_type_select.set_visibility(False)
+            self.meal_type_select.set_visibility(True)
+        self._queue_daily_summary()
         if hasattr(self, "z17_generate_button"):
             self.z17_generate_button.disable()
         if hasattr(self, "bulk_send_button"):
@@ -2543,6 +2630,7 @@ class NiceGuiApp:
         self.date_input.value = selected.strftime(CZECH_DATE_FORMAT)
         self.date_menu.close()
         self.update_mail_subject()
+        self._queue_daily_summary()
         asyncio.create_task(self._reload_meal_types())
 
     def _collect_config(self) -> dict[str, Any]:
@@ -2627,7 +2715,12 @@ class NiceGuiApp:
             info.period,
         )
 
-    async def test_connection(self) -> None:
+    async def _test_admin_connection(self) -> bool:
+        if not self._require_admin():
+            return False
+        return await self.test_connection()
+
+    async def test_connection(self) -> bool:
         try:
             database = self._collect_database()
             password = str(self.password_input.value or "")
@@ -2636,8 +2729,9 @@ class NiceGuiApp:
             if not password:
                 raise ConfigError("Vyplňte heslo k databázi.")
         except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
+            self.db_status.set_text(str(exc))
             ui.notify(str(exc), type="negative", position="top")
-            return
+            return False
 
         self.test_button.disable()
         self.db_status.set_text("Testuji připojení…")
@@ -2647,14 +2741,15 @@ class NiceGuiApp:
                 self._test_database, database, password
             )
         except Exception as exc:
+            message = database_error_message(exc)
             self.set_connection_display(
                 connected=False,
-                details=f"Poslední test selhal: {exc}",
+                details=message,
             )
-            self.db_status.set_text(f"Připojení selhalo: {exc}")
+            self.db_status.set_text(message)
             self.db_status.update()
             self.set_status("Připojení k databázi se nepodařilo.")
-            ui.notify(str(exc), type="negative", position="top", timeout=8000)
+            ui.notify(message, type="negative", position="top", timeout=8000)
         else:
             self.raw["databaze"] = database
             write_config(self.config_path, self.raw)
@@ -2697,6 +2792,7 @@ class NiceGuiApp:
             )
         finally:
             self.test_button.enable()
+        return self.connection_ok
 
     def populate_categories(self, categories: Sequence[tuple[str, str]]) -> None:
         self.categories = list(categories)
@@ -2705,8 +2801,11 @@ class NiceGuiApp:
             code for code, _name in self.categories
             if self.all_categories or code in configured_set
         }
-        # A new DB TEST resets a one-off choice to all allowed categories.
-        self.selected_categories = set(self.allowed_categories)
+        # Preserve a saved profile while rechecking current DB/admin permissions.
+        profile = next((p for p in getattr(self, "daily_profiles", [])
+                        if p.id == getattr(self, "daily_profile_id", None)), None)
+        self.selected_categories = (set(profile.categories) & self.allowed_categories
+                                    if profile else set(self.allowed_categories))
         known = {code for code, _name in self.categories}
         saved_z17 = set(peek_z17_ui(self.raw)["povolene_kategorie"])
         if saved_z17:
@@ -2718,6 +2817,8 @@ class NiceGuiApp:
                 code for code in self.z17_selected_categories if code in known
             }
         self.render_categories()
+        if hasattr(self, "daily_profile_choices"):
+            self._render_daily_profile_choices()
         self.render_z17_categories()
         self._update_z17_expansion_caption()
 
@@ -2725,7 +2826,7 @@ class NiceGuiApp:
         self._render_daily_selection()
 
     def select_all(self) -> None:
-        self.selected_categories = {code for code, _name in self.categories}
+        self.selected_categories = {code for code, _name in self.categories if code in self.allowed_categories}
         self._render_daily_selection()
 
     def clear_all(self) -> None:
@@ -2755,14 +2856,14 @@ class NiceGuiApp:
                     "ui-help p-2"
                 )
             for address in self.mail_recipients:
-                with ui.row().classes("w-full items-center gap-2"):
-                    ui.icon("mail_outline", color="secondary")
-                    ui.label(address).classes("app-text")
+                with ui.row().classes("ds-recipient-chip items-center no-wrap"):
+                    ui.icon("check_circle").props('aria-hidden="true"')
+                    ui.label(address).classes("app-text min-w-0")
                     ui.space()
                     ui.button(
                         icon="delete_outline",
                         on_click=lambda _event=None, item=address: self.delete_recipient(item),
-                    ).props("flat round dense color=negative")
+                    ).props("flat round").props(f'aria-label="Odebrat příjemce {address}"')
 
     def add_recipient(self) -> None:
         try:
@@ -3216,3 +3317,4 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+

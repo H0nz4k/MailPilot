@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Sequence
@@ -197,6 +197,44 @@ DINER_LIST_QUERY = """
 """
 
 
+# Hromadná přihláška má menu ve variantě a skutečný počet porcí v dNN.
+# Nelze na ni použít COUNT(*) ani test menu 1–9 nad denním sloupcem.
+BULK_DAILY_QUERY = """
+        WITH jidla AS (
+            SELECT j.typstravy, BTRIM(t.oznaceni) AS menu,
+                   string_agg(NULLIF(BTRIM(j.nazev), ''), ', '
+                              ORDER BY m.caststravy, m.id) AS nazev
+            FROM public.jidelnicek AS j
+            JOIN public.menustravy AS m ON m.id = j.idmenustravy
+            JOIN public.typstrj AS t ON t.id = m.idtypstrj
+            WHERE j.datum = %s
+              AND LOWER(BTRIM(j.jazyk)) = LOWER(BTRIM(%s))
+              AND j.cislojidelnicku = %s
+              AND BTRIM(t.oznaceni) ~ '^[1-9]$'
+            GROUP BY j.typstravy, BTRIM(t.oznaceni)
+        )
+        SELECT CASE WHEN %s::boolean THEN NULLIF(BTRIM(s.jmeno), '') END,
+               BTRIM(k.oznaceni), NULLIF(BTRIM(k.nazev), ''),
+               BTRIM(p.typsluzby), BTRIM(p.varianta),
+               NULLIF(UPPER(BTRIM(k.norma)), ''), NULLIF(j.nazev, ''),
+               p.{day_column}::integer
+        FROM public.prihlasn AS p
+        JOIN public.stravnik AS s ON s.evidcislo = p.stravnik
+        JOIN public.kategor AS k
+          ON BTRIM(k.oznaceni) = COALESCE(NULLIF(BTRIM(p.kategorie), ''),
+                                        BTRIM(s.kategorie))
+        LEFT JOIN jidla AS j
+          ON LOWER(BTRIM(p.typsluzby)) = LOWER(BTRIM(j.typstravy))
+         AND BTRIM(p.varianta) = j.menu
+        WHERE p.rok = %s AND p.mesic = %s
+          AND BTRIM(k.oznaceni) = ANY(%s::varchar[])
+          AND COALESCE(s.deleted, false) = false
+          AND p.{day_column} > 0
+          AND (%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text)
+        ORDER BY p.id
+"""
+
+
 class ConfigError(ValueError):
     """Chyba uživatelské konfigurace."""
 
@@ -253,6 +291,11 @@ class DinerOrder:
     menu: int
     norm: str | None
     meal_name: str | None
+    portions: int = 1
+
+    @property
+    def application_label(self) -> str:
+        return f"Menu {self.menu}" + (f" × {self.portions}" if self.portions != 1 else "")
 
 
 @dataclass(frozen=True)
@@ -557,6 +600,61 @@ def load_config(
     )
 
 
+def _include_bulk_orders(
+    report: ReportData, bulk_rows: Sequence[Sequence[Any]], *, show_diner_list: bool
+) -> ReportData:
+    """Přičte skutečné porce do všech souhrnů, skupinu nevydává za jednu porci."""
+    menu_totals: dict[tuple[str, int], MenuSummary] = {}
+    norm_totals: dict[tuple[str, str | None, int], NormMenuSummary] = {}
+    categories = {row.code: row for row in report.categories}
+    diners = list(report.diners)
+
+    def add_menu(row: MenuSummary) -> None:
+        key = (row.meal_type.strip().casefold(), row.menu)
+        previous = menu_totals.get(key)
+        menu_totals[key] = row if previous is None else replace(
+            previous, portions=previous.portions + row.portions,
+            meal_name=previous.meal_name or row.meal_name,
+        )
+
+    def add_norm(row: NormMenuSummary) -> None:
+        key = (row.meal_type.strip().casefold(), row.norm, row.menu)
+        previous = norm_totals.get(key)
+        norm_totals[key] = row if previous is None else replace(
+            previous, portions=previous.portions + row.portions,
+        )
+
+    for row in report.menus:
+        add_menu(row)
+    for row in report.norms:
+        add_norm(row)
+    for name, code, category_name, meal_type, variant, norm, meal_name, portions in bulk_rows:
+        variant = str(variant or "").strip()
+        if len(variant) != 1 or variant not in "123456789":
+            raise ConfigError(
+                "Hromadná přihláška s kladným počtem porcí nemá platné menu "
+                "1–9 v poli varianta. Opravte přihlášku v JídelnaSQL."
+            )
+        order = DinerOrder(name, code, category_name, meal_type, int(variant),
+                           norm, meal_name, int(portions))
+        add_menu(MenuSummary(meal_type, order.menu, order.portions, meal_name))
+        add_norm(NormMenuSummary(meal_type, norm, order.menu, order.portions))
+        category = categories[code]
+        categories[code] = replace(
+            category, applications=category.applications + order.portions,
+        )
+        if show_diner_list:
+            diners.append(order)
+    return replace(
+        report,
+        menus=tuple(sorted(menu_totals.values(), key=lambda r: (r.meal_type, r.menu))),
+        categories=tuple(categories.values()),
+        norms=tuple(sorted(norm_totals.values(),
+                           key=lambda r: (r.meal_type, r.norm or "", r.menu))),
+        diners=tuple(diners),
+    )
+
+
 def fetch_report(config: AppConfig) -> ReportData:
     try:
         import psycopg
@@ -572,6 +670,7 @@ def fetch_report(config: AppConfig) -> ReportData:
     category_query = sql.SQL(CATEGORY_SUMMARY_QUERY).format(day_column=day_column)
     norm_query = sql.SQL(NORM_MENU_QUERY).format(day_column=day_column)
     diner_query = sql.SQL(DINER_LIST_QUERY).format(day_column=day_column)
+    bulk_query = sql.SQL(BULK_DAILY_QUERY).format(day_column=day_column)
 
     with psycopg.connect(**config.database) as connection:
         with connection.cursor() as cursor:
@@ -700,13 +799,25 @@ def fetch_report(config: AppConfig) -> ReportData:
                     for row in cursor.fetchall()
                 )
 
-            return ReportData(
+            report = ReportData(
                 menus=menus,
                 categories=categories,
                 norms=norms,
                 diners=diners,
                 subject_name=subject_name,
                 active_categories=active_categories,
+            )
+            cursor.execute(
+                bulk_query,
+                (
+                    config.report_date, config.language, config.menu_list_number,
+                    config.show_diner_list,
+                    config.report_date.year, config.report_date.month,
+                    list(active_categories), config.meal_type, config.meal_type,
+                ),
+            )
+            return _include_bulk_orders(
+                report, cursor.fetchall(), show_diner_list=config.show_diner_list,
             )
 
 
@@ -728,6 +839,10 @@ def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[s
             FROM public.prihlas AS p
             WHERE p.rok = %s
             UNION
+            SELECT BTRIM(p.typsluzby) AS typ
+            FROM public.prihlasn AS p
+            WHERE p.rok = %s
+            UNION
             SELECT BTRIM(v.typsluzby) AS typ
             FROM public.varnedny AS v
             WHERE v.rok = %s
@@ -744,6 +859,7 @@ def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[s
     with psycopg.connect(**database) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query, (
+                report_date.year,
                 report_date.year,
                 report_date.year,
                 year_begin, year_end,
@@ -887,7 +1003,7 @@ def render_table(
                 (
                     row.name or "[bez jména]",
                     row.category_name or row.category_code,
-                    f"Menu {row.menu}",
+                    row.application_label,
                     row.norm or "[bez normy]",
                     row.meal_name or "[název v jídelníčku nenalezen]",
                 )
@@ -1378,7 +1494,7 @@ def create_pdf(
                 (
                     row.name or "[bez jména]",
                     row.category_name or row.category_code,
-                    f"Menu {row.menu}",
+                    row.application_label,
                     row.norm or "[bez normy]",
                     row.meal_name or "[název v jídelníčku nenalezen]",
                 )
@@ -1507,3 +1623,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

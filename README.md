@@ -1,4 +1,8 @@
-# MailPilot v12.8
+# MailPilot v12.8 / DataShip 1.0.0-rc.4
+
+> **Build a první Release:** [EXE, balíček s NSSM a postup vydání](docs/RELEASE_WINDOWS.md). [Kontrola funkcí před nasazením](docs/RELEASE_TEST_CHECKLIST.md).
+
+> **DataShip – nové rozhraní a uložené přehledy:** [návod a spuštění](docs/DATASHIP_UI_PRO_MAX.md). Denní stav nově ukládá více výběrů kategorií a jednotlivé e-mailové úlohy si mohou zvolit vlastní přehled.
 
 > **Webová vývojová verze (NiceGUI, Windows):** postup stažení, sestavení a spuštění je v `docs/BUILD_WEB_WINDOWS.md`. Použij `bash scripts/build_web_windows.sh` v Git Bash. Níže popsaný `build_windows.bat` vytváří pouze původní Qt 12.8.
 
@@ -92,3 +96,4 @@ Generovani:
 
 - DB hesla nejsou v `config.json` (Credential Manager + machine-scope fallback)
 - API klice nejsou logovany ani ukladany v plaintextu do configu
+
