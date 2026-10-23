@@ -1,98 +1,69 @@
-# MailPilot Web – sestavení a spuštění na Windows (Git Bash)
+# DataShip Web / Worker: Windows build a NSSM služba
 
-Tento návod platí pro větev `feat/web-mail-scheduler` a nové **NiceGUI webové rozhraní**. Starý skript `build_windows.bat` sestavuje **Qt 12.8**, nikoliv tuto webovou verzi.
+Vývojová větev: `feat/web-mail-scheduler`. Původní Qt MailPilot na `master` je samostatná aplikace.
 
-## Předpoklady
-- Windows 10/11 x64
-- Git for Windows (Git Bash)
-- Python **3.12 x64** z python.org včetně `py` launcheru
+## Rychlé spuštění nejnovějšího zdrojového GUI
 
-## 1. Stažení nové verze (Git Bash)
+V **Git Bash na Windows**, v kořeni klonu projektu:
 
 ```bash
-git clone --branch feat/web-mail-scheduler https://github.com/H0nz4k/MailPilot.git
-cd MailPilot
-```
-
-Pokud repozitář již máš stažený:
-
-```bash
-cd /c/cesta/k/MailPilot
-git fetch origin
 git switch feat/web-mail-scheduler
-git pull --ff-only
-```
-
-## 2. Sestavení dvou Windows EXE
-
-```bash
-bash scripts/build_web_windows.sh
-```
-
-Skript vytvoří izolované `.venv-web`, nainstaluje závislosti, sestaví webové EXE a samostatné EXE pro plánovač. Není třeba spouštět PowerShell. Součástí výstupu je ukázkový `config.json`, pokud dosud žádný nemáš.
-
-Výstupy:
-- `dist-web/MailPilot-Web/MailPilot-Web.exe` – NiceGUI v prohlížeči
-- `dist-web/MailPilot-Web/MailPilot-Web-Worker.exe` – plánovač pro NSSM
-- `dist-web/MailPilot-Web/START_WEB.cmd` – spouštěč dvojklikem
-- `dist-web/MailPilot-Web/config.json` – lokální nastavení, doplň skutečnou databázi
-
-**Před opakovaným buildem si ulož existující konfiguraci bokem.** Skript existující `config.json` v sestavené složce nepřepisuje, ale nepřebírá ji automaticky ze staré Qt instalace.
-
-## 3. Otevření webové aplikace
-
-```bash
-./dist-web/MailPilot-Web/MailPilot-Web.exe --browser
-```
-
-Alternativa: dvojklik na `dist-web\\MailPilot-Web\\START_WEB.cmd`. Otevře se lokální webová aplikace ve výchozím prohlížeči, proces EXE musí zůstat spuštěný.
-
-Po otevření zkontroluj databázové připojení přes TEST a záložky **E-mailové úlohy** a **Nastavení odesílání**. Typ služby pro tabulku `public.varnedny` je standardně **Oběd**.
-
-## Rychlé vyzkoušení změn GUI BEZ buildu
-
-Zavři předchozí okno programu. V Git Bash v kořeni repozitáře:
-
-```bash
 git pull --ff-only
 bash scripts/run_web_dev_windows.sh
 ```
 
-Spustí se aktuální `stravovaci_nicegui.py` z GitHubem aktualizovaných zdrojů, s Pythonem z `.venv-web` a se stejným `dist-web/MailPilot-Web/config.json` jako ve vytvořeném EXE. Skript neinstaluje ani nespouští NSSM službu. Okno Git Bash ponech otevřené, dokud testuješ; ukončíš jej klávesami Ctrl+C. Po změně Python kódu postup zopakuj. Při změně samotných závislostí může být potřeba znovu spustit build.
+Tento postup spouští jen uživatelské GUI z Python zdrojů a **nespouští automaticky NSSM ani Worker**. Při používání existujícího `config.json` skript preferuje `dist-web/DataShip/config.json`, případně starší `dist-web/MailPilot-Web/config.json`. Pozor na testovací data: neklikej na skutečné odesílání bez ověření příjemců.
 
-Až chceš znovu vyrobit samostatné EXE pro zákazníka, spusť:
+## Kompletní Windows EXE
 
 ```bash
 bash scripts/build_web_windows.sh
 ```
 
-Po buildu otevři `dist-web/MailPilot-Web/START_WEB.cmd`. Současné sestavené EXE **se aktualizací Gitu samo nezmění**.
+Výstupy v `dist-web/DataShip/`:
 
-## Aktualizace GUI po změnách (21. 10. 2026)
+- `DataShip.exe` – webová aplikace a její administrační GUI
+- `DataShip-Worker.exe` – samostatný plánovač pro Windows službu
+- `START_WEB.cmd` – spustí GUI v prohlížeči
+- `START_WORKER_MANUAL.cmd` – **spustí Worker doopravdy**, nepouštěj bez kontroly e-mailových úloh
+- `config.json`, `web_mail_settings.json`, `web_mail_tasks.json`, `.env` – lokální provozní nastavení
 
-Nové vývojové verze:
-- **Denní stav**: pole **Datum exportu** se při každém otevření GUI předvyplní dnešním datem z počítače (nikoli zastaralým datem z `config.json`).
-- **Český kalendář**: názvy dnů a měsíců jsou česky, týden začíná pondělím.
-- **Horní nabídka**: výchozí položky Denní stav, Uzávěrka, E-mailové úlohy a Administrace; Speciál a Hromadná zpráva jsou skryté.
-- **Administrace → Hlavní nabídka**: správce může zaškrtávat Uzávěrku, Speciál, Hromadnou zprávu a E-mailové úlohy, změny se uloží do `config.json`.
-- **Administrace → Nastavení odesílání**: původně samostatná záložka je přesunutá do administrace.
+Build přenáší existující provozní nastavení z předchozího adresáře `dist-web/MailPilot-Web` do `dist-web/DataShip`, pokud nejsou již u DataShip. Starší instalaci automaticky nemaže.
 
-Pro získání těchto změn v již sestavené instalaci spusť v Git Bash v kořeni zdrojového repozitáře:
+## NSSM – ověření stavu a oprava
+
+1. V DataShip otevři **Administrace → Nastavení odesílání → Windows služba NSSM**.
+2. Vyplň celou Windows cestu k `nssm.exe` (například `C:\\Tools\\nssm.exe`) a název služby (obvykle `DataShipScheduler`). Pokud je NSSM v PATH, pole cesty může být prázdné.
+3. Klikni nejdřív na **Stav**. Výstup nebo přesná chyba nyní zůstává vypsaná v panelu.
+4. **Instalovat / Spustit / Zastavit / Restart** vyžadují spustit samotný program (případně Git Bash při zdrojovém spuštění) **jako správce Windows**. Otevřený prohlížeč sám o sobě administrátorská oprávnění nezajistí.
+5. Instalace NSSM pouze registruje službu, **nespouští** ji. `Spustit` může okamžitě odesílat splatné úlohy. Nejdřív zkontroluj recipienty, nastavení Resend/SMTP a e-mailové úlohy.
+
+**Pozor na staré služby**: při přejmenování MailPilot → DataShip mohou v systému zůstat služby s původními jmény nebo cestami. **Neinstaluj dvě instance Workeru pro stejnou databázi/config**. Stará služba se automaticky nepřejmenuje ani nepřepíše. Pro bezpečný přechod nejprve zjisti její jméno, program a stav, teprve pak rozhodni, zda ji zastavit.
+
+### Když hlásí chybu při startu
+
+- V instalační složce hledej `logy/dataship_nssm_stderr.log` – chyby ještě před spuštěním Python loggeru.
+- V `logy/web_mail_worker.log` jsou provozní zprávy Workeru, pokud už nastartoval.
+- V režimu bez buildu se nyní používá absolutní cesta k `web_mail_worker_main.py` a pracovní složka zdrojového projektu, takže nehrozí původní `ModuleNotFoundError: services` pouze kvůli AppDirectory.
+- V zabaleném režimu NSSM spouští `DataShip-Worker.exe` vedle `DataShip.exe`.
+- U starší už nainstalované služby **změna Python kódu automaticky nepřepíše nastavení NSSM**. Ověř, na jakou cestu skutečně ukazuje, například kliknutím na Stav a externí diagnostikou.
+
+### Read-only diagnostika ve Windows Git Bash
+
+Pokud máš `nssm.exe` na PATH:
 
 ```bash
-git fetch origin
-git switch feat/web-mail-scheduler
-git pull --ff-only
-bash scripts/build_web_windows.sh
+nssm status DataShipScheduler
+nssm get DataShipScheduler Application
+nssm get DataShipScheduler AppDirectory
 ```
 
-Poté spusť nové `dist-web/MailPilot-Web/START_WEB.cmd`. Build zachovává `config.json` z tohoto výstupního adresáře, ale při kopírování na jiný počítač přenes také jeho provozní nastavení a znovu zkontroluj přístupové údaje. Worker a NSSM neměň během kontroly vzhledu.
+Pokud není v PATH, nahraď `nssm` úplnou cestou ke svému `nssm.exe`. Služba může mít jméno jiné než `DataShipScheduler`, zkontroluj pole **Název služby** v administraci. Tyto tři příkazy nic neinstalují, nemažou ani neodesílají.
 
-## 4. Windows služba NSSM (až po otestování GUI)
-V Nastavení odesílání vyplň cestu k `nssm.exe`. Po kliknutí na **Instalovat** se služba nastaví na samostatný `MailPilot-Web-Worker.exe`, nikoliv na webové GUI. Instalace a spuštění vyžaduje administrátorská práva. Nezapínej službu dřív, než ověříš cílové e-mailové adresy a nastavení odesílání; může odeslat skutečné zprávy.
+## Známé provozní podmínky
 
-## Omezení vývojové verze
-- Datum `následující varný den` se čte z `public.varnedny` dle roku, měsíce, typu služby a `d01`…`d31`; `A` je varný, `N` nevarný. Víkendy a svátky se nefiltrují.
-- Chybějící data znamenají chybu, nikoliv odhad data sestavy.
-- `meal_summary` a spolehlivé opakování neúspěšných odeslání ještě nejsou dokončené.
-- Testy Windows EXE, skutečné DB, NSSM a odeslání e-mailu je nutné provést na cílovém počítači; build samotný není potvrzením funkčnosti v produkci.
+- Práva a přístup k DB přihlašovacím údajům se mohou lišit mezi přihlášeným uživatelem a účtem Windows služby (typicky LocalSystem). GUI `DB OK` samo o sobě neprokazuje, že Worker má přístup ke credentialům.
+- `web_mail_settings.json` a `web_mail_tasks.json` se čtou za běhu ze stejné složky jako `config.json`. Worker kontroluje úlohy v intervalu.
+- SMTP heslo musí být dostupné v prostředí **konkrétní služby** pod klíčem `MAILPILOT_SMTP_PASSWORD` (historické interní pojmenování).
+- `mail_summary` není zatím plně propojen se sestavou. Odeslání selhané úlohy ani čekání na další retry není zaručeno bez dalšího otestování.
+- Úspěšný GitHub Actions Windows build **není** důkazem úspěšného startu NSSM na cílovém stroji.
