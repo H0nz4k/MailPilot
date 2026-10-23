@@ -165,7 +165,7 @@ class NiceGuiHelperTests(unittest.TestCase):
         self.assertIn("Nepřipojeno", init_source)
         self.assertIn("open_database_settings", inspect.getsource(gui.NiceGuiApp))
         admin_source = inspect.getsource(gui.NiceGuiApp._build_admin_dialog)
-        self.assertIn("keydown.enter", admin_source)
+        self.assertIn("submit.prevent", admin_source)
         self.assertIn("_submit_admin_dialog", admin_source)
         self.assertNotIn("connection_strip.set_visibility", build_source)
         self.assertNotIn("Nejprve otestujte připojení k databázi", build_source)

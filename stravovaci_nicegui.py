@@ -121,6 +121,7 @@ from services.web_report_output import manual_pdf_path
 from services.web_daily_design import DailyDesignMixin
 from services.web_daily_design_css import DATASHIP_CSS
 from services.web_closing_design import ClosingDesignMixin
+from services.web_admin_session import AdminSessionMixin
 from ui_theme import (
     DEFAULT_UI_LAYOUT,
     DEFAULT_UI_TEMPLATE,
@@ -420,7 +421,7 @@ def shutdown_when_last_client_closes(current_client: Any) -> None:
         app.shutdown()
 
 
-class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
+class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessionMixin):
     """Stav a obslužné funkce zákaznické aplikace."""
 
     def __init__(self, config_path: Path) -> None:
@@ -532,6 +533,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         appearance = peek_ui_appearance(self.raw)
         apply_ui_appearance(appearance, dark_mode=self._dark_mode)
         self.layout = layout_tokens(appearance)
+        self._install_admin_session()
 
         with ui.column().classes("app-page dataship-ui gap-0 px-3 py-2"):
             self._build_topbar()
@@ -659,24 +661,24 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
 
     def _build_admin_dialog(self) -> None:
         with ui.dialog() as self.admin_dialog, ui.card().classes("w-[420px] gap-2"):
-            self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
-            self.admin_dialog_help = ui.label(
-                "Zadejte heslo pro databázi, maily a úlohy."
-            ).classes("ui-help")
-            self.admin_password_input = ui.input("Heslo", password=True).classes(
-                "w-full"
-            )
-            self.admin_password_input.on("keydown.enter", self._submit_admin_dialog)
-            self.admin_password_repeat = ui.input(
-                "Heslo znovu", password=True
-            ).classes("w-full")
-            self.admin_password_repeat.on("keydown.enter", self._submit_admin_dialog)
-            self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
-            with ui.row().classes("w-full justify-end gap-2 pt-2"):
-                ui.button("Zrušit", on_click=self.admin_dialog.close).props(
-                    "outline no-caps"
+            with ui.element("form").classes("w-full flex flex-col gap-2").on("submit.prevent", self._submit_admin_dialog):
+                self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
+                self.admin_dialog_help = ui.label(
+                    "Zadejte heslo pro databázi, maily a úlohy."
+                ).classes("ui-help")
+                self.admin_password_input = ui.input("Heslo", password=True).classes(
+                    "w-full"
                 )
-                ui.button("Potvrdit", on_click=self.confirm_admin).props("no-caps")
+                self.admin_password_repeat = ui.input(
+                    "Heslo znovu", password=True
+                ).classes("w-full")
+                self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
+                ui.label("Administrace se po 10 minutách nečinnosti automaticky uzamkne.").classes("ui-help")
+                with ui.row().classes("w-full justify-end gap-2 pt-2"):
+                    ui.button("Zrušit", on_click=self.admin_dialog.close).props(
+                        "type=button outline no-caps"
+                    )
+                    ui.button("Potvrdit").props("type=submit no-caps").style("color: var(--ds-on-primary) !important")
 
     def _admin_password_is_set(self) -> bool:
         try:
@@ -707,6 +709,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
 
     def _submit_admin_dialog(self, _event: Any = None) -> None:
         """Enter v poli hesla potvrdí dialog; při prvním nastavení skočí na kontrolu."""
+        if not self.admin_dialog.value:
+            return
         if not self._admin_password_is_set() and not str(
             self.admin_password_repeat.value or ""
         ).strip():
@@ -732,7 +736,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         except CredentialStoreError as exc:
             self.admin_dialog_error.set_text(str(exc))
             return
-        self.admin_unlocked = True
+        self._start_admin_session()
+        self.admin_password_input.value = ""
+        self.admin_password_repeat.value = ""
         self._apply_admin_visibility()
         self.admin_dialog.close()
         self._open_admin_section(self._admin_target_section)
@@ -741,20 +747,23 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
             self._open_database_setup()
 
     def lock_admin(self) -> None:
-        self.admin_unlocked = False
+        self._close_admin_session()
         self._apply_admin_visibility()
-        self.tabs.value = "daily"
+        if self.tabs.value == "admin":
+            self.tabs.value = "daily"
         self.set_status("")
 
     def _open_admin_section(self, section: str = "db") -> None:
         """Přepne na administraci a vybere v jejím sidebaru konkrétní sekci."""
+        if not self._require_admin():
+            return
         self.tabs.value = "admin"
         if hasattr(self, "admin_sections"):
             self.admin_sections.value = section
 
     def open_database_settings(self) -> None:
         """Otevře sekci Databáze; při zamčené administraci nejdřív heslo."""
-        if self.admin_unlocked:
+        if self._require_admin(silent=True):
             self._open_admin_section("db")
             return
         self._admin_target_section = "db"
@@ -920,7 +929,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         self._render_daily_selection()
 
     def save_category_settings(self) -> None:
-        if not self.admin_unlocked:
+        if not self._require_admin(silent=True):
             ui.notify("Nejprve odemkněte Administraci.", type="warning")
             return
         all_categories = str(self.category_mode.value) == "all"
@@ -1440,6 +1449,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         )
 
     def _apply_allowed_categories(self, codes: list[str]) -> None:
+        if not self._require_admin():
+            return
         known = {code for code, _ in self.categories}
         self.allowed_categories = set(codes) & known
         self._render_daily_selection()
@@ -1722,7 +1733,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
                     self._build_scheduler_panel()
                 with ui.tab_panel("mail_settings"):
                     from services.web_mail_settings_gui import build_web_settings_panel
-                    build_web_settings_panel(self.config_path.parent)
+                    build_web_settings_panel(self.config_path.parent, require_admin=self._require_admin, before_lock=self._admin_before_lock)
                 with ui.tab_panel("navigation"):
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
@@ -1756,6 +1767,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
             self.navigation_status = ui.label("").classes("inline-status")
 
     def save_navigation_settings(self) -> None:
+        if not self._require_admin():
+            return
         raw = sanitize_config(self.raw)
         raw["ui_visible_tabs"] = {
             "daily": True,
@@ -1941,8 +1954,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
             self.ui_line,
             self.ui_density,
         ):
-            element.on("update:model-value", lambda: self.save_ui_appearance())
-        self.ui_blocks.on("update:model-value", lambda: self.save_ui_appearance())
+            element.on("update:model-value", lambda: self._save_admin_appearance())
+        self.ui_blocks.on("update:model-value", lambda: self._save_admin_appearance())
         self._highlight_layout_card(appearance["layout"])
 
     def _build_custom_palette(self, appearance: dict[str, Any]) -> None:
@@ -1977,10 +1990,14 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         self._refresh_custom_preview()
 
     def _use_custom_colors(self) -> None:
+        if not self._require_admin():
+            return
         self.ui_theme.value = "vlastni"
         self.save_ui_appearance()
 
     def _save_palette_color(self, key: str, value: object) -> None:
+        if not self._require_admin():
+            return
         from services.web_custom_palette import hex_color
 
         if self._updating_palette:
@@ -2013,6 +2030,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         )
 
     def _reset_custom_colors(self) -> None:
+        if not self._require_admin():
+            return
         from services.web_custom_palette import DEFAULT_CUSTOM_PALETTE
 
         self._updating_palette = True
@@ -2028,6 +2047,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
 
     def _pick_layout(self, name: str) -> None:
         """Výběr šablony z dlaždice; hustotu předvolí podle šablony."""
+        if not self._require_admin():
+            return
         if name not in UI_LAYOUTS:
             return
         self.ui_layout.value = name
@@ -2047,6 +2068,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
                 card.classes(remove="template-card-active")
 
     def _apply_style_template(self) -> None:
+        if not self._require_admin():
+            return
         name = peek_ui_template(
             {"ui_sablona": getattr(self, "ui_template", None) and self.ui_template.value}
         )
@@ -2089,6 +2112,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
                 and self.ui_density.value,
             }
         )
+
+    def _save_admin_appearance(self) -> None:
+        if self._require_admin():
+            self.save_ui_appearance()
 
     def save_ui_appearance(self) -> None:
         appearance = self._appearance_from_widgets()
@@ -2209,6 +2236,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
                     ).props("flat round dense color=negative")
 
     def add_planned_job(self) -> None:
+        if not self._require_admin():
+            return
         schedule_type = str(self.job_schedule_type.value or "daily")
         payload: dict[str, Any] = {
             "name": str(self.job_name_input.value or "").strip(),
@@ -2236,12 +2265,16 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         self.scheduler_status.set_text(f"Přidána úloha '{job.name}'. Nezapomeňte uložit.")
 
     def delete_planned_job(self, index: int) -> None:
+        if not self._require_admin():
+            return
         if 0 <= index < len(self.planned_jobs):
             removed = self.planned_jobs.pop(index)
             self.render_planned_jobs()
             self.scheduler_status.set_text(f"Odebrána úloha '{removed.name}'. Uložte změny.")
 
     def save_planned_jobs(self) -> None:
+        if not self._require_admin():
+            return
         try:
             save_jobs(self.scheduler_path, self.planned_jobs)
         except OSError as exc:
@@ -2462,6 +2495,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin):
         self.save_mail_assignment()
 
     def save_mail_assignment(self) -> None:
+        if not self._require_admin():
+            return
         try:
             self._flush_mail_editor()
             raw = sanitize_config(self.raw)

@@ -63,7 +63,7 @@ def build_mail_tasks_panel(
             with ui.card().classes("ds-mail-task w-full"):
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label(task.name).classes("ds-task-title")
-                    ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá").classes("ds-task-badge")
+                    ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá", color=None).classes("ds-task-badge")
                 ui.label(f"Každý den v {task.send_time}").classes("ds-task-line")
                 ui.label(f"Příjemci: {', '.join(task.recipients)}").classes("ds-task-line")
                 date_label = f"Den přehledu: {DATE_MODES[task.date_mode]}"

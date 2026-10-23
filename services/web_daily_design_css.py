@@ -196,7 +196,8 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 .ds-mail-task { border: 1.5px solid var(--app-border); padding: 18px; border-radius: 8px; box-shadow: none; }
 .ds-mail-task .ds-task-title { font-size: var(--app-heading); font-weight: var(--app-weight-heading); }
 .ds-task-line { font-size: var(--app-text); overflow-wrap: anywhere; }
-.ds-task-badge { font-size: var(--app-help); color: var(--app-ink) !important; background: var(--app-primary-soft) !important; border: 1px solid var(--app-primary); padding: 6px 10px; }
+.dataship-ui .q-badge.ds-task-badge { font-size: var(--app-help); color: var(--ds-badge-ink) !important; background: var(--ds-badge-background) !important; border: 1px solid var(--app-primary); padding: 6px 10px; }
+.q-tooltip { color: #ffffff !important; background: #17243d !important; border: 1px solid #64748b; padding: 8px 12px; }
 .ds-task-actions { border-top: 1px solid var(--app-border); padding-top: 12px; width: 100%; }
 .ds-closing-card { width: 100%; }
 .ds-closing-period { max-width: 600px; gap: 16px; }
@@ -220,6 +221,9 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
     .ds-closing-options { grid-template-columns: minmax(0,1fr); }
     .ds-summary-table .q-table__middle { max-height: none; }
 }
+.ds-path-entry { gap: 8px; }
+.ds-path-entry > .q-field { flex: 1; width: auto; min-width: 0; }
+@media (max-width: 600px) { .ds-path-entry { flex-wrap: wrap; } .ds-path-entry > .q-field { flex-basis: 100%; } }
 @media (max-width: 1100px) {
     .ds-settings-grid { grid-template-columns: minmax(0,1fr); }
 }

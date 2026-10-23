@@ -31,6 +31,9 @@ def stop(process):
 
 def smoke_service(app: Path, tmp: Path) -> None:
     from services.web_mail_nssm import _run_nssm, require_service_rights
+    from services import web_mail_nssm as service_api
+    from services.web_mail_settings import DEFAULTS, save_settings, settings_path
+    from unittest.mock import patch
     require_service_rights('install')
     service_dir = tmp / 'service'
     service_dir.mkdir()
@@ -56,13 +59,44 @@ def smoke_service(app: Path, tmp: Path) -> None:
         if 'ERROR' in logfile.read_text(encoding='utf-8'):
             raise RuntimeError('Worker reported an error under NSSM.')
         assert _run_nssm(base + ['status', name]).strip() == 'SERVICE_RUNNING'
+        _run_nssm(base + ['stop', name])
+        old_worker = service_dir / 'old' / 'DataShip-Worker.exe'
+        old_worker.parent.mkdir()
+        shutil.copy2(app / 'DataShip-Worker.exe', old_worker)
+        _run_nssm(base + ['set', name, 'Application', str(old_worker)])
+        account = _run_nssm(base + ['get', name, 'ObjectName']).strip()
+        # Reproduce a moved/deleted NSSM executable in the Windows SCM.
+        sc = Path(os.environ['SystemRoot']) / 'System32/sc.exe'
+        _run_nssm([str(sc), 'config', name, 'binPath=', f'"{service_dir / "missing-nssm.exe"}"'])
+        try:
+            _run_nssm(base + ['start', name])
+        except RuntimeError as exc:
+            assert 'Opravit cesty služby' in str(exc)
+        else:
+            raise RuntimeError('The deliberately missing service executable unexpectedly started.')
+        save_settings(settings_path(service_dir), {**DEFAULTS, 'service_name': name, 'nssm_path': base[0]})
+        with patch.object(service_api.sys, 'frozen', True, create=True), \
+             patch.object(service_api.sys, 'executable', str(app / 'DataShip.exe')):
+            service_api.service_command(service_dir, 'repair')
+        assert _run_nssm(base + ['get', name, 'Application']).strip().strip('"') == str(app / 'DataShip-Worker.exe')
+        assert _run_nssm(base + ['get', name, 'ObjectName']).strip() == account
+        assert _run_nssm(base + ['get', name, 'Start']).strip() == 'SERVICE_DEMAND_START'
+        assert _run_nssm(base + ['status', name]).strip() == 'SERVICE_STOPPED'
+        logfile.unlink()
+        _run_nssm(base + ['start', name])
+        deadline = time.monotonic() + 90
+        while not logfile.exists() or 'scheduler started' not in logfile.read_text(encoding='utf-8'):
+            if time.monotonic() > deadline:
+                raise RuntimeError('Repaired NSSM service did not start in 90 seconds.')
+            time.sleep(0.5)
+        assert _run_nssm(base + ['status', name]).strip() == 'SERVICE_RUNNING'
     finally:
         if installed:
             try:
                 _run_nssm(base + ['stop', name])
             finally:
                 _run_nssm(base + ['remove', name, 'confirm'])
-    print('Actual isolated NSSM install/start/status/stop/remove verified with no email tasks.')
+    print('Actual isolated NSSM install/start/status/stop/repair/remove verified with no email tasks; moved executable repaired without recreating the service.')
 
 
 def main():

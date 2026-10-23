@@ -72,3 +72,55 @@ def test_install_requires_windows_elevation_but_status_does_not():
         with pytest.raises(PermissionError, match='správce Windows'):
             nssm.require_service_rights('install')
         nssm.require_service_rights('status')
+
+
+@pytest.mark.parametrize('output', [
+    'Systém nemůže nalézt uvedený soubor.',
+    'The system cannot find the file specified.',
+])
+def test_missing_service_executable_explains_path_repair_not_elevation(output):
+    message = nssm.service_error_message(output)
+    assert 'Opravit cesty služby' in message
+    assert 'Spusťte DataShip.exe jako správce' not in message
+
+
+@pytest.mark.parametrize('state, registered, accepted', [
+    ('SERVICE_STOPPED', 'DataShip-Worker.exe', True),
+    ('SERVICE_RUNNING', 'DataShip-Worker.exe', False),
+    ('SERVICE_STOPPED', 'OtherWorker.exe', False),
+])
+def test_repair_rebinds_both_executables_without_recreating_or_starting_service(tmp_path, state, registered, accepted):
+    app = tmp_path / 'Honzák nová složka'
+    app.mkdir()
+    gui = app / 'DataShip.exe'; gui.touch()
+    worker = app / 'DataShip-Worker.exe'; worker.touch()
+    binary = app / 'nssm/win64/nssm.exe'; binary.parent.mkdir(parents=True); binary.touch()
+    config = app / 'config.json'; config.write_text('{}')
+    values = {**settings.DEFAULTS, 'nssm_path': str(binary)}
+    def respond(command):
+        if command[1] == 'get':
+            return 'C:\\Old Downloads\\' + registered
+        if command[1] == 'status':
+            return state
+        return ''
+    with patch.object(nssm, 'load_settings', return_value=values), \
+         patch.object(nssm, 'require_service_rights'), \
+         patch.object(nssm.sys, 'frozen', True, create=True), \
+         patch.object(nssm.sys, 'executable', str(gui)), \
+         patch.object(nssm, '_run_nssm', side_effect=respond) as run:
+        if accepted:
+            assert 'zůstává zastavená' in nssm.service_command(app, 'repair')
+        else:
+            with pytest.raises(ValueError):
+                nssm.service_command(app, 'repair')
+    commands = [c.args[0] for c in run.call_args_list]
+    changes = [c for c in commands if c[1] in ('config', 'set')]
+    if not accepted:
+        assert not changes
+        return
+    assert changes[0][1:] == ['config', 'DataShipScheduler', 'binPath=', f'"{binary.resolve()}"']
+    assert [str(binary), 'set', 'DataShipScheduler', 'Application', str(worker)] in changes
+    assert [str(binary), 'set', 'DataShipScheduler', 'AppDirectory', str(app)] in changes
+    assert any(c[3] == 'AppParameters' and str(config) in c[4] for c in changes[1:])
+    assert not any(c[1] in ('start', 'stop', 'restart', 'install', 'remove') for c in commands)
+    assert not any('ObjectName' in c or 'Start' in c for c in changes)

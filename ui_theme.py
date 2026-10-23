@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from nicegui import ui
-from services.web_custom_palette import normalize_palette, palette_tokens, luminance
+from services.web_custom_palette import normalize_palette, palette_tokens, luminance, contrast
 
 # ---------------------------------------------------------------------------
 # Písmo: tři styly pro celou aplikaci
@@ -635,6 +635,9 @@ def appearance_css_vars(appearance: dict[str, Any]) -> dict[str, str]:
     variables.setdefault("--app-field-border", variables["--app-border"])
     variables.setdefault("--custom-on-primary", "#ffffff")
     variables.setdefault("--ds-on-primary", "#ffffff")
+    badge_background = variables["--app-primary-soft"]
+    variables["--ds-badge-background"] = badge_background
+    variables["--ds-badge-ink"] = max(("#000000", "#ffffff"), key=lambda color: contrast(color, badge_background))
     variables.update(
         {
             "--app-text": f"{UI_TEXT_SIZE_PX['text'][peeked['text']]}px",

@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from services.web_mail_settings import load_settings, settings_path
 from services.web_branding import WORKER_EXE_NAME
@@ -17,6 +17,15 @@ LOG = logging.getLogger(__name__)
 ADMIN_HELP = ('Spusťte DataShip.exe jako správce Windows: zavřete aplikaci, '
               'klikněte na DataShip.exe pravým tlačítkem a zvolte „Spustit jako správce“. '
               'Heslo do nastavení DataShipu tato oprávnění nenahrazuje.')
+
+
+def windows_admin_state() -> bool | None:
+    if os.name != 'nt':
+        return None
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return None
 
 
 def require_service_rights(action: str) -> None:
@@ -49,7 +58,7 @@ def service_error_message(output: str, *, code: int | None = None) -> str:
     if has(5) or has(740) or any(s in text for s in ('access is denied', 'administrator', 'elevation', 'přístup byl odepřen')):
         return 'Windows nepovolil změnu služby. ' + ADMIN_HELP
     if has(1073) or 'already exists' in text or 'služba již existuje' in text:
-        return 'Služba již existuje. Použijte „Spustit“ nebo „Restart“; další službu neinstalujte.'
+        return 'Služba již existuje. Další službu neinstalujte. Po přesunu aplikace klikněte na „Opravit cesty služby“, jinak použijte „Spustit službu“.'
     if has(1060) or 'does not exist' in text or 'not installed' in text or ('služba' in text and 'neexistuje' in text):
         return 'Služba zatím není nainstalovaná. Nejprve klikněte na „Instalovat službu“.'
     if has(1069) or 'logon failure' in text:
@@ -64,8 +73,10 @@ def service_error_message(output: str, *, code: int | None = None) -> str:
         return 'Windows službu ještě odstraňuje. Zavřete správu služeb a zkuste operaci znovu.'
     if has(193) or 'not a valid win32' in text:
         return 'Soubor nelze spustit. Použijte přibalený 64bitový nssm.exe a DataShip-Worker.exe.'
-    if has(2) or 'cannot find the file' in text or 'file not found' in text:
-        return 'Windows nenalezl potřebný soubor. Zkontrolujte cestu k NSSM a DataShip-Worker.exe.'
+    if has(2) or any(s in text for s in ('cannot find the file', 'file not found', 'nemůže nalézt uvedený soubor', 'nelze nalézt uvedený soubor')):
+        return 'Windows nenalezl soubor potřebný ke spuštění služby. Po přesunu DataShipu zůstala pravděpodobně stará cesta ve Windows. Zkontrolujte NSSM a DataShip-Worker.exe a klikněte na „Opravit cesty služby“.'
+    if 'služba nebyla spuštěna' in text:
+        return 'Služba je zastavená. Při chybě chybějícího souboru nejprve použijte „Opravit cesty služby“, potom „Spustit službu“.'
     if has(1053) or 'service_paused' in text or 'service_stopped' in text:
         return 'Worker se nespustil správně. Zkontrolujte logy/web_mail_worker.log, účet služby a přístup ke konfiguraci.'
     return 'Operaci služby se nepodařilo dokončit. Ověřte stav služby a logy ve složce logy. ' + ADMIN_HELP
@@ -81,13 +92,14 @@ def _run_nssm(command: list[str]) -> str:
         raise RuntimeError(service_error_message(str(exc), code=getattr(exc, 'winerror', None) or exc.errno)) from exc
     output = '\n'.join(filter(None, (decode_nssm_output(completed.stdout), decode_nssm_output(completed.stderr))))
     if completed.returncode:
-        LOG.warning('NSSM %s failed (exit=%s): %s', command[1], completed.returncode, output)
-        raise RuntimeError(service_error_message(output))
+        LOG.warning('%s %s failed (exit=%s): %s', Path(command[0]).name, command[1], completed.returncode, output)
+        code = completed.returncode if Path(command[0]).name.lower() == 'sc.exe' else None
+        raise RuntimeError(service_error_message(output, code=code))
     return output
 
 
 def service_command(config_directory: Path, action: str) -> str:
-    if action not in ('install', 'start', 'stop', 'restart', 'status'):
+    if action not in ('install', 'repair', 'start', 'stop', 'restart', 'status'):
         raise ValueError('Neznámá operace služby.')
     settings = load_settings(settings_path(config_directory))
     nssm = Path(settings['nssm_path'])
@@ -99,7 +111,7 @@ def service_command(config_directory: Path, action: str) -> str:
     require_service_rights(action)
     config = (Path(config_directory) / 'config.json').resolve()
     base = [str(nssm)]
-    if action == 'install':
+    if action in ('install', 'repair'):
         if not config.is_file():
             raise ValueError('Nejprve ověřte připojení k databázi a uložte nastavení aplikace.')
         if getattr(sys, 'frozen', False):
@@ -109,13 +121,31 @@ def service_command(config_directory: Path, action: str) -> str:
             command = [str(worker), '--config', str(config)]
         else:
             command = [sys.executable, '-m', 'services.web_mail_worker', '--config', str(config)]
-        commands = [
-            base + ['install', name, *command],
-            base + ['set', name, 'AppDirectory', str(config.parent)],
-            base + ['set', name, 'Start', 'SERVICE_AUTO_START'],
-            base + ['set', name, 'AppExit', 'Default', 'Restart'],
-            base + ['set', name, 'AppRestartDelay', '10000'],
-        ]
+        if action == 'install':
+            commands = [
+                base + ['install', name, *command],
+                base + ['set', name, 'AppDirectory', str(config.parent)],
+                base + ['set', name, 'Start', 'SERVICE_AUTO_START'],
+                base + ['set', name, 'AppExit', 'Default', 'Restart'],
+                base + ['set', name, 'AppRestartDelay', '10000'],
+            ]
+        else:
+            registered = _run_nssm(base + ['get', name, 'Application']).strip().strip('"')
+            if PureWindowsPath(registered).name.casefold() != Path(command[0]).name.casefold():
+                raise ValueError('Vybraná služba nepoužívá tento worker DataShipu. Zkontrolujte název služby; její nastavení nebylo změněno.')
+            if not getattr(sys, 'frozen', False):
+                parameters = _run_nssm(base + ['get', name, 'AppParameters'])
+                if '-m services.web_mail_worker' not in parameters:
+                    raise ValueError('Vybraná služba není plánovač DataShipu. Její nastavení nebylo změněno.')
+            if _run_nssm(base + ['status', name]).strip() != 'SERVICE_STOPPED':
+                raise ValueError('Před opravou cest službu zastavte a počkejte na stav „Služba je zastavená“.')
+            sc = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' / 'sc.exe'
+            commands = [
+                [str(sc), 'config', name, 'binPath=', f'"{nssm.resolve()}"'],
+                base + ['set', name, 'Application', command[0]],
+                base + ['set', name, 'AppParameters', subprocess.list2cmdline(command[1:])],
+                base + ['set', name, 'AppDirectory', str(config.parent)],
+            ]
     elif action == 'restart':
         commands = [base + ['restart', name]]
     else:
@@ -127,6 +157,8 @@ def service_command(config_directory: Path, action: str) -> str:
             output = _run_nssm(command)
             installed = installed or command[1] == 'install'
     except RuntimeError as exc:
+        if action == 'repair':
+            raise RuntimeError('Oprava cest služby není dokončená. ' + str(exc)) from exc
         if installed:
             raise RuntimeError('Služba byla vytvořena, ale její nastavení není dokončené. ' + str(exc)) from exc
         raise
@@ -136,5 +168,6 @@ def service_command(config_directory: Path, action: str) -> str:
                   'SERVICE_PAUSED': 'Služba je pozastavená. Zkontrolujte log workeru.'}
         return states.get(output.strip(), 'Stav služby se nepodařilo rozpoznat. Ověřte jej ve správě služeb Windows.')
     return {'install': 'Služba je nainstalovaná a připravená. Zatím neběží; po kontrole odesílání klikněte na „Spustit“.',
+            'repair': 'Cesty existující služby byly opraveny podle aktuální složky aplikace. Služba zůstává zastavená; klikněte na „Spustit službu“.',
             'start': 'Služba byla spuštěna.', 'stop': 'Služba byla zastavena.',
             'restart': 'Služba byla restartována.'}[action]
