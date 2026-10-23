@@ -26,24 +26,38 @@ def build_web_settings_panel(directory: Path) -> None:
         ui.label("Windows služba NSSM").classes("text-subtitle1")
         nssm = ui.input("Cesta k nssm.exe", value=values["nssm_path"]).classes("w-full")
         name = ui.input("Název služby", value=values["service_name"]).classes("w-full")
-        ui.label("Správa služby vyžaduje na Windows oprávnění správce.").classes("text-caption")
+        ui.label(
+            "Instalovat, Spustit, Zastavit a Restart vyžadují spuštění aplikace "
+            "jako správce Windows. Stav lze načíst bez zvýšených oprávnění."
+        ).classes("text-caption")
+        service_status = ui.label("Stav služby nebyl ověřen.").classes(
+            "text-caption whitespace-pre-wrap break-words w-full"
+        )
         async def control(action: str):
             try:
                 # Save current service paths before invoking NSSM.
                 current = load_settings(path)
                 current.update(nssm_path=nssm.value.strip(), service_name=name.value.strip())
                 save_settings(path, current)
+                service_status.set_text("NSSM: provádím " + action + "…")
                 result = await run.io_bound(service_command, directory, action)
+                service_status.set_text(result or "Operace dokončena.")
                 ui.notify(result or "Operace dokončena.", type="positive")
             except Exception as exc:
+                service_status.set_text(f"NSSM: {exc}")
                 ui.notify(f"NSSM: {exc}", type="negative")
-        with ui.row().classes("gap-2"):
+        with ui.row().classes("gap-2 flex-wrap"):
             for action, caption in (
                 ("install", "Instalovat"), ("start", "Spustit"),
                 ("stop", "Zastavit"), ("restart", "Restart"),
                 ("status", "Stav")
             ):
-                ui.button(caption, on_click=lambda op=action: control(op)).props("outline")
+                # NiceGUI passes a click event to one-arg callbacks. Capture
+                # action as a *second* default arg so it is never overwritten.
+                ui.button(
+                    caption,
+                    on_click=lambda _event=None, op=action: control(op),
+                ).props("outline")
 
     with ui.card().classes("w-full"):
         ui.label("Upozornění v dashboardu Jídelny").classes("text-subtitle1")
@@ -59,7 +73,7 @@ def build_web_settings_panel(directory: Path) -> None:
                 ui.notify("Nejdřív povolte upozornění.", type="warning")
                 return
             result = show_jidelnasql_mail_warning(
-                warning_settings(), message="TEST MailPilot: upozornění funguje."
+                warning_settings(), message="TEST DataShip: upozornění funguje."
             )
             ui.notify(result or "Testovací upozornění vloženo.", type="negative" if result else "positive")
             refresh_state()
