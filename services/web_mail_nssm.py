@@ -113,7 +113,20 @@ def service_command(config_directory: Path, action: str) -> str:
     base = [str(nssm),]
     if action == "status":
         output = _invoke(base + ["status", name])
-        return f"{name}: {output}"
+        details = [f"{name}: {output}"]
+        # Detect old services still pointing at MailPilot-Web, without
+        # changing any Windows configuration or exposing secrets.
+        for parameter, label in (
+            ("Application", "Spouští"),
+            ("AppDirectory", "Pracovní složka"),
+        ):
+            try:
+                value = _invoke(base + ["get", name, parameter])
+            except RuntimeError as exc:
+                details.append(f"{label}: nelze načíst ({exc})")
+            else:
+                details.append(f"{label}: {value}")
+        return "\n".join(details)
 
     if action == "install":
         config = folder / "config.json"
