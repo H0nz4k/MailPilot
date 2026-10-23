@@ -32,6 +32,7 @@ async def test_new_task_uses_report_calendar_and_copy_keeps_report(tmp_path):
             stored = load_tasks(task_file(tmp_path))
             assert stored[0].profile_id == profile.id
             assert stored[0].cooking_meal_type is None
+            await user.should_see('Kopírovat')
             user.find('Kopírovat').click()
             user.find('Uložit').click()
             stored = load_tasks(task_file(tmp_path))
