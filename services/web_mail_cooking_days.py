@@ -148,3 +148,16 @@ def any_cooking_day_lookup(database):
                     raise ValueError(f"Neplatný stav varného dne {day:%d.%m.%Y}.")
                 return "A" in statuses
             yield is_day
+
+
+def report_is_cooking_day(config_path: Path, task: MailTask, report_date: date) -> bool:
+    """Check the target report day, never the day the email is sent."""
+    if not getattr(task, "only_cooking_days", False) or task.date_mode == "next_cooking_day":
+        return True
+    config_path = Path(config_path)
+    meal_type = task_calendar_type(config_path, task)
+    config = load_config(config_path, date_override=report_date.strftime("%d.%m.%Y"))
+    lookup = any_cooking_day_lookup if meal_type is None else cooking_day_lookup
+    args = (config.database,) if meal_type is None else (config.database, meal_type)
+    with lookup(*args) as is_day:
+        return is_day(report_date)
