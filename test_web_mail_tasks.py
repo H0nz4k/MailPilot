@@ -78,6 +78,22 @@ def test_each_task_roundtrips_its_own_calendar():
     assert task().cooking_meal_type is None  # Legacy tasks keep the previous rule.
 
 
+def test_multiple_and_all_calendar_selection_roundtrip():
+    multiple = task(cooking_meal_type=[
+        "Výdej pro pracoviště 7", "Oběd-B", "Výdej pro pracoviště 7"
+    ])
+    assert multiple.cooking_meal_type == (
+        "Výdej pro pracoviště 7", "Oběd-B"
+    )
+    assert multiple.to_dict()["cooking_meal_type"] == [
+        "Výdej pro pracoviště 7", "Oběd-B"
+    ]
+    assert task(**multiple.to_dict()) == multiple
+    all_calendars = task(cooking_meal_type="*")
+    assert all_calendars.cooking_meal_type == "*"
+    assert task(**all_calendars.to_dict()) == all_calendars
+
+
 @pytest.mark.parametrize('value', ['', '   ', 1, True, [], {}])
 def test_calendar_must_be_a_real_name(value):
     with pytest.raises(ValueError, match='Kalendář'):
