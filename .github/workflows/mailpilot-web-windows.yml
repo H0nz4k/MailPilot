@@ -36,60 +36,26 @@ jobs:
         run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
       - name: Package clean portable and NSSM distributions
         run: .venv-web/Scripts/python.exe scripts/package_web_release.py --commit "$GITHUB_SHA"
-      - name: Upload distribution and test evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: DataShip-Windows-${{ github.sha }}
-          path: |
-            release-dist/
-            build/test-results/
-          if-no-files-found: error
-          retention-days: 30
-      - name: Upload diagnostics on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: DataShip-diagnostics-${{ github.sha }}
-          path: |
-            build/test-results/
-            build/web-gui/**/warn-*.txt
-            build/web-worker/**/warn-*.txt
-          if-no-files-found: ignore
-  draft-release:
-    needs: windows-web
-    if: github.ref == 'refs/heads/feat/dataship-design-integration' || startsWith(github.ref, 'refs/tags/dataship-v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: DataShip-Windows-${{ github.sha }}
-          path: build-artifacts
-      - name: Create draft prerelease once for this version
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+      - name: Publish verified Windows rc.8 directly to GitHub Releases
+        if: github.ref == 'refs/heads/feat/dataship-design-integration'
         run: |
           set -Eeuo pipefail
-          version="$(tr -d '\r\n' < VERSION)"
+          version="$(tr -d '\\r\\n' < VERSION)"
+          # Release only this explicitly planned candidate; other versions
+          # require an intentional change to the release workflow.
+          [[ "$version" == "1.0.0-rc.8" ]] || exit 0
           tag="dataship-v$version"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release $tag already exists; its files and commit will not be replaced. Download this run's artifact for the new build."
+            echo "Release $tag already exists; refusing to overwrite it."
             exit 0
           fi
-          if gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha' > /tmp/dataship-tag-sha 2>/dev/null; then
-            [[ "$(cat /tmp/dataship-tag-sha)" == "$GITHUB_SHA" ]] || { echo 'Tag already points to a different commit; refusing to replace it.' >&2; exit 1; }
-          else
-            gh api --method POST "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' > "$RUNNER_TEMP/tag-sha" 2>/dev/null; then
+            [[ "$(cat "$RUNNER_TEMP/tag-sha")" == "$GITHUB_SHA" ]] || {
+              echo 'Tag exists at a different commit; refusing to publish it.' >&2
+              exit 1
+            }
           fi
-          release_flags=(--draft)
-          # Explicitly requested release; other versions remain drafts.
-          if [[ "$version" == "1.0.0-rc.8" ]]; then release_flags=(); fi
-          gh release create "$tag" \
-            build-artifacts/release-dist/"$version"/* \
-            --verify-tag --title "MailShip $version" \
-            --notes-file "docs/releases/$version.md" "${release_flags[@]}" --prerelease --latest=false
+          gh release create "$tag" release-dist/"$version"/* \\
+            --target "$GITHUB_SHA" --title "DataShip $version" \\
+            --notes-file "docs/releases/$version.md" \\
+            --prerelease --latest=false
