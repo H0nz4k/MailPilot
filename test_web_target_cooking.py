@@ -61,7 +61,7 @@ class TargetCookingTests(unittest.TestCase):
             calendar.report_is_cooking_day(Path('config.json'), task, date.today())
 
     def worker_namespace(self):
-        tree = ast.parse((ROOT / 'services/web_mail_worker.py').read_text())
+        tree = ast.parse((ROOT / 'services/web_mail_worker.py').read_text(encoding='utf-8'))
         wanted = {'dispatch', 'tick'}
         body = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
         ns = {'Path': Path, 'date': date, 'datetime': datetime,
