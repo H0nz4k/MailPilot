@@ -36,14 +36,14 @@ jobs:
         run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
       - name: Package clean portable and NSSM distributions
         run: .venv-web/Scripts/python.exe scripts/package_web_release.py --commit "$GITHUB_SHA"
-      - name: Publish verified Windows rc.8 directly to GitHub Releases
+      - name: Publish verified Windows rc.9 directly to GitHub Releases
         if: github.ref == 'refs/heads/feat/dataship-design-integration'
         run: |
           set -Eeuo pipefail
           version="$(tr -d '\r\n' < VERSION)"
           # Release only this explicitly planned candidate; other versions
           # require an intentional change to the release workflow.
-          [[ "$version" == "1.0.0-rc.8" ]] || exit 0
+          [[ "$version" == "1.0.0-rc.9" ]] || exit 0
           tag="dataship-v$version"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite it."
