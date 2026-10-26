@@ -18,7 +18,6 @@ EDITABLE_TABS: dict[str, str] = {
     "closing": "Uzávěrka",
     "special": "Speciál",
     "bulk": "Hromadná zpráva",
-    "mail_tasks": "Odesílání",
 }
 
 
@@ -27,9 +26,9 @@ def visible_tabs(config: Mapping[str, object]) -> dict[str, bool]:
     stored = config.get("ui_visible_tabs")
     if not isinstance(stored, dict):
         stored = {}
-    visibility: dict[str, bool] = {"daily": True}
+    visibility: dict[str, bool] = {"daily": True, "mail_tasks": True}
     for tab, default in DEFAULT_VISIBLE_TABS.items():
-        if tab == "daily":
+        if tab in {"daily", "mail_tasks"}:
             continue
         value = stored.get(tab, default)
         visibility[tab] = value if isinstance(value, bool) else default
