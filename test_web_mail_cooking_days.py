@@ -41,7 +41,9 @@ class FakeCursor:
         assert "FROM public.varnedny" in query
         assert all(f"d{n:02d}" in query for n in range(1, 32))
         assert "LOWER(BTRIM(typsluzby))" in query
-        self.key = tuple(args)
+        self.key = (("family",) + tuple(args)
+                    if "SELECT BTRIM(typsluzby)," in query
+                    else tuple(args))
         self.calls.append(self.key)
 
     def fetchall(self):
@@ -105,6 +107,70 @@ def test_missing_month_fails_closed(monkeypatch):
         with pytest.raises(ValueError, match="má 0 záznamů"):
             calendar.target_date(task(), date(2026, 10, 23), is_cooking_day=is_cooking)
 
+
+
+def test_generic_obed_falls_back_to_real_lunch_calendars_only(monkeypatch):
+    """Regression: JídelnaSQL uses Oběd-A, Oběd-B and ObědSZU-A, not Oběd."""
+    cursor = fake_database(monkeypatch, {
+        (2026, 10, "Oběd"): [],
+        ("family", 2026, 10, "Oběd"): [
+            ("Oběd-A", *month_row(d26="N", d29="A")),
+            ("Oběd-B", *month_row(d26="A")),
+            ("Oběd MŠ", *month_row(d26="N", d27="A")),
+            ("ObědSZU-A", *month_row(d26="N")),
+        ],
+    })
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_day:
+        assert calendar.target_date(task(), date(2026, 10, 23), is_cooking_day=is_day) == date(2026, 10, 26)
+    assert cursor.calls == [(2026, 10, "Oběd"), ("family", 2026, 10, "Oběd")]
+
+
+def test_exact_calendar_remains_strict_even_if_others_cook(monkeypatch):
+    cursor = fake_database(monkeypatch, {
+        (2026, 10, "Oběd-A"): [month_row(d26="N", d27="A")],
+        ("family", 2026, 10, "Oběd"): [("Oběd-B", *month_row(d26="A"))],
+    })
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd-A") as is_day:
+        assert calendar.target_date(task(), date(2026, 10, 23), is_cooking_day=is_day) == date(2026, 10, 27)
+    assert cursor.calls == [(2026, 10, "Oběd-A")]
+
+
+def test_generic_obed_never_falls_back_to_non_lunch_types(monkeypatch):
+    cursor = fake_database(monkeypatch, {
+        (2026, 10, "Oběd"): [],
+        ("family", 2026, 10, "Oběd"): [],
+        (2026, 10, "Svačina"): [month_row(d26="A")],
+    })
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_day:
+        with pytest.raises(ValueError, match="má 0 záznamů"):
+            calendar.target_date(task(), date(2026, 10, 23), is_cooking_day=is_day)
+    assert cursor.calls == [(2026, 10, "Oběd"), ("family", 2026, 10, "Oběd")]
+
+
+def test_invalid_lunch_variant_cannot_be_hidden_by_valid_sibling(monkeypatch):
+    fake_database(monkeypatch, {
+        (2026, 10, "Oběd"): [],
+        ("family", 2026, 10, "Oběd"): [
+            ("Oběd-A", *month_row(d26="A")),
+            ("Oběd-B", *month_row(d26="X")),
+        ],
+    })
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_day:
+        with pytest.raises(ValueError, match="Neplatný stav"):
+            is_day(date(2026, 10, 26))
+
+
+def test_duplicate_lunch_variant_names_fail_closed(monkeypatch):
+    fake_database(monkeypatch, {
+        (2026, 10, "Oběd"): [],
+        ("family", 2026, 10, "Oběd"): [
+            ("Oběd-A", *month_row(d26="A")),
+            (" oběd-a ", *month_row(d26="N")),
+        ],
+    })
+    with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_day:
+        with pytest.raises(ValueError, match="Duplicitní"):
+            is_day(date(2026, 10, 26))
 
 def test_duplicate_service_month_fails_closed(monkeypatch):
     record = month_row(d24="A")
