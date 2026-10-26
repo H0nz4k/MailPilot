@@ -112,7 +112,7 @@ from services.config_io import (
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
 from services.web_branding import (
-    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION,
+    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION, version_caption,
 )
 from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
@@ -582,6 +582,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ) as self.brand_home:
                 ui.icon(BRAND_ICON, size="1.25rem")
                 ui.label(APP_TITLE).classes("app-title")
+            self.version_label = ui.label(
+                version_caption(frozen=bool(getattr(sys, "frozen", False)))
+            ).classes("ui-help").style("white-space: normal; overflow-wrap: anywhere").mark("app-version")
             with ui.row().classes(
                 "db-chip items-center gap-2 no-wrap px-2 py-1 flex-grow min-w-0"
             ).on("click", self.open_database_settings) as self.connection_strip:
