@@ -272,7 +272,9 @@ class DailyDesignMixin:
             self.daily_summary_status.set_text("Počty se zobrazí po připojení k Jídelně.")
             return
         self.daily_summary_status.set_text("Aktualizuji souhrn…")
-        self._daily_summary_timer = ui.timer(0.45, self.refresh_daily_summary, once=True)
+        # Date reloads also call this from a background task without a UI slot.
+        with self.daily_summary_status.parent_slot:
+            self._daily_summary_timer = ui.timer(0.45, self.refresh_daily_summary, once=True)
 
     async def refresh_daily_summary(self) -> None:
         if not self.connection_ok or not self._connection_password:
