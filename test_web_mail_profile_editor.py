@@ -43,11 +43,11 @@ async def test_new_task_selects_a_named_profile_and_shows_its_contents(tmp_path)
             assert not load_tasks(task_file(tmp_path))
             with user:
                 choices.value = first.id
-                assert not field(user, ui.number, "Posun od dneška (dní)").visible
+                assert not field(user, ui.number, "Kolik dní dopředu? (2 = pozítří)").visible
                 assert not field(user, ui.input, "Vybraný den").visible
                 field(user, ui.select, "Za který den posílat?").value = "offset"
-                assert field(user, ui.number, "Posun od dneška (dní)").visible
-            user.find("Co přehled obsahuje?").click()
+                assert field(user, ui.number, "Kolik dní dopředu? (2 = pozítří)").visible
+            user.find("Typ stravy a obsah PDF").click()
             await user.should_see("Uložené kategorie: Žáci, Zaměstnanci.")
             await user.should_see("Bez seznamu strávníků.")
             user.find("Uložit").click()
