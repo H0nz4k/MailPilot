@@ -33,7 +33,7 @@ class MultiMealTests(unittest.TestCase):
             path = Path(tmp)/'daily_reports.json'
             save_profile(path, profile)
             self.assertEqual(load_profiles(path), [profile])
-            self.assertEqual(json.loads(path.read_text())['profiles'][0]['meal_type'], ['oběd-a', 'oběd-b'])
+            self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['profiles'][0]['meal_type'], ['oběd-a', 'oběd-b'])
         old = DailyProfile.from_dict(dict(name='old', categories=['A'], meal_type='Oběd'))
         self.assertEqual(old.meal_type, 'oběd')
 
