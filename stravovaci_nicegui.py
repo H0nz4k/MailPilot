@@ -872,18 +872,12 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
     def _build_category_panel(self) -> None:
         """Uživatel vybírá podmnožinu kategorií povolených správcem."""
         with ui.row().classes("items-center gap-2 flex-wrap"):
-            w.field_label(
-                "Kategorie",
-                "Vybírejte z kategorií povolených správcem v Administraci.",
-            )
-            self.daily_expansion_label = ui.label(
-                self._daily_category_caption()
-            ).classes("count-badge")
-            ui.button(
-                "Změnit výběr",
+            w.field_label("Kategorie")
+            self.daily_category_button = ui.button(
+                self._daily_category_caption(),
                 icon="checklist",
                 on_click=self.open_daily_category_dialog,
-            ).props("outline dense no-caps")
+            ).props("outline no-caps").classes("ds-secondary-action")
 
     def _build_category_settings_panel(self) -> None:
         """Filtrovat kategorie smí pouze správce. Defaultně jsou všechny."""
@@ -1360,13 +1354,15 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         total = len(self._allowed_category_order())
         selected = len(self.selected_categories)
         if not self.categories:
-            return "Po připojení"
-        return f"Vybráno kategorií: {selected}"
+            return "Vybrat kategorie"
+        return f"Kategorie ({selected})"
 
     def _render_daily_selection(self) -> None:
         self._render_daily_preview_categories()
         if hasattr(self, "daily_expansion_label"):
             self.daily_expansion_label.set_text(self._daily_category_caption())
+        if hasattr(self, "daily_category_button"):
+            self.daily_category_button.set_text(self._daily_category_caption())
         if hasattr(self, "admin_category_count"):
             self.admin_category_count.set_text(
                 f"{len(self.allowed_categories)} / {len(self.categories)}"
@@ -2389,11 +2385,14 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "Vytvořit PDF",
                 icon="picture_as_pdf",
                 on_click=self.generate_pdf,
-            ).props("outline no-caps")
+            ).props("no-caps unelevated")
             self.send_button = ui.button(
                 "Odeslat jednou…", icon="send", on_click=self.send_mail
             ).props("outline no-caps")
             self.send_button.disable()
+            self.daily_summary_detail_button = ui.button(
+                "Detail porcí", icon="table_rows", on_click=lambda: self.daily_summary_dialog.open()
+            ).props("outline no-caps")
 
     def _build_mail_panel(self) -> None:
         w.section_header(
@@ -3321,5 +3320,6 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
 
 

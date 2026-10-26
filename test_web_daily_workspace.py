@@ -42,9 +42,14 @@ async def test_saved_profiles_switch_and_summary_uses_current_filters(tmp_path):
             await user.should_see("Co zobrazit")
             with user:
                 page = pages[0]
+                assert not page.daily_summary_dialog.value
+                assert not page.daily_pdf_settings_dialog.value
+                assert page.daily_summary_detail_button.text == "Detail porcí"
+                assert page.daily_pdf_settings_button.text == "Nastavení PDF"
                 page.connection_ok = True
                 page._connection_password = "test-only"
                 page.populate_categories([(str(c), f"Kategorie {c}") for c in range(1, 7)])
+                assert page.daily_category_button.text == "Kategorie (6)"
                 page.daily_profile_name.value = "Školní"
                 page._apply_daily_categories(["1", "2"])
                 assert page.save_daily_profile()
@@ -112,3 +117,4 @@ async def test_old_summary_is_discarded_after_filter_change(tmp_path):
                     release.set()
                     await pending
                 assert page.daily_summary_total.text == "—"
+

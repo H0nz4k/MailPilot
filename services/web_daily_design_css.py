@@ -83,7 +83,7 @@ html.fields-husta .q-btn, .q-btn, .q-btn--dense { min-height: max(44px, var(--ap
 .ds-page-heading { margin: 0 0 8px; gap: 8px; }
 .ds-page-title { font-size: max(24px, var(--app-heading)); font-weight: var(--app-weight-heading); line-height: 1.2; }
 .ds-preview-state { padding: 4px 8px; border-radius: 6px; background: var(--app-primary-soft); color: var(--app-ink); }
-.ds-daily-grid { display: grid; grid-template-columns: minmax(320px, .85fr) minmax(0, 1.4fr); gap: 20px; align-items: start; width: 100%; }
+.ds-daily-grid { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(0, 1.1fr); gap: 16px; align-items: start; width: 100%; }
 .ds-daily-grid > * { min-width: 0; }
 .dataship-ui .ds-daily { padding: 0; border-left: 0; gap: 10px !important; }
 .dataship-ui .ds-daily .app-card { padding: var(--ds-space); border-radius: 8px; gap: 12px; border: 1px solid var(--app-border); }
@@ -103,6 +103,7 @@ html.blocks-emphasized .dataship-ui .ds-daily .app-card { border: 2px solid var(
 .ds-editor .q-expansion-item__content > .q-card { background: transparent; }
 .ds-editor .q-expansion-item__content > * { margin-bottom: 12px; }
 .ds-editor-actions { border-top: 1px solid var(--app-separator); padding-top: 10px; gap: 8px; flex-wrap: wrap; }
+.dataship-ui .ds-secondary-action { min-width: 180px; }
 .ds-summary-name { font-size: var(--app-text); font-weight: max(600, var(--app-weight-text)); overflow-wrap: anywhere; }
 .ds-summary-total { font-size: 42px; font-weight: var(--app-weight-heading); line-height: 1.1; font-variant-numeric: tabular-nums; margin-top: 4px; }
 .ds-summary-table { background: transparent; }
@@ -110,6 +111,7 @@ html.blocks-emphasized .dataship-ui .ds-daily .app-card { border: 2px solid var(
 .ds-summary-table td, .ds-summary-table th { font-size: var(--app-text); white-space: normal; overflow-wrap: anywhere; }
 .ds-summary-table td:last-child { font-variant-numeric: tabular-nums; }
 .ds-summary-table .q-table tbody td, .ds-summary-table .q-table thead th { height: 38px; padding: 6px 8px; line-height: 1.3; }
+.ds-summary-dialog { width: 680px !important; }
 .dataship-ui .action-bar { flex-wrap: wrap; gap: 10px; margin-top: 8px; padding: 12px 16px; border-radius: 8px; background: var(--app-surface); }
 .dataship-ui .action-bar .inline-status:empty { display: none; }
 /* Short mail form, visible recipient chips and a footer that never scrolls away. */
@@ -161,7 +163,7 @@ html.blocks-emphasized .dataship-ui :is(.app-card,.q-card,.app-note,.ui-block,.d
     border: 2px solid var(--app-primary);
 }
 html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
-.dataship-ui .ds-report-toolbar { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; width: 100%; }
+.dataship-ui .ds-report-toolbar { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; width: 100%; gap: 8px; }
 .dataship-ui .ds-report-toolbar .ds-profile-choices { flex: 1 1 320px; display: block; min-width: 0; }
 .dataship-ui .ds-editor-actions { border: 0; padding: 0; margin-left: auto; }
 .dataship-ui .ds-preview-state { padding: 6px 12px; border: 1px solid var(--app-primary); border-radius: 6px; background: var(--app-primary-soft); color: var(--app-ink); }
@@ -259,3 +261,4 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
     *, *:before, *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 """
+
