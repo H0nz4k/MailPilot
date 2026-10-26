@@ -15,7 +15,7 @@ from nicegui import run, ui
 from services.web_mail_task_store import load_tasks, save_tasks, task_file
 from services.web_mail_tasks import MailTask, next_send_at
 from services.web_mail_cooking_days import (
-    resolve_task_date, task_calendar_type,
+    resolve_task_date, task_calendar_type, report_is_cooking_day,
 )
 from services.web_daily_profiles import load_profiles, profile_file
 from services.web_recipient_editor import RecipientEditor
@@ -87,6 +87,8 @@ def build_mail_tasks_panel(
                     except (OSError, ValueError):
                         date_label += " · vyberte kalendář v úpravě odesílání"
                 ui.label(date_label)
+                if task.only_cooking_days:
+                    ui.label("Odeslat pouze, pokud je den přehledu varný; jinak přeskočit.").classes("ui-help")
                 if task.profile_id:
                     try:
                         label = profile_options().get(task.profile_id, "Chybějící přehled – upravte odesílání")
@@ -99,7 +101,9 @@ def build_mail_tasks_panel(
                 if upcoming:
                     try:
                         report_date = resolve_task_date(active_config_path, task, upcoming.date())
-                        ui.label(f"Příští odeslání: {upcoming:%d.%m.%Y %H:%M}; přehled za {report_date:%d.%m.%Y}")
+                        cooking = report_is_cooking_day(active_config_path, task, report_date)
+                        ui.label(f"Příští kontrola: {upcoming:%d.%m.%Y %H:%M}; přehled za {report_date:%d.%m.%Y}"
+                                 + (" · přeskočí se: nevarný den" if not cooking else ""))
                     except Exception as exc:
                         ui.label(
                             f"Příští odeslání: {upcoming:%d.%m.%Y %H:%M}; "
@@ -108,7 +112,7 @@ def build_mail_tasks_panel(
                 event = latest.get(task.id)
                 if event:
                     with ui.row().classes("w-full items-center gap-2").props('role="status"'):
-                        ui.icon('error_outline' if event['kind'] == 'error' else 'check_circle', color='negative' if event['kind'] == 'error' else 'positive')
+                        ui.icon('error_outline' if event['kind'] == 'error' else 'skip_next' if event['kind'] == 'skipped' else 'check_circle', color='negative' if event['kind'] == 'error' else 'grey' if event['kind'] == 'skipped' else 'positive')
                         ui.label(f"{event['time'].replace('T', ' ')} · {event['message']}").style('overflow-wrap:anywhere')
                     if event['report_date']:
                         ui.label(f"Poslední přehled za {event['report_date']}").classes('ui-help')
@@ -243,6 +247,8 @@ def build_mail_tasks_panel(
                 fixed = ui.input("Vybraný den", value=task.fixed_date or "" if task else date.today().isoformat()).props("outlined dense type=date").classes("w-full")
                 offset.bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 fixed.bind_visibility_from(mode, "value", backward=lambda value: value == "fixed")
+                only_cooking = ui.checkbox("Odeslat jen tehdy, když se v den přehledu vaří", value=task.only_cooking_days if task else True)
+                ui.label("Kontroluje cílové datum PDF, nikoli dnešek. Pro konkrétní stravu její kalendář; pro všechny typy alespoň jeden. Nevarný den se přeskočí, datum se neposouvá.").classes("ui-help")
                 enabled = ui.checkbox("Odesílat automaticky", value=task.enabled if task else True)
             with ui.row().classes("ds-dialog-footer w-full justify-end"):
                 ui.button("Zrušit", on_click=dialog.close).props("flat")
@@ -263,6 +269,7 @@ def build_mail_tasks_panel(
                             "report": "daily", "send_time": time.value,
                             "date_mode": mode.value, "day_offset": offset.value,
                             "fixed_date": fixed.value, "enabled": enabled.value,
+                            "only_cooking_days": only_cooking.value,
                             "profile_id": profile.value or None,
                             "cooking_meal_type": calendar_value if legacy_common and not profile.value else None,
                         })
