@@ -40,7 +40,7 @@ jobs:
         if: github.ref == 'refs/heads/feat/dataship-design-integration'
         run: |
           set -Eeuo pipefail
-          version="$(tr -d '\\r\\n' < VERSION)"
+          version="$(tr -d '\r\n' < VERSION)"
           # Release only this explicitly planned candidate; other versions
           # require an intentional change to the release workflow.
           [[ "$version" == "1.0.0-rc.8" ]] || exit 0
@@ -55,7 +55,7 @@ jobs:
               exit 1
             }
           fi
-          gh release create "$tag" release-dist/"$version"/* \\
-            --target "$GITHUB_SHA" --title "DataShip $version" \\
-            --notes-file "docs/releases/$version.md" \\
+          gh release create "$tag" release-dist/"$version"/* \
+            --target "$GITHUB_SHA" --title "DataShip $version" \
+            --notes-file "docs/releases/$version.md" \
             --prerelease --latest=false
