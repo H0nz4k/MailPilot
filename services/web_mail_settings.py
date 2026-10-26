@@ -8,7 +8,8 @@ from runtime_paths import application_directory
 DEFAULTS = {
     "nssm_path": "",
     "service_name": "DataShipScheduler",
-    "cooking_meal_type": "Oběd",
+    # Legacy fallback only; each new task chooses calendars explicitly.
+    "cooking_meal_type": "",
     "dashboard_enabled": True,
     "dashboard_path": r"C:\Gastro\Programy\Templates\dashboard.template.html",
     "transport": "resend",
@@ -49,8 +50,9 @@ def load_settings(path: Path) -> dict:
 def save_settings(path: Path, data: dict) -> None:
     values = {key: data[key] for key in DEFAULTS if key in data}
     cooking_meal_type = values.get("cooking_meal_type", "")
-    if not isinstance(cooking_meal_type, str) or not cooking_meal_type.strip():
-        raise ValueError("Typ služby pro varné dny musí být vyplněn.")
+    if not isinstance(cooking_meal_type, str):
+        raise ValueError("Historický kalendář varných dnů musí být text.")
+    # Empty value is safe: legacy tasks without an explicit calendar fail closed.
     values["cooking_meal_type"] = cooking_meal_type.strip()
     if values.get("transport") not in ("resend", "smtp"):
         raise ValueError("Neznámý typ odesílání.")
