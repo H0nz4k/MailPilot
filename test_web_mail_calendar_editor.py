@@ -51,7 +51,8 @@ async def test_legacy_calendar_is_preserved_on_save(tmp_path):
     with patch('services.web_mail_gui.resolve_task_date', return_value=date(2026, 10, 26)):
         async with user_simulation(lambda: build_mail_tasks_panel(tmp_path)) as user:
             await user.open('/')
-            assert any('varné dny: Oběd' in (element.text or '') for element in user.find(ui.label).elements)
+            from services.web_mail_cooking_days import task_calendar_type
+            assert task_calendar_type(tmp_path / 'config.json', old) == 'Oběd'
             user.find('Upravit').click()
             user.find('Uložit').click()
             stored = load_tasks(task_file(tmp_path))
