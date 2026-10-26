@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: dataship-windows-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   windows-web:
     runs-on: windows-latest
