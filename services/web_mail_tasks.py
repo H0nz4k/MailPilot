@@ -87,7 +87,7 @@ class MailTask:
                 not isinstance(v, str) or not v.strip() or v.strip() == "*"
                 for v in cooking_meal_type
             ):
-                raise ValueError("Vybrané kalendáře musí obsahovat skutečné typy služby.")
+                raise ValueError("Kalendář musí obsahovat alespoň jeden skutečný typ služby.")
             cooking_meal_type = tuple(
                 dict.fromkeys(v.strip() for v in cooking_meal_type)
             )
