@@ -23,6 +23,28 @@ CALENDAR_QUERY = (
     "AND LOWER(BTRIM(typsluzby)) = LOWER(%s)"
 )
 
+# Legacy generic 'Oběd' is not necessarily a calendar name. In JídelnaSQL
+# actual month rows can be Oběd-A, Oběd-B, Oběd MŠ, ObědSZU-A etc.
+# Resolve that generic label only if no exact Oběd calendar exists.
+# Other named types must never silently expand to neighbouring types.
+LUNCH_CALENDAR_QUERY = (
+    f"SELECT BTRIM(typsluzby), {', '.join(DAY_COLUMNS)} FROM public.varnedny "
+    "WHERE rok = %s AND mesic = %s "
+    "AND LOWER(BTRIM(typsluzby)) LIKE LOWER(%s) || '%'"
+)
+
+
+def _calendar_status(value: object, *, day: date, meal_type: str) -> bool:
+    status = value.strip().upper() if isinstance(value, str) else ""
+    if status not in ("A", "N"):
+        raise ValueError(
+            f"Neplatný stav varného dne {day:%d.%m.%Y} "
+            f"pro {meal_type!r}: {value!r}."
+        )
+    return status == "A"
+
+
+
 
 @contextmanager
 def cooking_day_lookup(
@@ -43,30 +65,59 @@ def cooking_day_lookup(
 
     with psycopg.connect(**database) as connection:
         with connection.cursor() as cursor:
-            cache: dict[tuple[int, int], tuple[object, ...]] = {}
+            # Cache a tuple of (actual calendar name, 31 A/N day flags) rows
+            # so the generic Oběd alias can be evaluated as a scoped union.
+            cache: dict[tuple[int, int], tuple[tuple[str, tuple[object, ...]], ...]] = {}
 
             def is_cooking_day(day: date) -> bool:
                 key = (day.year, day.month)
                 if key not in cache:
-                    cursor.execute(CALENDAR_QUERY, (day.year, day.month, meal_type.strip()))
+                    selected = meal_type.strip()
+                    cursor.execute(CALENDAR_QUERY, (day.year, day.month, selected))
                     rows = cursor.fetchall()
-                    if len(rows) != 1:
+                    if len(rows) > 1:
                         raise ValueError(
                             f"Kalendář varnedny pro {day.month:02d}/{day.year} "
                             f"a typ služby {meal_type!r} má {len(rows)} záznamů (očekáván 1)."
                         )
-                    if len(rows[0]) != 31:
+                    if len(rows) == 1:
+                        records = ((selected, tuple(rows[0])),)
+                    elif selected.casefold() == "oběd":
+                        # Safe compatibility for old settings. Use only
+                        # calendars whose real names start with Oběd, never
+                        # breakfast, snacks or dinner. No heuristic weekdays.
+                        cursor.execute(
+                            LUNCH_CALENDAR_QUERY, (day.year, day.month, selected)
+                        )
+                        matches = cursor.fetchall()
+                        records = tuple(
+                            (str(row[0]).strip(), tuple(row[1:])) for row in matches
+                        )
+                        names = [name.casefold() for name, _ in records]
+                        if len(names) != len(set(names)):
+                            raise ValueError(
+                                f"Duplicitní názvy kalendářů obědů pro "
+                                f"{day.month:02d}/{day.year}."
+                            )
+                    else:
+                        records = ()
+                    if not records:
+                        raise ValueError(
+                            f"Kalendář varnedny pro {day.month:02d}/{day.year} "
+                            f"a typ služby {meal_type!r} má 0 záznamů (očekáván 1 "
+                            "nebo skutečné varianty Oběd-*)."
+                        )
+                    if any(len(values) != 31 for _, values in records):
                         raise ValueError("Tabulka varnedny nemá očekávané sloupce d01–d31.")
-                    cache[key] = tuple(rows[0])
+                    cache[key] = records
 
-                value = cache[key][day.day - 1]
-                status = value.strip().upper() if isinstance(value, str) else ""
-                if status not in ("A", "N"):
-                    raise ValueError(
-                        f"Neplatný stav varného dne {day:%d.%m.%Y} "
-                        f"pro {meal_type!r}: {value!r}."
-                    )
-                return status == "A"
+                # Evaluate ALL real lunch calendars; an invalid A/N value
+                # must not be masked by another calendar already cooking.
+                decisions = [
+                    _calendar_status(values[day.day - 1], day=day, meal_type=name)
+                    for name, values in cache[key]
+                ]
+                return any(decisions)
 
             yield is_cooking_day
 
