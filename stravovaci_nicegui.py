@@ -661,24 +661,24 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
 
     def _build_admin_dialog(self) -> None:
         with ui.dialog() as self.admin_dialog, ui.card().classes("w-[420px] gap-2"):
-            with ui.element("form").classes("w-full flex flex-col gap-2").on("submit.prevent", self._submit_admin_dialog):
+            with ui.column().classes("w-full gap-2"):
                 self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
                 self.admin_dialog_help = ui.label(
                     "Zadejte heslo pro databázi, maily a úlohy."
                 ).classes("ui-help")
                 self.admin_password_input = ui.input("Heslo", password=True).classes(
                     "w-full"
-                )
+                ).on("keydown.enter.prevent", self._submit_admin_dialog)
                 self.admin_password_repeat = ui.input(
                     "Heslo znovu", password=True
-                ).classes("w-full")
+                ).classes("w-full").on("keydown.enter.prevent", self._submit_admin_dialog)
                 self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
                 ui.label("Administrace se po 10 minutách nečinnosti automaticky uzamkne.").classes("ui-help")
                 with ui.row().classes("w-full justify-end gap-2 pt-2"):
                     ui.button("Zrušit", on_click=self.admin_dialog.close).props(
                         "type=button outline no-caps"
                     )
-                    ui.button("Potvrdit").props("type=submit no-caps").style("color: var(--ds-on-primary) !important")
+                    ui.button("Potvrdit", on_click=self._submit_admin_dialog).props("type=button no-caps").style("color: var(--ds-on-primary) !important")
 
     def _admin_password_is_set(self) -> bool:
         try:
