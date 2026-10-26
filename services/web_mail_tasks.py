@@ -27,7 +27,7 @@ class MailTask:
     fixed_date: str | None = None
     enabled: bool = True
     profile_id: str | None = None
-    cooking_meal_type: str | None = None
+    cooking_meal_type: str | tuple[str, ...] | None = None
     only_cooking_days: bool = False
 
     @classmethod
@@ -82,9 +82,18 @@ class MailTask:
         if profile_id and report != "daily":
             raise ValueError("Uložený přehled lze přiřadit pouze k Dennímu stavu.")
         cooking_meal_type = raw.get("cooking_meal_type")
-        if cooking_meal_type is not None:
+        if isinstance(cooking_meal_type, (list, tuple)):
+            if not cooking_meal_type or any(
+                not isinstance(v, str) or not v.strip() or v.strip() == "*"
+                for v in cooking_meal_type
+            ):
+                raise ValueError("Vybrané kalendáře musí obsahovat skutečné typy služby.")
+            cooking_meal_type = tuple(
+                dict.fromkeys(v.strip() for v in cooking_meal_type)
+            )
+        elif cooking_meal_type is not None:
             if not isinstance(cooking_meal_type, str) or not cooking_meal_type.strip():
-                raise ValueError("Kalendář varných dnů musí být neprázdný název stravy.")
+                raise ValueError("Kalendář varných dnů musí být název typu služby.")
             cooking_meal_type = cooking_meal_type.strip()
         return cls(
             id=str(raw.get("id") or uuid4()), name=name, recipients=recipients,
@@ -101,7 +110,8 @@ class MailTask:
             "date_mode": self.date_mode, "day_offset": self.day_offset,
             "fixed_date": self.fixed_date, "enabled": self.enabled,
             "profile_id": self.profile_id,
-            "cooking_meal_type": self.cooking_meal_type,
+            "cooking_meal_type": list(self.cooking_meal_type)
+            if isinstance(self.cooking_meal_type, tuple) else self.cooking_meal_type,
             "only_cooking_days": self.only_cooking_days,
         }
 
