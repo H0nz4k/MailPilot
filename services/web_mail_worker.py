@@ -25,7 +25,7 @@ from services.web_mail_settings import load_settings, settings_path
 from services.web_branding import WEB_VERSION
 from services.web_mail_smtp import smtp_send
 from services.jidelnasql_warning import JidelnaWarningSettings
-from services.web_mail_cooking_days import resolve_task_date
+from services.web_mail_cooking_days import resolve_task_date, report_is_cooking_day
 from services.web_daily_profiles import task_report_config
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
@@ -78,6 +78,11 @@ def dispatch(config_path: Path, task, sent_on: date) -> None:
         raise ValueError("Souhrn počtu jídel zatím není propojen se sestavou.")
     # Resolve from real public.varnedny data (A/N), never from weekdays.
     report_date = resolve_task_date(config_path, task, sent_on)
+    if not report_is_cooking_day(config_path, task, report_date):
+        message = f"Přeskočeno: pro {report_date:%d.%m.%Y} není varný den vybraného typu stravy."
+        record_event(config_path.parent, "skipped", message, task_id=task.id, task_name=task.name, report_date=report_date)
+        LOG.info("Skipped task=%s date=%s: target is not a cooking day", task.id, report_date)
+        return
     deliver_daily(config_path, task, report_date)
 
 
