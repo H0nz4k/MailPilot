@@ -30,11 +30,28 @@ def load_calendar(profiles=()):
 
 
 class AutomaticCalendarTests(unittest.TestCase):
-    def test_profile_overrides_old_calendar(self):
+    def test_report_calendar_used_without_explicit_override(self):
         for meal in ('večeře', None):
             calendar, deps = load_calendar([SimpleNamespace(id='p', meal_type=meal)])
             with patch.dict(sys.modules, deps):
-                self.assertEqual(calendar.task_calendar_type(Path('config.json'), SimpleNamespace(profile_id='p', cooking_meal_type='Oběd')), meal)
+                self.assertEqual(
+                    calendar.task_calendar_type(
+                        Path('config.json'),
+                        SimpleNamespace(profile_id='p', cooking_meal_type=None),
+                    ),
+                    meal,
+                )
+
+    def test_explicit_calendar_overrides_report_filter(self):
+        calendar, deps = load_calendar([SimpleNamespace(id='p', meal_type='večeře')])
+        with patch.dict(sys.modules, deps):
+            self.assertEqual(
+                calendar.task_calendar_type(
+                    Path('config.json'),
+                    SimpleNamespace(profile_id='p', cooking_meal_type='Oběd-A'),
+                ),
+                'Oběd-A',
+            )
 
     def test_legacy_keeps_its_calendar(self):
         calendar, _ = load_calendar()
