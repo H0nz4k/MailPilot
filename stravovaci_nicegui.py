@@ -650,21 +650,44 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             with ui.tab_panel("bulk"):
                 self._build_bulk_panel()
             with ui.tab_panel("mail_tasks"):
+                self._build_sending_panel()
+            with ui.tab_panel("admin"):
+                self._build_admin_panel()
+
+    def _build_sending_panel(self) -> None:
+        """Everyday mail and scheduling are available without admin login."""
+        with ui.tabs().props("dense no-caps inline-label").classes("w-full") as sending_tabs:
+            ui.tab("reports", label="Plánované přehledy", icon="schedule_send")
+            ui.tab("function_mail", label="E-maily funkcí", icon="mail")
+            ui.tab("legacy", label="Původní plánovač", icon="schedule")
+        with ui.tab_panels(sending_tabs, value="reports").props("animated=false").classes("w-full min-w-0"):
+            with ui.tab_panel("reports"):
                 from services.web_mail_gui import build_mail_tasks_panel
                 self.mail_tasks_editor = build_mail_tasks_panel(
                     self.config_path.parent, config_path=self.config_path,
                     category_names=lambda: dict(self.categories),
                     on_open_reports=self.go_home,
                 )
-            with ui.tab_panel("admin"):
-                self._build_admin_panel()
+            with ui.tab_panel("function_mail"):
+                ui.label(
+                    "Příjemce plánovaného PDF nastavte u konkrétního odesílání v Plánovaných přehledech. "
+                    "Zde jsou společné údaje a příjemci pro jednorázové e-maily, uzávěrku a původní funkce."
+                ).classes("ui-help")
+                self._build_mail_panel()
+            with ui.tab_panel("legacy"):
+                ui.label(
+                    "Pro odesílání uloženého přehledu a datum například na pozítří použijte Plánované přehledy. "
+                    "Původní plánovač spouští celé funkce nebo soubory a uložený přehled nevybírá. "
+                    "Existující úlohy zůstávají zachované; před přechodem vypněte odpovídající původní úlohu."
+                ).classes("ui-help")
+                self._build_scheduler_panel()
 
     def _build_admin_dialog(self) -> None:
         with ui.dialog() as self.admin_dialog, ui.card().classes("w-[420px] gap-2"):
             with ui.column().classes("w-full gap-2"):
                 self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
                 self.admin_dialog_help = ui.label(
-                    "Zadejte heslo pro databázi, maily a úlohy."
+                    "Zadejte heslo pro databázi a správu aplikace."
                 ).classes("ui-help")
                 self.admin_password_input = ui.input("Heslo", password=True).classes(
                     "w-full"
@@ -701,7 +724,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         else:
             self.admin_dialog_title.set_text("Administrace")
             self.admin_dialog_help.set_text(
-                "Zadejte heslo pro databázi, maily a úlohy."
+                "Zadejte heslo pro databázi a správu aplikace."
             )
             self.admin_password_repeat.set_visibility(False)
         self.admin_dialog.open()
@@ -1554,7 +1577,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 get_resend_api_key() or ""
             )
             if not api_key:
-                raise ConfigError("Zadejte Resend API klíč v Administraci → Nastavení.")
+                raise ConfigError("Zadejte Resend API klíč v Odesílání → E-maily funkcí.")
             sender = normalize_recipient(self.sender_input.value)
             subject = str(self.bulk_subject.value or "").strip()
             body = str(self.bulk_body.value or "").strip()
@@ -1701,8 +1724,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         ("logs", "Logy", "history"),
         ("db", "Databáze", "storage"),
         ("categories", "Kategorie denního stavu", "checklist"),
-        ("mail", "E-maily", "mail"),
-        ("scheduler", "Plánovač", "schedule"),
         ("mail_settings", "Služba a odesílání", "outgoing_mail"),
         ("navigation", "Hlavní nabídka", "view_list"),
         ("appearance", "Vzhled", "palette"),
@@ -1724,10 +1745,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     self._build_db_panel()
                 with ui.tab_panel("categories"):
                     self._build_category_settings_panel()
-                with ui.tab_panel("mail"):
-                    self._build_mail_panel()
-                with ui.tab_panel("scheduler"):
-                    self._build_scheduler_panel()
                 with ui.tab_panel("mail_settings"):
                     from services.web_mail_settings_gui import build_web_settings_panel
                     build_web_settings_panel(self.config_path.parent, require_admin=self._require_admin, before_lock=self._admin_before_lock)
@@ -1746,19 +1763,19 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         w.section_header(
             "Hlavní nabídka",
             "Zvolte záložky viditelné pro běžného uživatele. "
-            "Přehledy a přístup k Nastavení jsou vždy dostupné.",
+            "Přehledy, Odesílání a přístup k Nastavení jsou vždy dostupné.",
             "view_list",
         )
         saved = visible_tabs(self.raw)
         with w.card():
-            ui.label("Přehledy – vždy zobrazeny").classes("ui-help")
+            ui.label("Přehledy a Odesílání – vždy zobrazeny").classes("ui-help")
             self.navigation_switches = {
                 key: ui.checkbox(label, value=saved[key]).props("dense")
                 for key, label in EDITABLE_TABS.items()
             }
             ui.label(
                 "Skrytí záložky mění nabídku, nikoli oprávnění k datům. "
-                "Nastavení odesílání je dostupné pouze přes Administraci."
+                "Plánování a e-maily najdete v Odesílání bez přihlášení. Správa služby zůstává v Nastavení."
             ).classes("ui-help")
             ui.button(
                 "Uložit hlavní nabídku", icon="save",
@@ -2236,8 +2253,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     ).props("flat round dense color=negative")
 
     def add_planned_job(self) -> None:
-        if not self._require_admin():
-            return
         schedule_type = str(self.job_schedule_type.value or "daily")
         payload: dict[str, Any] = {
             "name": str(self.job_name_input.value or "").strip(),
@@ -2265,16 +2280,12 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.scheduler_status.set_text(f"Přidána úloha '{job.name}'. Nezapomeňte uložit.")
 
     def delete_planned_job(self, index: int) -> None:
-        if not self._require_admin():
-            return
         if 0 <= index < len(self.planned_jobs):
             removed = self.planned_jobs.pop(index)
             self.render_planned_jobs()
             self.scheduler_status.set_text(f"Odebrána úloha '{removed.name}'. Uložte změny.")
 
     def save_planned_jobs(self) -> None:
-        if not self._require_admin():
-            return
         try:
             save_jobs(self.scheduler_path, self.planned_jobs)
         except OSError as exc:
@@ -2375,7 +2386,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     ).classes("inline-status truncate")
                     self.mail_subject_label.set_visibility(False)
                     ui.tooltip(
-                        "Příjemce denního stavu přiřadíte v Administraci → E-maily."
+                        "Příjemce jednorázového e-mailu nastavíte v Odesílání → E-maily funkcí."
                     )
             self.open_pdf_button = ui.button(
                 "Otevřít poslední", icon="open_in_new", on_click=self.open_last_pdf
@@ -2498,8 +2509,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.save_mail_assignment()
 
     def save_mail_assignment(self) -> None:
-        if not self._require_admin():
-            return
         try:
             self._flush_mail_editor()
             raw = sanitize_config(self.raw)
