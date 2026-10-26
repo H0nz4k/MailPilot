@@ -1,5 +1,6 @@
 """Regression tests: MailPilot must trust public.varnedny, not weekdays."""
 from datetime import date
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -104,7 +105,7 @@ def test_transition_to_next_month(monkeypatch):
 def test_missing_month_fails_closed(monkeypatch):
     fake_database(monkeypatch, {})
     with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as is_cooking:
-        with pytest.raises(ValueError, match="má 0 záznamů"):
+        with pytest.raises(ValueError, match="neexistuje v public.varnedny"):
             calendar.target_date(task(), date(2026, 10, 23), is_cooking_day=is_cooking)
 
 
@@ -115,7 +116,7 @@ def test_service_name_is_never_inferred_from_obed_prefix(monkeypatch):
         (2026, 10, "Oběd-A"): [month_row(d26="A")],
     })
     with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as check:
-        with pytest.raises(ValueError, match="vyberte skutečný typ služby|vyberte skutečný".replace("vyberte","vyberte")):
+        with pytest.raises(ValueError, match="vyberte skutečný typ služby"):
             check(date(2026, 10, 26))
     assert cursor.calls == [(2026, 10, "Oběd")]
 
