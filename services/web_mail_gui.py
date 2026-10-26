@@ -23,7 +23,7 @@ from services.web_recipient_editor import RecipientEditor
 REPORTS = {"daily": "Denní PDF přehled", "meal_summary": "Původní souhrn (nepodporováno)"}
 LEGACY_PROFILE_LABEL = "Dosavadní společné nastavení"
 DATE_MODES = {
-    "today": "Dnes", "tomorrow": "Zítra", "offset": "Posun o X dní",
+    "today": "Dnes", "tomorrow": "Zítra", "offset": "Za několik dní (např. pozítří)",
     "next_cooking_day": "Následující varný den", "fixed": "Konkrétní datum",
 }
 
@@ -38,7 +38,8 @@ def build_mail_tasks_panel(
     active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
     ui.label("Odesílání přehledů").classes("ds-page-title").props('role="heading" aria-level="1"')
     ui.label(
-        "Použijte uložený přehled z Přehledů. Zde nastavíte, komu, kdy a za který den se má posílat."
+        "1. Vyberte uložený přehled (typ stravy a vzhled PDF). "
+        "2. Zadejte příjemce. 3. Nastavte čas a den přehledu, například 2 dny dopředu."
     ).classes("ui-help")
     def read():
         try:
@@ -73,6 +74,10 @@ def build_mail_tasks_panel(
                 ui.label(f"Každý den v {task.send_time}").classes("ds-task-line")
                 ui.label(f"Příjemci: {', '.join(task.recipients)}").classes("ds-task-line")
                 date_label = f"Den přehledu: {DATE_MODES[task.date_mode]}"
+                if task.date_mode == "offset":
+                    date_label += f" · posun {task.day_offset:+d} dní od dneška"
+                if task.date_mode == "fixed":
+                    date_label += f" · {task.fixed_date}"
                 if task.date_mode == "next_cooking_day":
                     try:
                         calendar_name = task_calendar_type(active_config_path, task)
@@ -190,7 +195,7 @@ def build_mail_tasks_panel(
                     profile_id if profile_id is not None else next(iter(profiles)) if len(profiles) == 1 else None
                 )
                 profile = ui.select(profiles, label="Uložený přehled", value=selected).props("outlined dense").classes("w-full")
-                with ui.expansion("Co přehled obsahuje?", icon="info_outline").classes("w-full ds-profile-details"):
+                with ui.expansion("Typ stravy a obsah PDF", icon="info_outline", value=True).classes("w-full ds-profile-details"):
                     details = ui.label().classes("ui-help w-full")
                     ui.label("Stejný přehled najdete v Přehledech. Tam můžete upravit jeho obsah.").classes("ui-help")
 
@@ -233,7 +238,8 @@ def build_mail_tasks_panel(
                     mode, "value", backward=lambda value: value == "next_cooking_day"
                 ):
                     ui.label("Varný den určíme podle typu stravy uloženého přehledu. Pro všechny typy použijeme nejbližší den, kdy se vaří alespoň jeden z nich.").classes("ui-help")
-                offset = ui.number("Posun od dneška (dní)", value=task.day_offset if task else 0, step=1).props("outlined dense").classes("w-full")
+                offset = ui.number("Kolik dní dopředu? (2 = pozítří)", value=task.day_offset if task else 0, step=1).props("outlined dense").classes("w-full")
+                ui.label("Například 2 znamená: dnes odešleme přehled na pozítří. Jde o kalendářní dny.").classes("ui-help").bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 fixed = ui.input("Vybraný den", value=task.fixed_date or "" if task else date.today().isoformat()).props("outlined dense type=date").classes("w-full")
                 offset.bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 fixed.bind_visibility_from(mode, "value", backward=lambda value: value == "fixed")
