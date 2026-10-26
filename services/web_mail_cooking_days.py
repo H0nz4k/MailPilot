@@ -85,17 +85,31 @@ def cooking_day_lookup(
 
 
 def task_calendar_type(config_path: Path, task: MailTask) -> str | tuple[str, ...] | None:
-    """Saved reports derive their calendar from meal_type; legacy tasks keep theirs."""
-    if task.cooking_meal_type is not None:
-        # Explicit task override: '*' means all real calendars, not a
-        # filename wildcard or text prefix. Named types must match exactly.
-        return None if task.cooking_meal_type == "*" else task.cooking_meal_type
-    if getattr(task, "profile_id", None):
+    """Resolve actual calendar names. Explicit task choice overrides profile type.
+
+    A missing saved profile ALWAYS fails closed, even with a calendar override.
+    """
+    profile_meal_type = None
+    profile_id = getattr(task, "profile_id", None)
+    if profile_id:
         from services.web_daily_profiles import load_profiles, profile_file
-        profile = next((p for p in load_profiles(profile_file(Path(config_path).parent)) if p.id == task.profile_id), None)
+        profile = next(
+            (
+                p for p in load_profiles(profile_file(Path(config_path).parent))
+                if p.id == profile_id
+            ), None,
+        )
         if profile is None:
             raise ValueError("Uložený přehled této úlohy neexistuje.")
-        return profile.meal_type
+        profile_meal_type = profile.meal_type
+
+    explicit = getattr(task, "cooking_meal_type", None)
+    if explicit is not None:
+        # '*' is an explicit "all real calendars" choice.
+        return None if explicit == "*" else explicit
+    if profile_id:
+        return profile_meal_type
+
     settings = load_settings(settings_path(Path(config_path).parent))
     meal_type = settings["cooking_meal_type"]
     if not isinstance(meal_type, str) or not meal_type.strip():
