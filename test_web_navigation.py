@@ -7,7 +7,7 @@ def test_default_top_tabs():
         "daily": True, "closing": True, "special": False,
         "bulk": False, "mail_tasks": True,
     }
-    assert set(EDITABLE_TABS) == {"closing", "special", "bulk", "mail_tasks"}
+    assert set(EDITABLE_TABS) == {"closing", "special", "bulk"}
 
 
 def test_admin_can_enable_and_hide_extra_sections():
@@ -17,7 +17,7 @@ def test_admin_can_enable_and_hide_extra_sections():
         }
     }) == {
         "daily": True, "closing": False, "special": True,
-        "bulk": True, "mail_tasks": False,
+        "bulk": True, "mail_tasks": True,
     }
 
 
