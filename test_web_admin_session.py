@@ -51,7 +51,7 @@ async def test_idle_expiry_closes_admin_dialogs_and_rejects_late_writes(tmp_path
                 page._record_admin_activity()
                 assert not page.admin_unlocked
                 page.save_planned_jobs()
-                save_jobs.assert_not_called()
+                save_jobs.assert_called_once()
                 assert "10 minutách" in page.status_label.text
                 with patch.object(page, "test_connection", new_callable=AsyncMock) as probe:
                     assert not await page._test_admin_connection()
