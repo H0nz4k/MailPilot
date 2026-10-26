@@ -7,6 +7,7 @@ import tempfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import uuid4
+from services.web_meal_types import normalize_meal_filter
 
 
 @dataclass(frozen=True)
@@ -14,7 +15,7 @@ class DailyProfile:
     id: str
     name: str
     categories: tuple[str, ...]
-    meal_type: str | None = None
+    meal_type: str | tuple[str, ...] | None = None
     category_separation: bool = True
     show_by_categories: bool = True
     show_by_norms: bool = True
@@ -33,20 +34,20 @@ class DailyProfile:
         if any(not isinstance(c, str) or not c.strip() for c in values):
             raise ValueError("Kódy kategorií musí být neprázdné texty.")
         categories = tuple(dict.fromkeys(c.strip() for c in values))
-        meal = raw.get("meal_type")
-        if meal is not None and not isinstance(meal, str):
-            raise ValueError("Typ stravy musí být text nebo null.")
+        meal = normalize_meal_filter(raw.get("meal_type"))
         flags = {}
         for key in ("category_separation", "show_by_categories", "show_by_norms", "show_diner_list"):
             flags[key] = raw.get(key, True)
             if not isinstance(flags[key], bool):
                 raise ValueError(f"{key} musí být true nebo false.")
         return cls(str(raw.get("id") or uuid4()), name, categories,
-                   meal.strip().casefold() or None if meal else None, **flags)
+                   meal, **flags)
 
     def to_dict(self) -> dict:
         raw = asdict(self)
         raw["categories"] = list(self.categories)
+        if isinstance(self.meal_type, tuple):
+            raw["meal_type"] = list(self.meal_type)
         return raw
 
 
@@ -118,3 +119,4 @@ def task_report_config(config, raw: dict, task, directory: Path):
     if profile is None:
         raise ValueError("Uložený přehled této úlohy neexistuje; zvolte jej znovu.")
     return apply_profile(config, profile, raw)
+

@@ -14,6 +14,7 @@ from typing import Any, Sequence
 from xml.sax.saxutils import escape
 
 from credential_store import CredentialStoreError, get_password
+from services.web_meal_types import normalize_meal_filter
 from runtime_paths import application_directory, bundled_path
 
 
@@ -254,7 +255,7 @@ class AppConfig:
     pdf_data_font_size: float = 7.4
     pdf_label_font_size: float = 7.4
     pdf_bold: bool = False
-    meal_type: str | None = None  # None = všechny
+    meal_type: str | tuple[str, ...] | None = None  # None = všechny
     show_diner_list: bool = True
 
 
@@ -473,13 +474,10 @@ def load_config(
     from pocty_nastaveni import parse_client_categories
 
     normalized_categories = parse_client_categories(raw)
-    meal_type = raw.get("typ_stravy_denne")
-    if meal_type in (None, ""):
-        meal_type = None
-    elif not isinstance(meal_type, str):
-        raise ConfigError("'typ_stravy_denne' musí být text nebo null.")
-    else:
-        meal_type = meal_type.strip().casefold() or None
+    try:
+        meal_type = normalize_meal_filter(raw.get("typ_stravy_denne"))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
     show_diner_list = raw.get("seznam_stravniku", True)
     if not isinstance(show_diner_list, bool):
@@ -665,12 +663,22 @@ def fetch_report(config: AppConfig) -> ReportData:
             "'python -m pip install -r requirements.txt'."
         ) from exc
 
+    meal_filter = normalize_meal_filter(config.meal_type)
+    multiple = isinstance(meal_filter, tuple)
+    meal_parameter = list(meal_filter) if multiple else meal_filter
+
+    def meal_query(query):
+        if multiple:
+            return query.replace("%s::text IS NULL OR LOWER(BTRIM(p.typsluzby)) = %s::text",
+                                 "%s::text[] IS NULL OR LOWER(BTRIM(p.typsluzby)) = ANY(%s::text[])")
+        return query
+
     day_column = sql.Identifier(f"d{config.report_date.day:02d}")
-    summary_query = sql.SQL(SUMMARY_QUERY).format(day_column=day_column)
-    category_query = sql.SQL(CATEGORY_SUMMARY_QUERY).format(day_column=day_column)
-    norm_query = sql.SQL(NORM_MENU_QUERY).format(day_column=day_column)
-    diner_query = sql.SQL(DINER_LIST_QUERY).format(day_column=day_column)
-    bulk_query = sql.SQL(BULK_DAILY_QUERY).format(day_column=day_column)
+    summary_query = sql.SQL(meal_query(SUMMARY_QUERY)).format(day_column=day_column)
+    category_query = sql.SQL(meal_query(CATEGORY_SUMMARY_QUERY)).format(day_column=day_column)
+    norm_query = sql.SQL(meal_query(NORM_MENU_QUERY)).format(day_column=day_column)
+    diner_query = sql.SQL(meal_query(DINER_LIST_QUERY)).format(day_column=day_column)
+    bulk_query = sql.SQL(meal_query(BULK_DAILY_QUERY)).format(day_column=day_column)
 
     with psycopg.connect(**config.database) as connection:
         with connection.cursor() as cursor:
@@ -713,8 +721,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     config.report_date.year,
                     config.report_date.month,
                     list(active_categories),
-                    config.meal_type,
-                    config.meal_type,
+                    meal_parameter,
+                    meal_parameter,
                     config.report_date,
                     config.language,
                     config.menu_list_number,
@@ -736,8 +744,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     list(active_categories),
                     config.report_date.year,
                     config.report_date.month,
-                    config.meal_type,
-                    config.meal_type,
+                    meal_parameter,
+                    meal_parameter,
                 ),
             )
             categories = tuple(
@@ -756,8 +764,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                     config.report_date.year,
                     config.report_date.month,
                     list(active_categories),
-                    config.meal_type,
-                    config.meal_type,
+                    meal_parameter,
+                    meal_parameter,
                 ),
             )
             norms = tuple(
@@ -782,8 +790,8 @@ def fetch_report(config: AppConfig) -> ReportData:
                         config.report_date.year,
                         config.report_date.month,
                         list(active_categories),
-                        config.meal_type,
-                        config.meal_type,
+                        meal_parameter,
+                        meal_parameter,
                     ),
                 )
                 diners = tuple(
@@ -813,7 +821,7 @@ def fetch_report(config: AppConfig) -> ReportData:
                     config.report_date, config.language, config.menu_list_number,
                     config.show_diner_list,
                     config.report_date.year, config.report_date.month,
-                    list(active_categories), config.meal_type, config.meal_type,
+                    list(active_categories), meal_parameter, meal_parameter,
                 ),
             )
             return _include_bulk_orders(
@@ -1623,4 +1631,5 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

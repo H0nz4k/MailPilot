@@ -19,6 +19,7 @@ from services.web_mail_cooking_days import (
 )
 from services.web_daily_profiles import load_profiles, profile_file
 from services.web_recipient_editor import RecipientEditor
+from services.web_meal_types import meal_filter_caption
 
 REPORTS = {"daily": "Denní PDF přehled", "meal_summary": "Původní souhrn (nepodporováno)"}
 LEGACY_PROFILE_LABEL = "Dosavadní společné nastavení"
@@ -81,7 +82,7 @@ def build_mail_tasks_panel(
                 if task.date_mode == "next_cooking_day":
                     try:
                         calendar_name = task_calendar_type(active_config_path, task)
-                        date_label += f" · varné dny: {calendar_name or 'alespoň jeden typ stravy'}"
+                        date_label += f" · varné dny: {meal_filter_caption(calendar_name) if calendar_name else 'alespoň jeden typ stravy'}"
                         if not task.profile_id and task.cooking_meal_type is None:
                             date_label += " (dosavadní nastavení)"
                     except (OSError, ValueError):
@@ -212,7 +213,7 @@ def build_mail_tasks_panel(
                         categories = ", ".join(names.get(code, code) for code in chosen.categories)
                         parts = [
                             f"Uložené kategorie: {categories}.",
-                            f"Typ stravy: {chosen.meal_type or 'všechny typy'}.",
+                            f"Typ stravy: {meal_filter_caption(chosen.meal_type)}.",
                             "Se seznamem strávníků." if chosen.show_diner_list else "Bez seznamu strávníků.",
                         ]
                         details.set_text(" ".join(parts))
@@ -241,14 +242,14 @@ def build_mail_tasks_panel(
                 with ui.column().classes("w-full gap-1").bind_visibility_from(
                     mode, "value", backward=lambda value: value == "next_cooking_day"
                 ):
-                    ui.label("Varný den určíme podle typu stravy uloženého přehledu. Pro všechny typy použijeme nejbližší den, kdy se vaří alespoň jeden z nich.").classes("ui-help")
+                    ui.label("Varný den určíme podle typu stravy uloženého přehledu. U více vybraných typů použijeme nejbližší den, kdy se vaří alespoň jeden z vybraných; u všech typů libovolný.").classes("ui-help")
                 offset = ui.number("Kolik dní dopředu? (2 = pozítří)", value=task.day_offset if task else 0, step=1).props("outlined dense").classes("w-full")
                 ui.label("Například 2 znamená: dnes odešleme přehled na pozítří. Jde o kalendářní dny.").classes("ui-help").bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 fixed = ui.input("Vybraný den", value=task.fixed_date or "" if task else date.today().isoformat()).props("outlined dense type=date").classes("w-full")
                 offset.bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 fixed.bind_visibility_from(mode, "value", backward=lambda value: value == "fixed")
                 only_cooking = ui.checkbox("Odeslat jen tehdy, když se v den přehledu vaří", value=task.only_cooking_days if task else True)
-                ui.label("Kontroluje cílové datum PDF, nikoli dnešek. Pro konkrétní stravu její kalendář; pro všechny typy alespoň jeden. Nevarný den se přeskočí, datum se neposouvá.").classes("ui-help")
+                ui.label("Kontroluje cílové datum PDF, nikoli dnešek. U jednoho typu jeho kalendář; u více vybraných typů alespoň jeden z nich; u všech typů libovolný. Nevarný den se přeskočí, datum se neposouvá.").classes("ui-help")
                 enabled = ui.checkbox("Odesílat automaticky", value=task.enabled if task else True)
             with ui.row().classes("ds-dialog-footer w-full justify-end"):
                 ui.button("Zrušit", on_click=dialog.close).props("flat")
@@ -291,5 +292,6 @@ def build_mail_tasks_panel(
             ui.button("Přejít do Přehledů", icon="today", on_click=on_open_reports).props("flat no-caps")
     table()
     return editor
+
 
 

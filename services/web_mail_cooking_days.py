@@ -6,7 +6,8 @@ N means not cooking. No weekday or public-holiday assumptions are made.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
+from services.web_meal_types import meal_filter_values
 from datetime import date
 from pathlib import Path
 from typing import Callable, Iterator, Mapping
@@ -70,7 +71,7 @@ def cooking_day_lookup(
             yield is_cooking_day
 
 
-def task_calendar_type(config_path: Path, task: MailTask) -> str | None:
+def task_calendar_type(config_path: Path, task: MailTask) -> str | tuple[str, ...] | None:
     """Saved reports derive their calendar from meal_type; legacy tasks keep theirs."""
     if getattr(task, "profile_id", None):
         from services.web_daily_profiles import load_profiles, profile_file
@@ -113,7 +114,7 @@ def resolve_task_date(config_path: Path, task: MailTask, sent_on: date) -> date:
     config_path = Path(config_path)
     meal_type = task_calendar_type(config_path, task)
     config = load_config(config_path, date_override=sent_on.strftime("%d.%m.%Y"))
-    lookup = any_cooking_day_lookup if meal_type is None else cooking_day_lookup
+    lookup = any_cooking_day_lookup if meal_type is None else selected_cooking_day_lookup if isinstance(meal_type, (list, tuple)) else cooking_day_lookup
     args = (config.database,) if meal_type is None else (config.database, meal_type)
     with lookup(*args) as is_day:
         return target_date(task, sent_on, is_cooking_day=is_day)
@@ -157,7 +158,21 @@ def report_is_cooking_day(config_path: Path, task: MailTask, report_date: date) 
     config_path = Path(config_path)
     meal_type = task_calendar_type(config_path, task)
     config = load_config(config_path, date_override=report_date.strftime("%d.%m.%Y"))
-    lookup = any_cooking_day_lookup if meal_type is None else cooking_day_lookup
+    lookup = any_cooking_day_lookup if meal_type is None else selected_cooking_day_lookup if isinstance(meal_type, (list, tuple)) else cooking_day_lookup
     args = (config.database,) if meal_type is None else (config.database, meal_type)
     with lookup(*args) as is_day:
         return is_day(report_date)
+
+
+
+@contextmanager
+def selected_cooking_day_lookup(database, meal_types):
+    """Any selected type may cook; unrelated calendars cannot qualify a day."""
+    with ExitStack() as stack:
+        checks = [stack.enter_context(cooking_day_lookup(database, meal))
+                  for meal in meal_filter_values(meal_types)]
+        def is_day(day):
+            # Evaluate every selected calendar so missing data is never hidden.
+            states = [check(day) for check in checks]
+            return any(states)
+        yield is_day

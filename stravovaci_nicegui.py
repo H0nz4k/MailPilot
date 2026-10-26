@@ -118,6 +118,7 @@ from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
+from services.web_meal_types import normalize_meal_filter, meal_filter_values, meal_filter_caption
 from services.web_daily_design import DailyDesignMixin
 from services.web_daily_design_css import DATASHIP_CSS
 from services.web_closing_design import ClosingDesignMixin
@@ -707,14 +708,17 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     ui.button("Potvrdit", on_click=self._submit_admin_dialog).props("type=button no-caps").style("color: var(--ds-on-primary) !important")
 
     def _admin_password_is_set(self) -> bool:
-        try:
-            stored = get_admin_password()
-        except CredentialStoreError:
-            return False
-        return bool(stored)
+        # An unreadable vault must never be mistaken for first-time setup.
+        return bool(get_admin_password())
 
     def open_admin_dialog(self) -> None:
-        first_setup = not self._admin_password_is_set()
+        self.admin_dialog.open()
+        self.admin_dialog_error.set_text("")
+        try:
+            first_setup = not self._admin_password_is_set()
+        except CredentialStoreError as exc:
+            self.admin_dialog_error.set_text(str(exc))
+            return
         self.admin_password_input.value = ""
         self.admin_password_repeat.value = ""
         self.admin_dialog_error.set_text("")
@@ -737,17 +741,20 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         """Enter v poli hesla potvrdí dialog; při prvním nastavení skočí na kontrolu."""
         if not self.admin_dialog.value:
             return
-        if not self._admin_password_is_set() and not str(
-            self.admin_password_repeat.value or ""
-        ).strip():
+        try:
+            first_setup = not self._admin_password_is_set()
+        except CredentialStoreError as exc:
+            self.admin_dialog_error.set_text(str(exc))
+            return
+        if first_setup and not str(self.admin_password_repeat.value or "").strip():
             self.admin_password_repeat.run_method("focus")
             return
         self.confirm_admin()
 
     def confirm_admin(self) -> None:
         password = str(self.admin_password_input.value or "")
-        first_setup = not self._admin_password_is_set()
         try:
+            first_setup = not self._admin_password_is_set()
             if first_setup:
                 repeat = str(self.admin_password_repeat.value or "")
                 if password != repeat:
@@ -1072,10 +1079,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         # A newer date may have been selected while the DB query was running.
         if day != self._selected_date():
             return
-        options = {"__all__": "Všechny typy stravy", **normalized}
-        selected = str(self.meal_type_select.value or "__all__")
-        if selected != "__all__" and selected not in normalized:
-            options[selected] = f"{selected} (bez objednávek v tomto dni)"
+        options = dict(normalized)
+        selected = list(meal_filter_values(self._selected_daily_meal_type()))
+        for meal in selected:
+            if meal not in normalized:
+                options[meal] = f"{meal} (bez objednávek v tomto dni)"
         self.meal_type_select.options = options
         self.meal_type_select.value = selected
         self.meal_type_select.set_visibility(True)
@@ -2586,7 +2594,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.send_button.disable()
         self._connection_password = None
         if hasattr(self, "meal_type_select"):
-            self.meal_type_select.value = "__all__"
+            self.meal_type_select.value = []
             self.meal_type_select.set_visibility(True)
         self._queue_daily_summary()
         if hasattr(self, "z17_generate_button"):
@@ -2929,9 +2937,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.raw = raw
         return api_key
 
-    def _selected_daily_meal_type(self) -> str | None:
-        value = str(self.meal_type_select.value or "__all__")
-        return None if value == "__all__" else value
+    def _selected_daily_meal_type(self) -> str | tuple[str, ...] | None:
+        value = self.meal_type_select.value
+        return normalize_meal_filter(None if value == "__all__" else value)
 
     def _manual_daily_categories(self) -> tuple[str, ...]:
         selected = tuple(self._selected_category_order())
@@ -3332,6 +3340,7 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
 
 
 

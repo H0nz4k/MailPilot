@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Sequence
 import re
 import unicodedata
+from services.web_meal_types import meal_filter_values
 
 
 def _slug(value: str) -> str:
@@ -30,6 +31,8 @@ def manual_pdf_path(
     The canonical configured path stays unchanged if the operator chooses
     *all* allowed categories and all meal types.
     """
+    if isinstance(meal_type, (tuple, list)):
+        meal_type = ",".join(meal_filter_values(meal_type))
     selected = {str(code).strip() for code in selected_categories}
     allowed = {str(code).strip() for code in allowed_categories}
     if not selected or not selected <= allowed:
@@ -48,3 +51,4 @@ def manual_pdf_path(
         suffix += f"_typ-{_slug(meal_type)[:24]}"
     path = Path(configured_path)
     return path.with_name(f"{path.stem}_{suffix}{path.suffix}")
+

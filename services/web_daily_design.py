@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from services.web_meal_types import meal_filter_values, meal_filter_caption
 from uuid import uuid4
 
 from nicegui import run, ui
@@ -43,8 +44,9 @@ class DailyDesignMixin:
                         self._build_date_field()
                         self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
                         self.date_input.props["label"] = "Datum náhledu"
-                        self.meal_type_select = ui.select({"__all__": "Všechny typy stravy"}, value="__all__", label="Typ stravy").props("outlined dense options-dense").classes("w-full")
-                        self.meal_type_select.on_value_change(lambda _e: self._daily_filters_changed())
+                        self.meal_type_select = ui.select({}, value=[], multiple=True, label="Typy stravy").classes("hidden")
+                        self.meal_types_button = ui.button("Typy stravy: všechny", icon="checklist", on_click=self._open_meal_types_dialog).props("outline no-caps").classes("w-full")
+                        self.meal_type_select.on_value_change(lambda _e: self._meal_types_changed())
                     self._build_category_panel()
                     self.daily_pdf_settings_button = ui.button(
                         "Nastavení PDF", icon="tune", on_click=lambda: self.daily_pdf_settings_dialog.open()
@@ -75,6 +77,45 @@ class DailyDesignMixin:
             self._load_daily_profile(self.daily_profiles[0])
         else:
             self._update_daily_preview_state()
+
+    def _update_meal_types_button(self) -> None:
+        values = meal_filter_values(self._selected_daily_meal_type())
+        self.meal_types_button.set_text(f"Typy stravy ({len(values)})" if values else "Typy stravy: všechny")
+
+    def _meal_types_changed(self) -> None:
+        self._update_meal_types_button()
+        self._daily_filters_changed()
+
+    def _open_meal_types_dialog(self) -> None:
+        selected = set(meal_filter_values(self._selected_daily_meal_type()))
+        with ui.dialog() as dialog, ui.card().classes("ds-mail-dialog"):
+            ui.label("Typy stravy v přehledu").classes("ds-dialog-title")
+            ui.label("Vyberte více typů. Výběr se uloží společně s přehledem a použije se i při odesílání.").classes("ui-help")
+            all_types = ui.checkbox("Všechny typy stravy", value=not selected)
+            choices = {}
+            with ui.column().classes("w-full max-h-[50vh] overflow-y-auto"):
+                for value, label in self.meal_type_select.options.items():
+                    choices[value] = ui.checkbox(label, value=value in selected)
+            def choose_all(event):
+                if event.value:
+                    for checkbox in choices.values():
+                        checkbox.value = False
+            all_types.on_value_change(choose_all)
+            for checkbox in choices.values():
+                checkbox.on_value_change(lambda event: all_types.set_value(False) if event.value else None)
+            error = ui.label("").classes("text-negative")
+            def apply():
+                values = [key for key, checkbox in choices.items() if checkbox.value]
+                if not all_types.value and not values:
+                    error.set_text("Vyberte alespoň jeden typ nebo Všechny typy stravy.")
+                    return
+                self.meal_type_select.value = [] if all_types.value else values
+                self._meal_types_changed()
+                dialog.close()
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Zrušit", on_click=dialog.close).props("flat no-caps")
+                ui.button("Použít výběr", on_click=apply).props("no-caps")
+        dialog.open()
 
     def _update_daily_preview_state(self) -> None:
         profile = next((p for p in self.daily_profiles if p.id == self.daily_profile_id), None)
@@ -214,7 +255,7 @@ class DailyDesignMixin:
         self.daily_profile_id = None
         self.daily_profile_name.value = "Nový přehled"
         self.selected_categories = set(self.allowed_categories)
-        self.meal_type_select.value = "__all__"
+        self.meal_type_select.value = []
         self._render_daily_selection()
         self._mark_daily_dirty()
         self._render_daily_profile_choices()
@@ -243,9 +284,10 @@ class DailyDesignMixin:
             self.daily_profile_id = profile.id
             self.daily_profile_name.value = profile.name
             self.selected_categories = set(profile.categories) & self.allowed_categories
-            if profile.meal_type:
-                self.meal_type_select.options = {**self.meal_type_select.options, profile.meal_type: profile.meal_type}
-            self.meal_type_select.value = profile.meal_type or "__all__"
+            meals = list(meal_filter_values(profile.meal_type))
+            self.meal_type_select.options = {**self.meal_type_select.options, **{v: v for v in meals}}
+            self.meal_type_select.value = meals
+            self._update_meal_types_button()
             for field, value in ((self.category_separation, profile.category_separation),
                                  (self.show_categories, profile.show_by_categories),
                                  (self.show_norms, profile.show_by_norms),
@@ -289,7 +331,7 @@ class DailyDesignMixin:
             self.daily_summary_total.set_text("—")
             self.daily_summary_table.rows = []
             self.daily_summary_table.update()
-            self.daily_summary_meta.set_text(f"{day:%d.%m.%Y} · {self.meal_type_select.options.get(meal_type or '__all__', meal_type)}")
+            self.daily_summary_meta.set_text(f"{day:%d.%m.%Y} · {meal_filter_caption(meal_type)}")
             self.daily_summary_status.set_text("Načítám počty porcí…")
             config = AppConfig(database=database, report_date=day, categories=categories,
                 meal_type=meal_type, language=str(self.language_input.value or "česky"),
@@ -316,4 +358,5 @@ class DailyDesignMixin:
         # The verified session password is already in the snapshot. Reading the
         # credential store here would fail on a first TEST before PDF saves it.
         return fetch_report(config)
+
 

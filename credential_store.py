@@ -111,7 +111,7 @@ def _blob_from_bytes(data: bytes) -> tuple[_DataBlob, ctypes.Array]:
     return blob, buffer
 
 
-def _dpapi_encrypt_machine(data: bytes) -> str:
+def _dpapi_encrypt_machine(data: bytes, *, flags: int = _CRYPTPROTECT_LOCAL_MACHINE) -> str:
     crypt32 = ctypes.windll.crypt32
     kernel32 = ctypes.windll.kernel32
     in_blob, _in_buffer = _blob_from_bytes(data)
@@ -122,7 +122,7 @@ def _dpapi_encrypt_machine(data: bytes) -> str:
         None,
         None,
         None,
-        _CRYPTPROTECT_LOCAL_MACHINE,
+        flags,
         ctypes.byref(out_blob),
     )
     if not ok:
@@ -134,7 +134,7 @@ def _dpapi_encrypt_machine(data: bytes) -> str:
     return base64.b64encode(encrypted).decode("ascii")
 
 
-def _dpapi_decrypt_machine(token: str) -> str | None:
+def _dpapi_decrypt_machine(token: str, *, flags: int = _CRYPTPROTECT_LOCAL_MACHINE) -> str | None:
     if not token:
         return None
     crypt32 = ctypes.windll.crypt32
@@ -148,7 +148,7 @@ def _dpapi_decrypt_machine(token: str) -> str | None:
         None,
         None,
         None,
-        _CRYPTPROTECT_LOCAL_MACHINE,
+        flags,
         ctypes.byref(out_blob),
     )
     if not ok:
@@ -279,38 +279,92 @@ def set_password(database: dict[str, Any], password: str) -> None:
         ) from (errors[0] if errors else None)
 
 
-def get_admin_password() -> str | None:
-    """Načte heslo administrátorského UI ze systémového trezoru."""
-    keyring, keyring_error = _keyring_module()
+def _user_admin_path() -> Path:
+    root = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
+    return root / "MailShip" / "admin.dpapi"
+
+
+def _read_user_admin_password() -> str | None:
+    if not _is_windows():
+        return None
+    path = _user_admin_path()
     try:
+        token = path.read_text(encoding="ascii")
+    except FileNotFoundError:
+        return None
+    password = _dpapi_decrypt_machine(token, flags=0)
+    if not password:
+        raise CredentialStoreError("Heslo nastavení nelze odemknout v tomto účtu Windows.")
+    return password
+
+
+def _write_user_admin_password(password: str) -> None:
+    if not _is_windows():
+        raise CredentialStoreError("Systémové úložiště hesel není dostupné.")
+    import tempfile
+    path = _user_admin_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    token = _dpapi_encrypt_machine(password.encode("utf-8"), flags=0)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="ascii", dir=path.parent, delete=False) as file:
+            temporary = Path(file.name)
+            file.write(token)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def get_admin_password() -> str | None:
+    """Read UI credentials without requiring access to machine-wide files."""
+    try:
+        fallback = _read_user_admin_password()
+        if fallback:
+            return fallback
+        keyring, _keyring_error = _keyring_module()
         password = keyring.get_password(SERVICE_NAME, ADMIN_ACCOUNT)
         if password:
             return password
         for legacy_service in LEGACY_SERVICE_NAMES:
             password = keyring.get_password(legacy_service, ADMIN_ACCOUNT)
             if password:
-                keyring.set_password(SERVICE_NAME, ADMIN_ACCOUNT, password)
+                # A failed migration must not prevent reading an existing password.
+                try:
+                    keyring.set_password(SERVICE_NAME, ADMIN_ACCOUNT, password)
+                except Exception:
+                    pass
                 return password
         return None
-    except keyring_error as exc:
+    except Exception as exc:
         raise CredentialStoreError(
-            "Heslo administrátora nelze načíst ze systémového úložiště."
+            "Heslo nastavení nelze načíst pro aktuální účet Windows. "
+            "Zkontrolujte přístup k uživatelskému úložišti hesel."
         ) from exc
 
 
 def set_admin_password(password: str) -> None:
-    """Uloží heslo administrátorského UI mimo config.json."""
+    """Save in the user's vault, or user-bound DPAPI under LOCALAPPDATA."""
     if not isinstance(password, str) or not password.strip():
         raise CredentialStoreError("Heslo administrátora nesmí být prázdné.")
     if len(password.strip()) < 4:
         raise CredentialStoreError("Heslo administrátora musí mít alespoň 4 znaky.")
-    keyring, keyring_error = _keyring_module()
     try:
+        if _user_admin_path().is_file() and _is_windows():
+            _write_user_admin_password(password.strip())
+            return
+        keyring, _keyring_error = _keyring_module()
         keyring.set_password(SERVICE_NAME, ADMIN_ACCOUNT, password.strip())
-    except keyring_error as exc:
-        raise CredentialStoreError(
-            "Heslo administrátora se nepodařilo uložit do systémového úložiště."
-        ) from exc
+    except Exception:
+        try:
+            _write_user_admin_password(password.strip())
+        except Exception as exc:
+            raise CredentialStoreError(
+                "Heslo nastavení se nepodařilo uložit v profilu uživatele. "
+                "Zkontrolujte oprávnění složky LOCALAPPDATA."
+            ) from exc
 
 
 def get_resend_api_key() -> str | None:
@@ -372,3 +426,4 @@ def write_config(path: Path, raw: dict[str, Any]) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
