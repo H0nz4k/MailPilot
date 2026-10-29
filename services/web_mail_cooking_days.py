@@ -7,6 +7,7 @@ N means not cooking. No weekday or public-holiday assumptions are made.
 from __future__ import annotations
 
 from contextlib import contextmanager, ExitStack
+from collections import Counter
 from services.web_meal_types import meal_filter_values
 from datetime import date
 from pathlib import Path
@@ -66,8 +67,8 @@ def cooking_day_lookup(
                         raise ValueError(
                             f"Pro {day.month:02d}/{day.year} neexistuje v public.varnedny "
                             f"kalendář typu služby {selected!r}. "
-                            "Otevřete odesílání a vyberte skutečný typ služby "
-                            "z databáze JídelnaSQL. Název se nikdy nedohaduje."
+                            "Doplňte kalendář tohoto měsíce v Jídelně nebo vyberte typ stravy, "
+                            "který pro tento měsíc existuje."
                         )
                     if len(rows) != 1:
                         raise ValueError(
@@ -170,8 +171,14 @@ def any_cooking_day_lookup(database):
                     )
                     rows = cursor.fetchall()
                     names = [row[0] for row in rows]
-                    if not rows or any(not name for name in names) or len(names) != len(set(names)):
-                        raise ValueError(f"Chybí nebo je duplicitní kalendář varných dnů pro {day.month:02d}/{day.year}.")
+                    if not rows:
+                        raise ValueError(f"V Jídelně chybí kalendář varných dnů pro {day.month:02d}/{day.year}. Doplňte jej v Jídelně.")
+                    if any(not name for name in names):
+                        raise ValueError(f"V Jídelně má kalendář pro {day.month:02d}/{day.year} prázdný typ stravy. Doplňte jej v Jídelně.")
+                    duplicates = {name: count for name, count in Counter(names).items() if count > 1}
+                    if duplicates:
+                        details = ", ".join(f"{name!r} (počet záznamů: {count})" for name, count in sorted(duplicates.items()))
+                        raise ValueError(f"V Jídelně je pro {day.month:02d}/{day.year} více záznamů stejného kalendáře: {details}. Opravte duplicitní data v Jídelně.")
                     if any(len(row) != 32 for row in rows):
                         raise ValueError("Tabulka varnedny nemá očekávané sloupce d01–d31.")
                     cache[key] = rows
@@ -208,3 +215,4 @@ def selected_cooking_day_lookup(database, meal_types):
             states = [check(day) for check in checks]
             return any(states)
         yield is_day
+

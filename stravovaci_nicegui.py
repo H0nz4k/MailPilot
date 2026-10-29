@@ -93,7 +93,7 @@ from services.config_io import (
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
 from services.web_branding import (
-    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION, version_caption,
+    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION, WEB_BUILD, version_caption,
 )
 from services.web_mail_settings import load_settings, settings_path
 from services.web_mail_smtp import smtp_send
@@ -2899,7 +2899,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="provozní log automatického exportu nebo uzávěrky",
     )
     parser.add_argument(
-        "--version", action="version", version=f"{APP_TITLE} {APP_VERSION}"
+        "--version", action="version", version=f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}"
     )
     args = parser.parse_args(remaining)
     args.uzaverka_current = period == CURRENT_CLOSING_PERIOD

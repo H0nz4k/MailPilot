@@ -64,6 +64,16 @@ echo "[3/4] Sestavuji bezobsluznou sluzbu pro NSSM..."
   "$WIN_ROOT\\web_mail_worker_main.py"
 
 cp "$ROOT/dist-web-worker/DataShip-Worker.exe" "$APP/"
+expected_build="$("$PY" -c 'from services.web_branding import WEB_BUILD; print(WEB_BUILD)')"
+for executable in DataShip.exe DataShip-Worker.exe; do
+  reported_version="$("$APP/$executable" --version)"
+  reported_version="${reported_version//$'\r'/}"
+  if [[ "$reported_version" != *" build $expected_build" ]]; then
+    echo "CHYBA: $executable nema ocekavane sestaveni $expected_build: $reported_version" >&2
+    exit 2
+  fi
+  echo "OVERENO: $executable: $reported_version"
+done
 cp "$ROOT/config.example.json" "$APP/config.example.json"
 if [[ -f "$PRESERVE/config.json" ]]; then
   cp "$PRESERVE/config.json" "$APP/config.json"

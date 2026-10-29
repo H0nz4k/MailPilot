@@ -1,6 +1,27 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.6.
+Verze 1.0.0-rc.10, sestavení 20261029.7.
+
+## Ověření skutečně spuštěné verze
+
+Ikony Windows jsou od sestavení 20261029.4, režim exportu PDF a velká tlačítka dní od 20261029.6. Pokud hlavička ukazuje 20261029.3, stále běží staré EXE. Aktualizace zdrojů sama běžící proces ani službu nevymění. Před sestavením zastavte službu a zavřete aplikaci včetně starých záložek. Po sestavení spusťte EXE z `dist-web/DataShip` a zkontrolujte sestavení v hlavičce.
+
+Od 20261029.7 vypisují obě EXE přes `--version` také číslo sestavení. Build oba programy zkontroluje a při nesouladu skončí chybou. V Git Bash lze ověřit:
+
+```bash
+./dist-web/DataShip/DataShip.exe --version
+./dist-web/DataShip/DataShip-Worker.exe --version
+```
+
+Heartbeat nového workeru obsahuje jeho sestavení. GUI upozorní na starý nebo neznámý worker místo běžného potvrzení čekání. Technický log workeru uvádí sestavení, PID, cestu konfigurace a u každé splatné úlohy její ID, název, plánovaný čas a čas kontroly.
+
+Každá úloha má vlastní čas. Worker termíny standardně kontroluje po 30 sekundách a úlohy zpracovává postupně. Po pozdním spuštění dohání již splatné úlohy; při delším exportu může být další úloha opožděná. Nejde o záruku odeslání na přesnou sekundu. Změna sestavení tento dosavadní režim dohánění sama nemění.
+
+## Co znamená chyba kalendáře
+
+Více typů stravy, například Oběd a Večeře, není duplicita. Duplicitní kalendář znamená více řádků pro stejný rok, měsíc a stejný typ služby. Starší společná hláška „Chybí nebo je duplicitní…“ mohla znamenat i úplnou absenci dat pro další měsíc. Nově se chybějící kalendář, prázdný typ služby a skutečné duplicity vypisují odděleně; duplicita uvádí typ a počet záznamů.
+
+Pokud při hledání následujícího varného dne dojde aplikace do listopadu a listopadový kalendář chybí, datum se neodhaduje a úloha e-mail neodešle. Je nutné doplnit varné dny daného měsíce v Jídelně nebo vybrat existující správný kalendář.
 
 ## Pouze exportovat a uložit PDF
 

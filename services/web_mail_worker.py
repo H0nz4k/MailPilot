@@ -24,7 +24,7 @@ from services.jidelnasql_warning import (
 )
 from services.web_mail_task_store import load_tasks, task_file
 from services.web_mail_settings import load_settings, settings_path
-from services.web_branding import WEB_VERSION
+from services.web_branding import WEB_VERSION, WEB_BUILD
 from services.web_mail_smtp import smtp_send
 from services.jidelnasql_warning import JidelnaWarningSettings
 from services.web_mail_cooking_days import resolve_task_date, report_is_cooking_day
@@ -159,6 +159,8 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
         if (now.hour, now.minute) < (hh, mm):
             continue
         try:
+            LOG.info("Task due id=%s name=%s scheduled=%s checked=%s build=%s",
+                     task.id, task.name, task.send_time, now.isoformat(timespec="seconds"), WEB_BUILD)
             runtime_status(config_path, "running", task.id)
             dispatch(config_path, task, now.date())
         except Exception as exc:
@@ -193,7 +195,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", action="version", version=f"DataShip Worker {WEB_VERSION}")
+    parser.add_argument("--version", action="version", version=f"DataShip Worker {WEB_VERSION} build {WEB_BUILD}")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--interval", type=int, default=30)
     args = parser.parse_args()
@@ -212,7 +214,7 @@ def main() -> int:
     )
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    LOG.info("DataShip scheduler started: %s", config_path)
+    LOG.info("DataShip scheduler started: %s build=%s pid=%s", config_path, WEB_BUILD, os.getpid())
     record_event(config_path.parent, "started", "Plánovač byl spuštěn.")
     heartbeat_stop = threading.Event()
     def heartbeat():

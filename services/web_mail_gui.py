@@ -124,7 +124,7 @@ def build_mail_tasks_panel(
                         ui.label(
                             f"Příští spuštění: {upcoming:%d.%m.%Y %H:%M}; "
                             f"den přehledu nelze určit: {exc}"
-                        )
+                        ).classes("text-negative").props('role="alert"')
                 event = latest.get(task.id)
                 if event:
                     with ui.row().classes("w-full items-center gap-2").props('role="status"'):

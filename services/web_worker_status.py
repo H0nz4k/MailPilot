@@ -6,6 +6,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from services.web_branding import WEB_BUILD
 
 
 def write_runtime(directory, *, phase="waiting", task_id=None):
@@ -17,7 +18,7 @@ def write_runtime(directory, *, phase="waiting", task_id=None):
                                          prefix=".worker-runtime-", delete=False) as stream:
             temporary = Path(stream.name)
             json.dump({"heartbeat": datetime.now().isoformat(), "phase": phase,
-                       "task_id": task_id}, stream)
+                       "task_id": task_id, "build": WEB_BUILD, "pid": os.getpid()}, stream)
         os.replace(temporary, path)
     finally:
         if temporary:
@@ -35,6 +36,9 @@ def observed_status(directory, task=None, *, now=None):
             return "Běh plánovače není potvrzen"
         if raw["phase"] == "stopped":
             return "Plánovač je zastaven"
+        if raw["phase"] in ("running", "waiting") and raw.get("build") != WEB_BUILD:
+            build = raw.get("build") or "nezjištěné"
+            return f"Plánovač má jiné sestavení ({build}); aktualizujte a restartujte worker. Aplikace používá {WEB_BUILD}."
         if raw["phase"] == "running" and task is not None and raw.get("task_id") == task.id:
             return "Právě zpracovává přehled"
         if raw["phase"] in ("running", "waiting"):
@@ -42,3 +46,4 @@ def observed_status(directory, task=None, *, now=None):
     except (OSError, ValueError, KeyError, TypeError):
         pass
     return "Běh plánovače není potvrzen"
+

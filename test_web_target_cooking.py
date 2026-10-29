@@ -64,7 +64,7 @@ class TargetCookingTests(unittest.TestCase):
         tree = ast.parse((ROOT / 'services/web_mail_worker.py').read_text(encoding='utf-8'))
         wanted = {'dispatch', 'tick'}
         body = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
-        ns = {'Path': Path, 'date': date, 'datetime': datetime,
+        ns = {'Path': Path, 'date': date, 'datetime': datetime, 'WEB_BUILD': 'test',
               'resolve_task_date': Mock(return_value=date(2026, 10, 28)),
               'report_is_cooking_day': Mock(return_value=False),
               'deliver_daily': Mock(), 'record_event': Mock(), 'LOG': Mock(),
@@ -113,4 +113,5 @@ class TargetCookingTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 
