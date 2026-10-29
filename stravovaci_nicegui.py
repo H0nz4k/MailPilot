@@ -2900,6 +2900,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--version", action="version", version=f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}"
     )
+    export = parser.add_mutually_exclusive_group()
+    export.add_argument("--export-report", metavar="NÁZEV", help="bez GUI uložit PDF vybraného uloženého přehledu")
+    export.add_argument("--export-report-id", metavar="ID", help="bez GUI uložit PDF přehledu podle jeho jednoznačného ID")
+    export_day = parser.add_mutually_exclusive_group()
+    export_day.add_argument("--date", dest="report_date", metavar="RRRR-MM-DD", help="datum exportu uloženého přehledu; výchozí je dnešek")
+    export_day.add_argument("--days-ahead", type=int, metavar="N", help="export přehledu za N kalendářních dní (0–370)")
+    parser.add_argument("--output", dest="export_output", type=Path, metavar="SOUBOR.pdf", help="cílové PDF; relativní cesta platí vůči složce konfigurace")
+    parser.add_argument("--open-pdf", action="store_true", help="po exportu otevřít PDF ve výchozím prohlížeči PDF")
     parser.add_argument("--version-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(remaining)
     args.uzaverka_current = period == CURRENT_CLOSING_PERIOD
@@ -2908,6 +2916,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args.z17_year = z17_year
     args.z17 = z17_year is not None
     args.automatic = bool(args.automatic or args.poctyemailem)
+    saved_export = args.export_report is not None or args.export_report_id is not None
+    if saved_export and (args.browser or args.native or args.automatic or args.uzaverka or args.z17):
+        parser.error("Export uloženého přehledu nelze kombinovat s GUI, odesíláním ani jinou sestavou.")
+    if not saved_export and any((args.report_date is not None, args.days_ahead is not None,
+                                 args.export_output is not None, args.open_pdf)):
+        parser.error("Volby --date, --days-ahead, --output a --open-pdf patří k --export-report nebo --export-report-id.")
     return args
 
 
@@ -2925,6 +2939,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Verzi nelze zapsat: {exc}", file=sys.stderr)
             return 2
         return 0
+    if args.export_report is not None or args.export_report_id is not None:
+        from services.web_saved_report_cli import run_saved_report_export
+        return run_saved_report_export(args)
     if args.automatic and args.uzaverka:
         print(
             "Zvolte jen --poctyemailem / --automatic, nebo jen přepínač uzávěrky.",

@@ -42,6 +42,7 @@ echo "[2/5] Sestavuji webovou aplikaci pro prohlizec..."
   --collect-submodules psycopg \
   --hidden-import services.web_mail_gui \
   --hidden-import services.web_mail_settings_gui \
+  --hidden-import services.web_saved_report_cli \
   --hidden-import services.web_mail_cooking_days \
   --add-data "$WIN_ROOT\\assets;assets" \
   --add-data "$WIN_ROOT\\config.example.json;." \

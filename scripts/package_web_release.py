@@ -16,7 +16,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from services.web_branding import WEB_VERSION
+from services.web_branding import WEB_VERSION, WEB_BUILD
 
 NSSM_VERSION = '2.24-101-g897c7ad'
 NSSM_URL = f'https://nssm.cc/ci/nssm-{NSSM_VERSION}.zip'
@@ -139,7 +139,9 @@ def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Pa
         shutil.copy2(sample, stage / 'config.json')
         shutil.copy2(ROOT / 'docs/RELEASE_TEST_CHECKLIST.md', stage / 'KONTROLA_FUNKCI.md')
         shutil.copy2(ROOT / 'docs/RELEASE_WINDOWS.md', stage / 'CTETE_ME.md')
-        metadata = {'product': 'DataShip', 'version': WEB_VERSION, 'commit': commit,
+        shutil.copy2(ROOT / 'docs/CLI_EXPORT_PREHLEDU.md', stage / 'EXPORT_PREHLEDU.md')
+        shutil.copy2(ROOT / 'docs/releases' / f'{WEB_VERSION}.md', stage / 'NOVINKY.md')
+        metadata = {'product': 'DataShip', 'version': WEB_VERSION, 'build': WEB_BUILD, 'commit': commit,
                     'platform': 'windows-x64', 'python': sys.version.split()[0]}
         (stage / 'BUILD_INFO.json').write_text(json.dumps(metadata, indent=2)+'\n', encoding='utf-8')
         make_zip(stage, paths[0])

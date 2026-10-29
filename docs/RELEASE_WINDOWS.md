@@ -1,101 +1,75 @@
-# DataShip – stažení, sestavení a vydání pro Windows
+# DataShip – Windows build a vydání
 
-Aktuální testovací verze: **1.0.0-rc.4**. Původní Qt MailPilot zůstává ve verzi 12.8.
+Aktuální testovací verze: **1.0.0-rc.11**, sestavení **20261029.12**. Původní Qt MailPilot zůstává samostatnou aplikací.
 
-## Hotové soubory
+## Stažení a spuštění
 
-Otevři https://github.com/H0nz4k/MailPilot/releases (pro soukromý repozitář musíš být přihlášený).
+Soubory patří do [GitHub Releases](https://github.com/H0nz4k/MailPilot/releases), nikoli mezi zdrojové soubory repozitáře:
 
-- `DataShip-1.0.0-rc.4-Windows-x64.zip`: celá aplikace včetně `DataShip.exe`, složky `_internal` a `DataShip-Worker.exe`.
-- `DataShip-1.0.0-rc.4-Windows-x64-NSSM.zip`: totéž plus 64bitový NSSM a skript pro instalaci služby.
-- `SHA256SUMS.txt`: kontrolní součty obou ZIPů.
+- `DataShip-1.0.0-rc.11-Windows-x64.zip` – celé GUI, worker a potřebné knihovny.
+- `DataShip-1.0.0-rc.11-Windows-x64-NSSM.zip` – navíc NSSM pro službu Windows.
+- `SHA256SUMS.txt` – kontrolní součty ZIPů.
 
-Rozbal celý ZIP do stálé zapisovatelné složky, například `C:\DataShip`. Samotný `DataShip.exe` bez `_internal` nefunguje. Spusť `START_WEB.cmd`, nastav databázi a ověř funkce podle `KONTROLA_FUNKCI.md`. Nový balíček neobsahuje tvoje hesla, příjemce, uložené přehledy ani naplánovaná odesílání. `BUILD_INFO.json` zaznamenává verzi a zdrojový commit.
+Rozbalte celý ZIP do stálé zapisovatelné složky, například `C:\DataShip`, a spusťte přímo **DataShip.exe**. Otevře web v prohlížeči bez černého konzolového okna. VBS ani Windows Script Host nejsou potřeba. Samotné EXE bez složky `_internal` nefunguje.
 
-Při aktualizaci nejprve zastav GUI a existující službu. Zálohuj celou původní instalaci. Zachovej své `config.json`, `daily_reports.json`, `web_mail_settings.json`, `web_mail_tasks.json`, `web_mail_worker_state.json`, `.env` a `planovac.json`; čistým ukázkovým `config.json` je nepřepiš. Přihlašovací údaje uložené ve Windows nejsou přenosnou součástí ZIPu. Pro vlastní kalendáře odesílání aktualizuj GUI i `DataShip-Worker.exe` a znovu spusť dosavadní službu. Při testu používej jednu instalaci a jeden worker, aby se zprávy neposílaly dvakrát.
+Distribuce neobsahuje uživatelská hesla, API klíč, příjemce, úlohy ani uložené přehledy. `BUILD_INFO.json` zaznamenává verzi, sestavení a zdrojový commit.
 
-## Build u tebe v Git Bash
+## Sestavení v Git Bash
 
-Zavři spuštěnou aplikaci. V kořeni repozitáře:
-
-```bash
-git fetch origin &&
-git switch feat/dataship-design-integration &&
-git pull --ff-only &&
-bash scripts/test_windows.sh &&
-bash scripts/build_web_windows.sh &&
-./.venv-web/Scripts/python.exe scripts/smoke_windows_build.py &&
-./.venv-web/Scripts/python.exe scripts/package_web_release.py
-```
-
-Potřebuješ Windows 10/11 x64, Git Bash a Python 3.12 x64 včetně launcheru `py`. Testy DataShipu a společných výpočtů mají vlastní `.venv-test`, build používá `.venv-web`. Sada zahrnuje všechna webová a backendová testovací témata; dva moduly widgetových testů původního Qt GUI 12.8 do vydání DataShipu nepatří. Testy a smoke kontrola neposílají skutečné e-maily. Smoke kontrola spustí obě vytvořená EXE s oddělenou dočasnou konfigurací a bez úloh.
-
-Výstup buildu je `dist-web/DataShip/`, distribuční ZIPy jsou v `release-dist/1.0.0-rc.4/`. Při opakovaném balení stejné verze použij nový prázdný výstupní adresář pomocí `--output`; existující balíčky se samy nepřepisují.
-
-## Co je Release a jak ho vytvořit
-
-Commit ukládá změny zdrojů. Tag označuje konkrétní verzi zdrojů. Release je stránka k danému tagu s popisem a soubory ke stažení. EXE a velké ZIPy patří mezi přílohy Release, ne mezi soubory zdrojového repozitáře.
-
-Workflow **Build DataShip Web (Windows)** ve stránce Actions při změnách větve `feat/dataship-design-integration` spustí testy, sestaví EXE, ověří jejich start a vytvoří oba ZIPy. Úspěšný běh uloží soubory jako artefakt na 30 dní. U první verze vytvoří také koncept Release `dataship-v1.0.0-rc.4`, navázaný na přesný sestavený commit. Již existující Release stejné verze nepřepíše.
-
-Koncept není vydaná verze. Po úspěšném průchodu kontrolním seznamem otevři **Releases → koncept DataShip 1.0.0-rc.4 → Edit**. Zkontroluj přílohy a ponech zaškrtnuté **Set as a pre-release**. Tlačítkem **Publish release** zveřejníš testovací vydání. U soukromého repozitáře ho uvidí jen lidé s přístupem. Automatické položky „Source code“ jsou jen zdroje; uživatelé aplikace stahují náš ZIP v Assets.
-
-Pokud chceš nahrát vlastní lokální build, otevři **Releases → Draft a new release**, vytvoř tag `dataship-v1.0.0-rc.4` na skutečném sestaveném commitu, vlož obsah `docs/releases/1.0.0-rc.4.md` a přetáhni oba ZIPy i `SHA256SUMS.txt` z `release-dist`. Ulož nejprve jako koncept. Pokud už koncept automaticky vznikl, uprav ten existující; nevytvářej druhé vydání stejné verze.
-
-Pro další verzi změň `VERSION` i `WEB_VERSION` v `services/web_branding.py` a přidej příslušné poznámky v `docs/releases/`. Test kontroluje shodu čísel. Nová verze dostane nový tag a nové přílohy; vydanou verzi zpětně nepřepisuj.
-
-## První spuštění
-
-1. Rozbal celý balíček s NSSM do stálé složky, například `C:\DataShip`.
-2. Spusť `DataShip.exe`. Pokud aplikace ještě není připojená, požádá nejprve o vytvoření nebo zadání hesla správce DataShipu.
-3. Potom se otevře **Připojení k Jídelně**. Vyplň server, port, název databáze, uživatele a **heslo k databázi**. Je jiné než heslo správce DataShipu.
-4. Klikni **Ověřit a pokračovat**. Při chybě zůstane formulář otevřený s českým vysvětlením. Po úspěchu se otevře denní přehled. Při dalším spuštění se uložené spojení ověří automaticky.
-5. V Nastavení zkontroluj povolené kategorie a e-mailové údaje, vytvoř přehled a odešli zkušební PDF na vlastní adresu.
-
-## NSSM až po ručním ověření
-
-Použij ZIP s NSSM a stálou cestu. V **Nastavení → Nastavení odesílání** se cesta předvyplní jako `<složka s DataShip.exe>\nssm\win64\nssm.exe`, i když je konfigurační soubor jinde nebo byla dříve uložena prázdná cesta. Cesta musí zahrnovat i samotný soubor `nssm.exe`. Zavři aplikaci a spusť **DataShip.exe pravým tlačítkem → Spustit jako správce**. Odemkni Nastavení a otevři Nastavení odesílání. Klikni **Instalovat službu**, potom **Spustit** a **Stav**. Úspěšná instalace službu sama nespouští. Tlačítka pro změny služby vyžadují práva správce Windows.
-
-Alternativně otevři Git Bash **jako správce** v rozbalené složce:
+Potřebujete Windows 10/11 x64, Git Bash a Python 3.12 x64 včetně launcheru `py`. Před buildem zastavte službu a ukončete GUI. Z kořene repozitáře:
 
 ```bash
-bash INSTALOVAT_SLUZBU.sh
+(
+  set -e
+  git switch feat/dataship-report-wizard
+  git pull --ff-only origin feat/dataship-report-wizard
+  bash scripts/build_web_windows.sh
+  ./.venv-web/Scripts/python.exe scripts/package_web_release.py
+)
 ```
 
-Heslo do nastavení DataShipu není oprávnění správce Windows. Samotné zadání tohoto hesla k instalaci nestačí.
+EXE jsou v `dist-web/DataShip/`, ZIPy v `release-dist/1.0.0-rc.11/`. Build ověřuje oba programy: windowed GUI pomocí výstupu `--version-file`, konzolový worker přes `--version`. Sestavuje do pracovní složky a původní instalaci ponechá v záloze `DataShip.backup-*`.
 
-Skript nainstaluje `DataShipScheduler` pro `DataShip-Worker.exe`. Existující službu nepřepíše a worker nespustí. V `nssm edit DataShipScheduler` nastav účet služby, který má přístup k databázi a potřebným přihlašovacím údajům. Po dokončení kontrol:
+Existující balíčky se nepřepisují. Při opakovaném balení použijte například `--output release-dist/rc11-build20261029.12`.
+
+Doplňková kontrola skutečných EXE s oddělenou dočasnou konfigurací a bez e-mailových úloh:
 
 ```bash
-./nssm/win64/nssm.exe start DataShipScheduler
-./nssm/win64/nssm.exe status DataShipScheduler
+./.venv-web/Scripts/python.exe scripts/smoke_windows_build.py
 ```
 
-Zastavení:
+Volba `--service` navíc ověřuje dočasnou NSSM službu a vyžaduje Git Bash jako správce. Obyčejné otevření GUI ani export PDF práva správce nevyžadují.
+
+## GitHub Releases
+
+V [novém vydání](https://github.com/H0nz4k/MailPilot/releases/new) vytvořte tag `dataship-v1.0.0-rc.11` na skutečně sestaveném commitu větve `feat/dataship-report-wizard`. Název: **DataShip 1.0.0-rc.11**. Vložte `docs/releases/1.0.0-rc.11.md`, nahrajte oba ZIPy a kontrolní součty, označte **pre-release** a po kontrole publikujte. Existující vydání stejné verze zpětně nepřepisujte.
+
+Workflow **Build DataShip Web (Windows)** lze také ručně spustit v Actions pro tuto větev. Po úspěšném sestavení a testu EXE uloží ZIPy jako artefakt na 30 dní a připraví **koncept rc.11** s přílohami na přesném sestaveném commitu. Veřejné vydání se samo nepublikuje. Existující release ani odlišný tag se nepřepisují. Push změn této pracovní větve sám tento Windows build nespouští.
+
+## První nastavení a služba
+
+V Administraci se zadává **heslo administrace**. V nastavení databáze pak samostatné **heslo k databázi**; musí být uložené pro účet Windows, který exporty provádí. Resend API klíč patří do `.env` vedle EXE, pole po uložení zůstává prázdné a jeho načtení potvrzuje zelený stav.
+
+Po ručním ověření databáze, PDF a e-mailu spusťte GUI jako správce Windows a v **Nastavení → Služba a odesílání** nainstalujte NSSM službu. Cesta musí končit `nssm\win64\nssm.exe`. Výchozí služba je **DataShipScheduler** a používá **DataShip-Worker.exe** ze stejné instalace.
+
+Uložení nebo zapnutí aktivní úlohy ověří službu a případně se ji pokusí spustit. Chybějící práva, služba nebo chybná cesta se ohlásí viditelným upozorněním; uložená úloha se neztratí. Běžící služba a skutečný heartbeat workeru se zobrazují odděleně. Službu lze také spustit a ověřit přímo v nastavení.
+
+Worker může pracovat se zavřeným GUI, ale počítač musí zůstat zapnutý a neuspaný. Úlohy se kontrolují přibližně každých 30 sekund a zpracovávají postupně; po pozdním startu se mohou dohnat splatné úlohy. Varné dny vyžadují skutečné vyplněné kalendáře Jídelny SQL.
+
+## Jednorázový export bez GUI
 
 ```bash
-./nssm/win64/nssm.exe stop DataShipScheduler
+./DataShip.exe --export-report "mujprehled" --open-pdf
 ```
 
-Služba po instalaci používá účet LocalSystem, pokud ho nezměníš ve vlastnostech služby. Pro přístup k síťovým souborům může být potřeba vlastní účet Windows.
+Příkaz lze dát do cíle zástupce na ploše. Použije uložený obsah a dnešní datum, vytvoří PDF, případně je otevře. Web, e-mail ani službu nespouští. Podporuje vlastní datum, počet dní dopředu, cestu PDF a jednoznačné ID přehledu. Podrobnosti jsou v přibaleném `EXPORT_PREHLEDU.md` nebo [návodu v repozitáři](CLI_EXPORT_PREHLEDU.md).
 
-Po restartu Windows ověř stav a jediný běžící worker. Provozní log je `logy/web_mail_worker.log`. Přibalený NSSM 2.24-101 pochází z https://nssm.cc/download, je public domain a při balení se kontroluje jeho SHA-256. Zdroj a kontrolní součet jsou v `nssm/SOURCE.txt`.
+## Aktualizace a diagnostika
 
-## Kalendář pro každé odesílání
+Před výměnou souborů zastavte službu a ukončete příslušný `DataShip.exe` ve Správci úloh; zavření záložky webový proces na pozadí neukončuje. Zálohujte celou instalaci. Zachovejte vlastní `config.json`, `daily_reports.json`, `web_mail_settings.json`, `web_mail_tasks.json`, `web_mail_worker_state.json`, `.env` a `planovac.json`. Nepřepište je čistým vzorem. Přihlašovací údaje Windows nejsou přenosnou součástí ZIPu. Po aktualizaci GUI i workeru znovu spusťte službu.
 
-V **Odesílání → Upravit / Nové odesílání** vyber **Za který den posílat? → Následující varný den**. Zobrazí se **Kalendář varných dnů** s nabídkou typů stravy skutečně nastavených v Jídelně pro letošní nebo příští rok. Například ranní odesílání může používat Oběd a jiné Večeři. Tato volba určuje datum; kategorie a obsah PDF stále určuje vybraný přehled. Kalendář je při novém odesílání potřeba vybrat výslovně.
+Po přesunu zastavené instalace použijte **Opravit cesty služby**. Nevytvářejte další kopii služby pro stejnou instalaci. Pro síťové složky musí mít účet služby příslušný přístup; výchozí LocalSystem nemusí mít vaše uživatelská oprávnění.
 
-Starší odesílání bez vlastního kalendáře dál používá dosavadní společné nastavení. Při jeho úpravě se kalendář předvyplní a po uložení zůstane přiřazený pouze tomuto odesílání. Původní společná volba je v rozbalovací sekci **Kalendář starších odesílání**. Chybějící kalendář nebo neúplná data se nenahrazují jiným typem stravy.
+Logy: `logy/dataship_web.log` pro GUI bez konzole, `logy/web_mail_worker.log` pro plánovač a `logy/automaticky_export.log` pro export přes parametr. Výsledky jsou také v sekci Logy aplikace.
 
-## Od počtů k odesílání
-
-1. V **Přehledech** zvolte den, stravu a kategorie. Jde o náhled; uložený přehled se prohlížením nemění.
-2. Pro vlastní výběr zvolte **Uložit výběr…**, nebo rovnou **Nastavit odesílání** — aplikace nejprve nabídne uložení a pojmenování.
-3. Do **Odesílání** se přenese právě tento přehled. Doplňte adresy, čas a volbu **Za který den posílat?**. Název odesílání se vyplní sám.
-4. **Uložit** uloží pravidelné odesílání. Samo nic neodešle; plán provádí spuštěný worker v nastaveném čase.
-
-Datum náhledu se pravidelnému odesílání nepředává. **Uložit změny…** po úpravě existujícího přehledu změní i obsah jeho budoucích odesílání. **Uložit jako nový…** vytvoří samostatný přehled. **Odeslat jednou…** je dosavadní ruční odeslání s potvrzením příjemců.
-
-## Záložní zdroj NSSM při sestavení
-
-Po třech neúspěšných pokusech o stažení z oficiálního serveru build načte náš konkrétní balíček rc.3 přes GitHub CLI. Celý ZIP musí odpovídat pevně zadanému SHA-256. Převezme se pouze NSSM a jeho dokumentace; starší GUI, worker ani konfigurace se nekopírují. V GitHub Actions se používá token repozitáře, při lokálním sestavení je pro tuto zálohu potřeba přihlášené `gh`. Alternativně lze již stažený ověřený NSSM ZIP nebo náš NSSM balíček rc.3 předat pomocí `--nssm-archive`. Zdroj se zaznamená v `nssm/SOURCE.txt`.
+NSSM se bere z oficiálního serveru a kontroluje pevným SHA-256. Při výpadku lze použít ověřenou kopii z předchozího vydání přes přihlášené GitHub CLI; zdroj je zaznamenaný v `nssm/SOURCE.txt`.

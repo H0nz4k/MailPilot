@@ -1,6 +1,6 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.11.
+Verze 1.0.0-rc.11, sestavení 20261029.12.
 
 ## Dvě oddělená hesla
 
@@ -150,3 +150,10 @@ Spouštějte přímo `DataShip.exe` dvojklikem nebo zástupcem na ploše. GUI se
 Místní webový server běží na pozadí. Zavření záložky jej neukončí; opakované spuštění může otevřít další proces. V případě potřeby lze ukončit příslušný `DataShip.exe` ve Správci úloh. Samostatný `DataShip-Worker.exe` běží přes NSSM a plánované úlohy na otevřeném webu nezávisí. Worker zůstává konzolové EXE vhodné pro NSSM a příkazovou řádku; pro běžné otevření aplikace jej nespouštějte ručně.
 
 Při běhu GUI bez konzole se standardní diagnostický výstup ukládá do `logy/dataship_web.log` vedle EXE. Pokud složka není zapisovatelná, aplikace se kvůli samotnému logu nezablokuje. Ověření sestavení GUI před nasazením používá `--version-file` a zkontroluje soubor i návratový kód; worker se ověřuje přes `--version`. Tato změna vyžaduje nový Windows build. Nativní spuštění windowed EXE zde na Windows ověřené nebylo.
+
+
+### Jednorázový export uloženého přehledu bez GUI (rc.11)
+
+`DataShip.exe --export-report "mujprehled"` vyhledá uložený přehled v `daily_reports.json`, použije dnešní datum a vytvoří PDF v podsložce `exporty` vedle konfigurace. Neotevírá web, nic neodesílá a službu nespouští. Podporuje `--date`, `--days-ahead`, `--output`, `--open-pdf` a místo názvu také `--export-report-id`. Názvy s mezerami se zadávají v uvozovkách; duplicitní názvy se neodhadují. Aktuálně povolené kategorie a uložené nastavení PDF se ověřují stejně jako u workeru. Při chybě tvorby či nahrazení zůstává předchozí PDF zachované. Návratové kódy a návod pro zástupce jsou v [CLI_EXPORT_PREHLEDU.md](CLI_EXPORT_PREHLEDU.md).
+
+Verze je sjednocená na `1.0.0-rc.11` v `VERSION`, hlavičce GUI, workeru a balení. `BUILD_INFO.json` obsahuje i číslo sestavení. Kontrola skutečných EXE před balením podporuje windowed GUI. Ručně spuštěný Windows workflow připraví pro rc.11 koncept Release s ověřenými balíčky; publikování zůstává samostatným krokem.
