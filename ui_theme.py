@@ -643,9 +643,9 @@ def appearance_css_vars(appearance: dict[str, Any]) -> dict[str, str]:
             "--app-text": f"{UI_TEXT_SIZE_PX['text'][peeked['text']]}px",
             "--app-heading": f"{UI_TEXT_SIZE_PX['nadpis'][peeked['nadpis']]}px",
             "--app-help": f"{UI_TEXT_SIZE_PX['popis'][peeked['popis']]}px",
-            "--app-weight-heading": "700" if peeked["tucne_nadpisy"] else "650",
-            "--app-weight-text": "700" if peeked["tucny_text"] else "400",
-            "--app-weight-help": "700" if peeked["tucne_popisy"] else "400",
+            "--app-weight-heading": "600" if peeked["tucne_nadpisy"] else "400",
+            "--app-weight-text": "600" if peeked["tucny_text"] else "400",
+            "--app-weight-help": "600" if peeked["tucne_popisy"] else "400",
             "--app-line": UI_LINE_HEIGHT[peeked["radkovani"]],
             "--app-zoom": f"{peeked['zoom'] / 100:.2f}",
             "--app-gap": f"{space['gap']}px",
@@ -816,7 +816,7 @@ _CSS_TYPOGRAPHY = """
 .app-title {
     color: var(--app-ink);
     font-size: calc(var(--app-heading) * 1.05);
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1.1;
     letter-spacing: -0.01em;
 }
@@ -1170,7 +1170,7 @@ _CSS_COMPONENTS = """
     padding: 2px 8px;
     border-radius: 999px;
     font-size: var(--app-help);
-    font-weight: 650;
+    font-weight: 600;
     white-space: nowrap;
     border: 1px solid transparent;
 }
@@ -1209,7 +1209,7 @@ _CSS_COMPONENTS = """
 .connection-name {
     color: var(--app-ink);
     font-size: var(--app-text);
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.2;
 }
 
@@ -1291,7 +1291,7 @@ html.overview-on .overview-row {
 .stat-card-value {
     color: var(--app-ink);
     font-size: var(--app-text);
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1333,7 +1333,7 @@ html.layout-dashboard .action-bar {
     background: var(--app-primary-soft);
     color: var(--app-tab-active);
     font-size: var(--app-help);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .chip-row {
@@ -1531,4 +1531,5 @@ UI_CSS = "\n".join(
         _CSS_LAYOUTS,
     )
 )
+
 

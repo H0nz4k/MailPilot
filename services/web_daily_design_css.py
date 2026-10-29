@@ -45,7 +45,7 @@ html.theme-tmave .dataship-ui {
     width: 36px; height: 36px; color: var(--ds-on-primary);
     background: var(--app-primary); border-radius: 6px;
 }
-.dataship-ui .app-title { font-size: 26px; font-weight: 700; }
+.dataship-ui .app-title { font-size: 26px; font-weight: 600; }
 .dataship-ui .db-chip { padding: 0; background: transparent; border: 0; flex-wrap: wrap; gap: 5px; }
 .dataship-ui .connection-caption { display: none; }
 .dataship-ui .connection-name { font-size: var(--app-help); white-space: normal; overflow-wrap: anywhere; }
@@ -266,7 +266,7 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 .ds-wizard-intro { color: var(--app-muted); line-height: 1.6; margin-bottom: 12px; }
 .ds-wizard-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 .ds-wizard-indicator { padding: 14px 12px; gap: 10px; border: 1px solid var(--app-border); border-radius: 12px; margin: 0; background: var(--app-surface); color: var(--app-muted); }
-.ds-wizard-number { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; border: 1px solid var(--app-border); font-size: 16px; font-weight: 700; background: var(--app-block); }
+.ds-wizard-number { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; border: 1px solid var(--app-border); font-size: 16px; font-weight: 600; background: var(--app-block); }
 .ds-wizard-step-title { font-size: max(16px, var(--app-help)); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .ds-wizard-current { border: 2px solid var(--app-primary); background: var(--app-primary-soft); color: var(--app-primary); padding: 13px 11px; }
 .ds-wizard-current .ds-wizard-number { background: var(--app-primary); color: var(--ds-on-primary); border-color: var(--app-primary); }
@@ -296,4 +296,56 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
     .ds-wizard-actions .q-btn, .ds-wizard-actions .q-btn.bg-primary { width: 100%; min-width: 0; }
     .ds-wizard-preview { padding: 14px; }
 }
+
+/* Three type roles, one family; icon ligatures keep their own icon font. */
+body, .dataship-ui, .q-dialog, .q-menu {
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+.q-field, .q-field__native, .q-field__input, .q-btn, .q-tab__label, .q-item__label {
+    font-family: inherit;
+}
+.dataship-ui .app-title, .dataship-ui .ds-page-title, .ds-dialog-title,
+.ds-mail-task .ds-task-title, .dataship-ui .ds-summary-total {
+    font-size: var(--app-heading); font-weight: var(--app-weight-heading);
+}
+.dataship-ui .q-btn, .ds-mail-dialog .q-btn, .dataship-ui .app-nav .q-tab__label {
+    font-size: var(--app-text); font-weight: 600;
+}
+.ds-wizard-number, .ds-wizard-step-title, .ds-wizard-context {
+    font-size: var(--app-help); font-weight: 600;
+}
+.ds-wizard-context { font-weight: var(--app-weight-help); }
+.ds-summary-name, .ds-wizard-content .q-radio__label { font-weight: 600; }
+.q-field--dense .q-field__control, .q-field__control {
+    min-height: max(60px, var(--app-field-min));
+}
+.q-field--dense .q-field__marginal, .q-field__marginal { height: 60px; }
+.q-field--labeled.q-field--float .q-field__label {
+    top: 5px; transform: none; font-size: var(--app-help); line-height: 1.2;
+}
+.q-field--labeled.q-field--float .q-field__native {
+    padding-top: 26px; padding-bottom: 6px;
+}
+.q-select__dropdown-icon, .q-expansion-item__toggle-icon {
+    font-size: 28px; width: 44px; min-height: 44px;
+    color: var(--app-primary); border-radius: 8px;
+    background: var(--app-primary-soft);
+}
+.q-menu .q-item { min-height: 48px; }
+.ds-day-stepper { gap: 8px; }
+.ds-day-stepper > .q-btn { flex: 0 0 48px; width: 48px; min-height: 48px; }
+.ds-day-stepper > .q-btn .q-icon { font-size: 26px; }
+.ds-stepper-input input[type=number] { appearance: textfield; -moz-appearance: textfield; }
+.ds-stepper-input input::-webkit-inner-spin-button,
+.ds-stepper-input input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ds-output-choice { width: 100%; padding: 8px 12px; border: 1px solid var(--app-border);
+    border-radius: 10px; background: var(--app-primary-soft); }
+.ds-output-choice .q-checkbox__label { font-weight: 600; }
+.ds-output-path { gap: 10px; }
+.ds-output-path .q-btn { min-height: 48px; }
+@media(max-width: 600px) {
+    .ds-output-path { flex-wrap: wrap !important; }
+    .ds-output-path > .q-field { flex-basis: 100%; }
+}
+
 """

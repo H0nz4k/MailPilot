@@ -31,13 +31,13 @@ async def test_new_task_selects_a_named_profile_and_shows_its_contents(tmp_path)
     with patch("services.web_mail_gui.resolve_task_date", return_value=date(2026, 10, 22)):
         async with user_simulation(root) as user:
             await user.open("/")
-            user.find("Nové odesílání").click()
+            user.find("Nová úloha").click()
             with user:
                 choices = field(user, ui.select, "Uložený přehled")
                 assert choices.options == {first.id: first.name, other.id: other.name}
                 assert choices.value is None
                 assert all(e.props.get("label") != "Sestava" for e in user.find(ui.select).elements)
-                field(user, ui.input, "Název odesílání").value = "Ranní přehled"
+                field(user, ui.input, "Název úlohy").value = "Ranní přehled"
                 field(user, ui.input, "E-mail příjemce").value = "test@example.org"
             user.find("Uložit").click()
             assert not load_tasks(task_file(tmp_path))
@@ -45,7 +45,7 @@ async def test_new_task_selects_a_named_profile_and_shows_its_contents(tmp_path)
                 choices.value = first.id
                 assert not field(user, ui.number, "Kolik dní dopředu? (2 = pozítří)").visible
                 assert not field(user, ui.input, "Vybraný den").visible
-                field(user, ui.select, "Za který den posílat?").value = "offset"
+                field(user, ui.select, "Za který den připravit PDF?").value = "offset"
                 assert field(user, ui.number, "Kolik dní dopředu? (2 = pozítří)").visible
             user.find("Typ stravy a obsah PDF").click()
             await user.should_see("Uložené kategorie: Žáci, Zaměstnanci.")
@@ -75,3 +75,4 @@ async def test_editing_old_task_keeps_shared_settings_until_user_changes_them(tm
                 assert choices.options[""] == LEGACY_PROFILE_LABEL
             user.find("Uložit").click()
             assert load_tasks(task_file(tmp_path)) == [old]
+

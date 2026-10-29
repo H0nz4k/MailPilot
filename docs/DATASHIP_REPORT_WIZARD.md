@@ -1,6 +1,22 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.5.
+Verze 1.0.0-rc.10, sestavení 20261029.6.
+
+## Pouze exportovat a uložit PDF
+
+Ve čtvrtém kroku lze zaškrtnout **Pouze exportovat a uložit PDF**. Příjemci i jednorázové odeslání zmizí. Zobrazí se úplná cesta cílové složky, tlačítko Procházet a název souboru. Čas se změní na **Každý den vytvořit v**. Úlohu lze zapnout nebo pozastavit stejně jako e-mailovou úlohu.
+
+Například složka `C:\DataShip\Exporty` a název `Prehled_{date}.pdf` vytvoří pro přehled za 30. 10. 2026 soubor `C:\DataShip\Exporty\Prehled_2026-10-30.pdf`. Použije se cílový den ze třetího kroku a skutečné varné dny Jídelny. Datum v názvu je datum přehledu, nikoli datum spuštění. Proměnná `{date}` je volitelná; pokud se znovu vytvoří stejný název, soubor se nahradí. Pro různé úlohy zvolte odlišné složky nebo názvy.
+
+Worker pouze vytvoří PDF, uloží je do vybrané složky a zapíše výsledek do historie. Nečte nastavení e-mailu ani API klíč, nepoužije SMTP/Resend a PDF neotevírá. Složku případně vytvoří. Nejprve vznikne dočasné PDF ve stejné složce a teprve po úspěšném dokončení nahradí cílový soubor; při chybě zůstává předchozí PDF zachované. Účet Windows služby musí mít ke složce právo zápisu, u síťových cest i přístup k danému sdílení.
+
+Úloha se ukládá s volitelnými položkami `output_mode`, `output_directory` a `output_filename`. Starší úlohy bez nich nadále posílají e-mail. Nový režim je podporovaný i při úpravě a kopírování úloh. **Aktualizujte GUI i DataShip-Worker.exe na sestavení 20261029.6 a službu restartujte.** Starší worker režim exportu neumí.
+
+## Čitelnější ovládání
+
+Počet dní se zadává číslem nebo velkými tlačítky − a + o velikosti 48 px; drobné systémové šipky jsou odstraněné. Šipky rozbalovacích voleb mají 44px plochu. Stejné ovládání používá průvodce i editor uložených úloh. Kalendáře mají srozumitelnější názvy a vysvětlení, že určují varné dny, nikoli obsah PDF.
+
+Rozhraní používá jednu rodinu písma Segoe UI (s běžným systémovým fallbackem) a tři role: běžný text, nadpis a pomocný popis. Síla písma je běžná nebo polotučná, včetně nastavení tučnosti. Ikony si ponechávají vlastní ikonové písmo. Písmo a vzhled exportovaných PDF tím nejsou změněné.
 
 ## Zjednodušený plánovač
 

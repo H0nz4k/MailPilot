@@ -31,7 +31,7 @@ class DailyDesignMixin(ReportWizardMixin):
             self.set_status(self.initial_status)
         with ui.column().classes("ui-block ds-daily ds-wizard w-full"):
             ui.label("Přehledy").classes("ds-page-title").props('role="heading" aria-level="1"')
-            ui.label("Připravte přehled a nastavte jeho pravidelné odesílání.").classes("ds-wizard-intro")
+            ui.label("Připravte přehled a naplánujte e-mail nebo uložení PDF.").classes("ds-wizard-intro")
             self._build_wizard_header()
             with w.card().classes("w-full") as selection:
                 ui.label("Co zobrazit").classes("app-heading")
@@ -79,6 +79,7 @@ class DailyDesignMixin(ReportWizardMixin):
                     ui.label("Odešle PDF pro datum náhledu z prvního kroku výše uvedeným příjemcům. Čas a pravidlo dne pro plánovač se nepoužijí.").classes("ui-help")
                     self.send_button.move(one_off)
                     self.mail_status.move(one_off)
+                one_off.bind_visibility_from(self.wizard_output.pdf_only, "value", backward=lambda value: not value)
             self._wizard_cards.append(email)
             self._build_wizard_footer()
 

@@ -5,6 +5,24 @@ import sys
 from pathlib import Path
 
 
+def pick_local_directory(initial: str) -> str | None:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.wm_attributes("-topmost", True)
+            value = filedialog.askdirectory(
+                title="Kam ukládat PDF přehledy", initialdir=initial, mustexist=False,
+            )
+            return str(value) if value else None
+        finally:
+            root.destroy()
+    except Exception as exc:
+        raise ValueError("Výběr složky není dostupný. Úplnou cestu zadejte ručně.") from exc
+
+
 def pick_local_file(initial: str, *, kind: str) -> str | None:
     if kind not in ("nssm", "dashboard"):
         raise ValueError("Neznámý typ souboru.")
@@ -74,3 +92,4 @@ def _pick_windows_file(initial: str, *, kind: str) -> str | None:
     if error:
         raise ValueError(f"Dialog výběru souboru se nepodařilo otevřít (Windows {error}). Cestu zadejte ručně.")
     return None
+

@@ -14,6 +14,8 @@ from services.web_mail_cooking_days import available_cooking_calendars, resolve_
 from services.web_recipient_editor import RecipientEditor
 from services.web_worker_status import observed_status
 from services.web_meal_types import meal_filter_caption
+from services.web_task_output import TaskOutputEditor
+from services.web_controls import day_stepper
 
 RULES = {"today": "Dnes", "tomorrow": "Zítra", "after_tomorrow": "Pozítří (2 dny dopředu)",
          "next_cooking_day": "Následující varný den", "offset": "Jiný počet dní dopředu"}
@@ -54,13 +56,14 @@ class ReportWizardMixin:
     def _build_wizard_date(self):
         ui.label("Každý den připravit přehled na:").classes("app-heading")
         self.wizard_mode = ui.select(RULES, value="today", label="Den přehledu").props("outlined").classes("w-full")
-        self.wizard_offset = ui.number("Počet kalendářních dní dopředu", value=2, min=0, max=370, step=1).props("outlined").classes("w-full")
+        self.wizard_offset = day_stepper("Počet kalendářních dní dopředu", 2)
+        self.wizard_offset.stepper_row.bind_visibility_from(self.wizard_mode, "value", backward=lambda mode: mode == "offset")
         self.wizard_offset.bind_visibility_from(self.wizard_mode, "value", backward=lambda mode: mode == "offset")
         ui.label("Dva dny dopředu znamená dva kalendářní dny. Následující varný den se určí podle kalendáře Jídelny.").classes("ui-help")
-        self.wizard_only_cooking = ui.checkbox("Odesílat jen tehdy, když se v den přehledu vaří", value=True)
+        self.wizard_only_cooking = ui.checkbox("Spustit jen tehdy, když se v den přehledu vaří", value=True)
         with ui.expansion("Jiný kalendář varných dnů (volitelné)", icon="event").classes("w-full"):
-            ui.label("Běžně použijeme typy stravy vybrané v prvním kroku. Zde lze zvolit jiné skutečné kalendáře z Jídelny.").classes("ui-help")
-            self.wizard_calendar_mode = ui.select({"report": "Podle vybrané stravy", "all": "Všechny kalendáře", "selected": "Vybrané kalendáře"}, value="report", label="Kalendář").props("outlined").classes("w-full")
+            ui.label("Kalendář určuje, kdy se vaří. Obsah PDF se tím nemění. Běžně použijeme stravu z prvního kroku; u více kalendářů stačí, aby se vařilo alespoň podle jednoho z nich.").classes("ui-help")
+            self.wizard_calendar_mode = ui.select({"report": "Stejné typy stravy jako v přehledu", "all": "Kterýkoli kalendář Jídelny", "selected": "Jen kalendáře, které zvolím"}, value="report", label="Které varné dny použít?").props("outlined").classes("w-full")
             self.wizard_calendars = ui.select([], multiple=True, value=[], label="Kalendáře z Jídelny").props("outlined use-chips").classes("w-full")
             self.wizard_calendars.bind_visibility_from(self.wizard_calendar_mode, "value", backward=lambda mode: mode == "selected")
             self.wizard_calendar_status = ui.label("").classes("ui-help")
@@ -72,12 +75,29 @@ class ReportWizardMixin:
 
     def _build_wizard_email(self):
         self.wizard_name = ui.input("Název úlohy", value="Nový přehled").props("outlined maxlength=80").classes("w-full")
-        self.wizard_recipients = RecipientEditor()
+        self.wizard_output = TaskOutputEditor(self.config_path.parent)
+        self.wizard_recipients = self.wizard_output.recipients
         self.wizard_time = ui.input("Každý den odeslat v", value="08:00").props("outlined type=time").classes("w-full")
         self.wizard_enabled = ui.checkbox("Zapnout automatické odesílání", value=True)
         self.wizard_time.on_value_change(lambda _e: self._wizard_queue_preview())
         self.wizard_final_preview = ui.label("").classes("ds-wizard-preview").props('role="status" aria-live="polite"')
-        ui.label("Uložením se úloha zařadí do plánovače. E-mail se odešle až v naplánovaný čas.").classes("ui-help")
+        self.wizard_save_help = ui.label("").classes("ui-help")
+        self.wizard_output.pdf_only.on_value_change(lambda _event: self._wizard_output_changed())
+        for field in (self.wizard_output.directory, self.wizard_output.filename):
+            field.on_value_change(lambda _event: self._wizard_queue_preview())
+        self._wizard_output_changed()
+
+    def _wizard_output_changed(self):
+        pdf = self.wizard_output.pdf_only.value
+        self.wizard_time.props['label'] = "Každý den vytvořit v" if pdf else "Každý den odeslat v"
+        self.wizard_time.update()
+        self.wizard_enabled.text = "Zapnout automatické vytváření PDF" if pdf else "Zapnout automatické odesílání"
+        self.wizard_enabled.update()
+        self.wizard_save_help.set_text(
+            "V zadaný čas se pouze vytvoří PDF ve zvolené složce. E-mail se neposílá."
+            if pdf else "Uložením se úloha zařadí do plánovače. E-mail se odešle až v naplánovaný čas."
+        )
+        self._wizard_queue_preview()
 
     def _build_wizard_footer(self):
         with ui.row().classes("ds-wizard-actions w-full items-center justify-between") as self.wizard_navigation:
@@ -138,7 +158,7 @@ class ReportWizardMixin:
         if number >= 3:
             self._wizard_task(validate_recipients=False)
         if number == 4:
-            if not self.wizard_recipients.commit_pending():
+            if not self.wizard_output.commit():
                 raise ValueError("Opravte e-mailovou adresu příjemce.")
             self._wizard_task()
 
@@ -163,6 +183,7 @@ class ReportWizardMixin:
             raise ValueError("Vyberte alespoň jeden skutečný kalendář z Jídelny.")
         return MailTask.from_dict({
             "id": self._wizard_task_id, "profile_id": self._wizard_profile_id,
+            **self.wizard_output.values(preview=not validate_recipients),
             "name": self.wizard_name.value, "report": "daily",
             "recipients": self.wizard_recipients.addresses if validate_recipients else ["preview@example.invalid"],
             "send_time": self.wizard_time.value, "enabled": self.wizard_enabled.value,
@@ -199,7 +220,9 @@ class ReportWizardMixin:
                        f"Příští plánované spuštění: {upcoming:%d.%m.%Y v %H:%M}; "
                        f"PDF bude za {readable_day(day)}.")
             if task.only_cooking_days and task.date_mode != "next_cooking_day":
-                message += " Pokud se v tento den nevaří, odeslání se přeskočí."
+                message += " Pokud se v tento den nevaří, spuštění se přeskočí."
+            if task.output_mode == "pdf":
+                message += " PDF se pouze uloží na disk, e-mail se neposílá."
         except Exception as exc:
             message = f"Konkrétní datum nelze ověřit: {exc}. Zkontrolujte připojení a kalendář Jídelny."
         if revision == self._wizard_revision:
@@ -242,7 +265,9 @@ class ReportWizardMixin:
         for card in self._wizard_cards:
             card.set_visibility(False)
         self.wizard_navigation.set_visibility(False)
-        self.wizard_receipt_summary.set_text(f"{task.name} · každý den v {task.send_time} · {', '.join(task.recipients)}. " + (f"Příští spuštění {upcoming:%d.%m.%Y v %H:%M}." if upcoming else "Automatické odesílání je vypnuté."))
+        destination = (f"PDF: {task.output_directory} · {task.output_filename}"
+                       if task.output_mode == "pdf" else ', '.join(task.recipients))
+        self.wizard_receipt_summary.set_text(f"{task.name} · každý den v {task.send_time} · {destination}. " + (f"Příští spuštění {upcoming:%d.%m.%Y v %H:%M}." if upcoming else "Automatické spouštění je vypnuté."))
         self.wizard_receipt.set_visibility(True)
         self._wizard_refresh_status()
         if hasattr(self, "mail_tasks_refresh"):
@@ -264,9 +289,13 @@ class ReportWizardMixin:
         self.wizard_calendar_mode.value = "report"
         self.wizard_calendars.value = []
         self.wizard_enabled.value = True
+        self.wizard_output.pdf_only.value = False
+        self.wizard_output.directory.value = self.wizard_output.default_directory
+        self.wizard_output.filename.value = "Prehled_{date}.pdf"
         self.wizard_recipients.addresses.clear()
         self.wizard_recipients.input.value = ""
         self.wizard_recipients.render()
         self.wizard_receipt.set_visibility(False)
         self.wizard_navigation.set_visibility(True)
         self._wizard_show_step(1)
+

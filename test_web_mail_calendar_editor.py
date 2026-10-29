@@ -22,11 +22,11 @@ async def test_new_task_uses_report_calendar_and_copy_keeps_report(tmp_path):
     with patch('services.web_mail_gui.resolve_task_date', return_value=date(2026, 10, 25)):
         async with user_simulation(lambda: build_mail_tasks_panel(tmp_path)) as user:
             await user.open('/')
-            user.find('Nové odesílání').click()
+            user.find('Nová úloha').click()
             with user:
-                field(user, ui.input, 'Název odesílání').value = 'Večerní přehled'
+                field(user, ui.input, 'Název úlohy').value = 'Večerní přehled'
                 field(user, ui.input, 'E-mail příjemce').value = 'test@example.org'
-                field(user, ui.select, 'Za který den posílat?').value = 'next_cooking_day'
+                field(user, ui.select, 'Za který den připravit PDF?').value = 'next_cooking_day'
                 assert not any(isinstance(e, ui.select) and e.props.get('label') == 'Kalendář varných dnů' for e in user.client.elements.values())
             user.find('Uložit').click()
             stored = load_tasks(task_file(tmp_path))
@@ -58,3 +58,4 @@ async def test_legacy_calendar_is_preserved_on_save(tmp_path):
             stored = load_tasks(task_file(tmp_path))
             assert stored[0].id == old.id
             assert stored[0].cooking_meal_type == 'Oběd'
+
