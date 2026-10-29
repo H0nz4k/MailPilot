@@ -1,6 +1,14 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.4.
+Verze 1.0.0-rc.10, sestavení 20261029.5.
+
+## Zjednodušený plánovač
+
+Stránka **Plánovač** obsahuje rovnou seznam plánovaných přehledů a jejich stav. Záložky **E-maily funkcí** a **Původní plánovač** byly odstraněny z nového rozhraní. Nové úlohy vznikají průvodcem v Přehledech, každá má vlastní příjemce a čas. Společný odesílatel, API klíč, způsob odesílání a šablony e-mailu jsou pouze v **Nastavení → Služba a odesílání**.
+
+Volitelné **Jednorázové odeslání** je nově ve čtvrtém kroku průvodce a používá zde uvedené příjemce i společné nastavení Resend/SMTP. Odešle aktuální PDF pro datum náhledu z prvního kroku; pravidlo cílového dne a čas se uplatní až při plánovaném odesílání. Odeslání vyžaduje výslovné potvrzení a nevytváří plánovanou úlohu.
+
+Staré údaje příjemců v `config.json` a soubor `planovac.json` se nemažou ani nemigrují. Původní příkazy pro automatický export a uzávěrku zůstávají kompatibilní; odstranění záložek samo nevypíná případné externí spouštění starých plánů. Export PDF už nepotřebuje pole ani API klíč ze starého e-mailového editoru.
 
 ## Ikony Windows aplikací
 

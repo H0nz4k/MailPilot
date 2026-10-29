@@ -65,8 +65,6 @@ class DailyDesignMixin(ReportWizardMixin):
                         ui.label("porcí celkem").classes("ui-help")
                 self._build_pdf_panel()
                 self.generate_button.props(remove="unelevated").props("outline")
-                with ui.expansion("Jednorázové odeslání (volitelné)", icon="mail_outline").classes("w-full") as one_off:
-                    self.send_button.move(one_off)
                 with ui.row().classes("ds-next-step w-full") as self.daily_schedule_card:
                     self.daily_schedule_button = ui.button("Nastavit odesílání", icon="schedule_send", on_click=self.schedule_daily_profile).props("outline no-caps")
                 self.daily_schedule_card.set_visibility(False)
@@ -77,6 +75,10 @@ class DailyDesignMixin(ReportWizardMixin):
             self._wizard_cards.append(day)
             with w.card().classes("w-full") as email:
                 self._build_wizard_email()
+                with ui.expansion("Jednorázové odeslání (volitelné)", icon="mail_outline").classes("w-full") as one_off:
+                    ui.label("Odešle PDF pro datum náhledu z prvního kroku výše uvedeným příjemcům. Čas a pravidlo dne pro plánovač se nepoužijí.").classes("ui-help")
+                    self.send_button.move(one_off)
+                    self.mail_status.move(one_off)
             self._wizard_cards.append(email)
             self._build_wizard_footer()
 
@@ -393,6 +395,7 @@ class DailyDesignMixin(ReportWizardMixin):
         # The verified session password is already in the snapshot. Reading the
         # credential store here would fail on a first TEST before PDF saves it.
         return fetch_report(config)
+
 
 
 
