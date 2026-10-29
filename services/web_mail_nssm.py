@@ -99,7 +99,7 @@ def _run_nssm(command: list[str]) -> str:
 
 
 def service_command(config_directory: Path, action: str) -> str:
-    if action not in ('install', 'repair', 'start', 'stop', 'restart', 'status'):
+    if action not in ('install', 'repair', 'start', 'stop', 'restart', 'status', 'remove'):
         raise ValueError('Neznámá operace služby.')
     settings = load_settings(settings_path(config_directory))
     nssm = Path(settings['nssm_path'])
@@ -146,6 +146,20 @@ def service_command(config_directory: Path, action: str) -> str:
                 base + ['set', name, 'AppParameters', subprocess.list2cmdline(command[1:])],
                 base + ['set', name, 'AppDirectory', str(config.parent)],
             ]
+    elif action == 'remove':
+        registered = _run_nssm(base + ['get', name, 'Application']).strip().strip('"')
+        registered_name = PureWindowsPath(registered).name.casefold()
+        if registered_name != WORKER_EXE_NAME.casefold():
+            if registered_name != Path(sys.executable).name.casefold():
+                raise ValueError('Vybraná služba není plánovač DataShipu. Nebyla zastavena ani odstraněna.')
+            parameters = _run_nssm(base + ['get', name, 'AppParameters'])
+            if not re.search(r'(?:^|\s)-m\s+services\.web_mail_worker(?=\s|$)', parameters):
+                raise ValueError('Vybraná služba není plánovač DataShipu. Nebyla zastavena ani odstraněna.')
+        if _run_nssm(base + ['status', name]).strip() != 'SERVICE_STOPPED':
+            _run_nssm(base + ['stop', name])
+            if _run_nssm(base + ['status', name]).strip() != 'SERVICE_STOPPED':
+                raise ValueError('Služba ještě není zastavená. Ověřte stav a odstranění zopakujte.')
+        commands = [base + ['remove', name, 'confirm']]
     elif action == 'restart':
         commands = [base + ['restart', name]]
     else:
@@ -170,4 +184,6 @@ def service_command(config_directory: Path, action: str) -> str:
     return {'install': 'Služba je nainstalovaná a připravená. Zatím neběží; po kontrole odesílání klikněte na „Spustit“.',
             'repair': 'Cesty existující služby byly opraveny podle aktuální složky aplikace. Služba zůstává zastavená; klikněte na „Spustit službu“.',
             'start': 'Služba byla spuštěna.', 'stop': 'Služba byla zastavena.',
-            'restart': 'Služba byla restartována.'}[action]
+            'restart': 'Služba byla restartována.',
+            'remove': 'Služba byla odstraněna z Windows. Uložené úlohy a nastavení zůstaly zachované.'}[action]
+

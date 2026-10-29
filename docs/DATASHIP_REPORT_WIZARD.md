@@ -1,6 +1,10 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.2.
+Verze 1.0.0-rc.10, sestavení 20261029.3.
+
+## Odstranění Windows služby
+
+V **Nastavení → Služba a odesílání → Windows služba NSSM** je tlačítko **Odstranit službu**. Dialog zobrazí název služby a vyžádá potvrzení. Aplikace nejprve ověří, že jde o worker DataShipu, běžící službu zastaví a po ověření zastavení odstraní její registraci z Windows pomocí NSSM. Pokud zastavení selže, služba se neodstraní. Uložené přehledy, úlohy, API klíč i konfigurace zůstávají zachované; automatické odesílání touto službou se ukončí. Službu lze později znovu nainstalovat. Odstranění vyžaduje oprávnění správce Windows a odemknuté nastavení aplikace.
 
 ## Nastavení Resend API
 

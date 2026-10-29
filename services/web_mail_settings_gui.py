@@ -92,6 +92,31 @@ def build_web_settings_panel(
                         button = ui.button(caption, on_click=lambda op=action: control(op)).props("outline no-caps")
                         button.set_enabled(elevated is not False or action == "status")
                         service_buttons.append((button, action))
+                removal_target = {"name": ""}
+                with ui.dialog() as removal_dialog, ui.card().classes("w-full max-w-lg gap-3"):
+                    ui.label("Odstranit službu?").classes("app-heading")
+                    removal_name = ui.label("")
+                    ui.label("Běžící služba se nejprve zastaví a potom odstraní z Windows. Automatické odesílání touto službou přestane fungovat. Uložené úlohy, API klíč i ostatní nastavení zůstanou zachované.").classes("ui-help")
+                    async def confirm_removal():
+                        removal_dialog.close()
+                        if str(name.value or "").strip() != removal_target["name"]:
+                            ui.notify("Název služby se změnil. Potvrďte odstranění znovu.", type="warning")
+                            return
+                        await control("remove")
+                    with ui.row().classes("w-full justify-end gap-2"):
+                        ui.button("Zrušit", on_click=removal_dialog.close).props("outline no-caps").mark("cancel-service-removal")
+                        ui.button("Ano, odstranit službu", color="negative", on_click=confirm_removal).props("no-caps").mark("confirm-service-removal")
+
+                def request_removal():
+                    if busy["value"] or not allowed() or elevated is False:
+                        return
+                    removal_target["name"] = str(name.value or "").strip()
+                    removal_name.set_text(f'Služba: {removal_target["name"]}')
+                    removal_dialog.open()
+
+                remove_button = ui.button("Odstranit službu", icon="delete_outline", color="negative", on_click=request_removal).props("outline no-caps").mark("remove-service")
+                remove_button.set_enabled(elevated is not False)
+                service_buttons.append((remove_button, "remove"))
                 ui.label("Po přesunu DataShipu zastavené službě opravte cesty. Oprava zachová stejnou službu a sama ji nespustí.").classes("ui-help")
 
             with ui.card().classes("ds-settings-card"):
