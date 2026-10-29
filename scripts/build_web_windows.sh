@@ -16,31 +16,26 @@ if [[ ! -f "$PY" ]]; then
   command -v py >/dev/null 2>&1 || { echo "CHYBA: nainstaluj Python 3.12 pro Windows (py launcher)." >&2; exit 2; }
   py -3.12 -m venv "$VENV" || { echo "CHYBA: nainstaluj Python 3.12 x64 a zopakuj build." >&2; exit 2; }
 fi
-echo "[1/4] Instaluji zavislosti webove verze..."
-"$PY" -m pip install --disable-pip-version-check -r "$ROOT/requirements-web-build.txt"
-
-WIN_ROOT="$(cygpath -w "$ROOT")"
 DIST="$ROOT/dist-web"
-APP="$DIST/DataShip"
+INSTALL_APP="$DIST/DataShip"
 LEGACY_APP="$DIST/MailPilot-Web"
-PRESERVE="$ROOT/build/dataship-preserved"
-mkdir -p "$DIST" "$ROOT/build" "$PRESERVE"
-# Keep config, scheduled tasks and mail preferences across upgrades. On the
-# first DataShip build, import from the former MailPilot-Web install without
-# deleting/moving it. Future builds prefer the existing DataShip files.
-for name in config.json daily_reports.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
-  rm -f "$PRESERVE/$name"
-  if [[ -f "$APP/$name" ]]; then
-    cp "$APP/$name" "$PRESERVE/$name"
-  elif [[ -f "$LEGACY_APP/$name" ]]; then
-    cp "$LEGACY_APP/$name" "$PRESERVE/$name"
-  fi
-done
-echo "[2/4] Sestavuji webovou aplikaci pro prohlizec..."
+RECOVERY="$ROOT/build/dataship-preserved"
+# Stop before pip/PyInstaller if the currently installed EXEs are in use.
+"$PY" "$ROOT/scripts/deploy_web_build.py" --app "$INSTALL_APP" --check-only
+mkdir -p "$DIST" "$ROOT/build"
+# PyInstaller may delete only its new temporary directory, never the installation.
+STAGE_ROOT="$(mktemp -d "$DIST/.dataship-build-XXXXXX")"
+APP="$STAGE_ROOT/DataShip"
+trap 'echo "CHYBA: build selhal; puvodni instalace se nemaze. Pracovni slozka: $STAGE_ROOT" >&2' ERR
+
+echo "[1/5] Instaluji zavislosti webove verze..."
+"$PY" -m pip install --disable-pip-version-check -r "$ROOT/requirements-web-build.txt"
+WIN_ROOT="$(cygpath -w "$ROOT")"
+echo "[2/5] Sestavuji webovou aplikaci pro prohlizec..."
 "$PY" -m PyInstaller --noconfirm --clean --onedir --console --noupx \
   --name DataShip \
   --icon "$WIN_ROOT\\assets\\dataship.ico" \
-  --distpath "$DIST" \
+  --distpath "$STAGE_ROOT" \
   --workpath "$ROOT/build/web-gui" \
   --specpath "$ROOT/build/web-spec" \
   --collect-all nicegui \
@@ -52,18 +47,18 @@ echo "[2/4] Sestavuji webovou aplikaci pro prohlizec..."
   --add-data "$WIN_ROOT\\config.example.json;." \
   "$WIN_ROOT\\stravovaci_nicegui.py"
 
-echo "[3/4] Sestavuji bezobsluznou sluzbu pro NSSM..."
+echo "[3/5] Sestavuji bezobsluznou sluzbu pro NSSM..."
 "$PY" -m PyInstaller --noconfirm --clean --onefile --console --noupx \
   --name DataShip-Worker \
   --icon "$WIN_ROOT\\assets\\dataship-worker.ico" \
-  --distpath "$ROOT/dist-web-worker" \
+  --distpath "$STAGE_ROOT/worker" \
   --workpath "$ROOT/build/web-worker" \
   --specpath "$ROOT/build/web-spec" \
   --collect-submodules psycopg \
   --add-data "$WIN_ROOT\\assets;assets" \
   "$WIN_ROOT\\web_mail_worker_main.py"
 
-cp "$ROOT/dist-web-worker/DataShip-Worker.exe" "$APP/"
+cp "$STAGE_ROOT/worker/DataShip-Worker.exe" "$APP/"
 expected_build="$("$PY" -c 'from services.web_branding import WEB_BUILD; print(WEB_BUILD)')"
 for executable in DataShip.exe DataShip-Worker.exe; do
   reported_version="$("$APP/$executable" --version)"
@@ -75,16 +70,7 @@ for executable in DataShip.exe DataShip-Worker.exe; do
   echo "OVERENO: $executable: $reported_version"
 done
 cp "$ROOT/config.example.json" "$APP/config.example.json"
-if [[ -f "$PRESERVE/config.json" ]]; then
-  cp "$PRESERVE/config.json" "$APP/config.json"
-else
-  cp "$APP/config.example.json" "$APP/config.json"
-fi
-for name in daily_reports.json web_mail_settings.json web_mail_tasks.json web_mail_worker_state.json .env planovac.json; do
-  if [[ -f "$PRESERVE/$name" ]]; then
-    cp "$PRESERVE/$name" "$APP/$name"
-  fi
-done
+cp "$APP/config.example.json" "$APP/config.json"
 cat > "$APP/START_WEB.cmd" <<'CMD'
 @echo off
 cd /d "%~dp0"
@@ -97,10 +83,14 @@ cd /d "%~dp0"
 "%~dp0DataShip-Worker.exe" --config "%~dp0config.json"
 if errorlevel 1 pause
 CMD
-echo "[4/4] Pridavam overeny NSSM pro Windows sluzbu..."
+echo "[4/5] Pridavam overeny NSSM pro Windows sluzbu..."
 "$PY" "$ROOT/scripts/package_web_release.py" --install-nssm "$APP"
-echo "HOTOVO: $APP/DataShip.exe"
+echo "[5/5] Nasazuji overene sestaveni a zachovavam nastaveni..."
+"$PY" "$ROOT/scripts/deploy_web_build.py" \
+  --app "$INSTALL_APP" --stage "$APP" --recovery "$RECOVERY" --legacy "$LEGACY_APP"
+# Only disposable build output remains here. The previous installation stays
+# in its named backup beside DataShip; it is never deleted by this script.
+rm -rf "$STAGE_ROOT"
+echo "HOTOVO: $INSTALL_APP/DataShip.exe"
 echo "OTEVRENI: v Git Bash spust ./dist-web/DataShip/DataShip.exe --browser"
 echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."
-
-

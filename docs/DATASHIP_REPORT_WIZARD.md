@@ -21,6 +21,10 @@ Od 20261029.7 vypisují obě EXE přes `--version` také číslo sestavení. Bui
 ./dist-web/DataShip/DataShip-Worker.exe --version
 ```
 
+Při chybě `WinError 5` na `DataShip-Worker.exe` soubor může držet spuštěná služba nebo ručně spuštěný worker. NSSM je při instalaci nastavené na restart workeru po ukončení s prodlevou 10 sekund; samotné ukončování procesů tedy službu nezastaví. Dva procesy stejného názvu mohou být spouštěcí a pracovní proces jednoho PyInstaller onefile workeru. Zastavte skutečnou službu DataShipu (výchozí název `DataShipScheduler`; starší `MailPilot_denniprehled` může být jiná služba), zavřete GUI a teprve potom sestavujte.
+
+Build nyní kontroluje přístup k instalovanému GUI, workeru a NSSM před instalací závislostí a znovu před nasazením. Při zamčeném souboru skončí s návodem; procesy automaticky neukončuje. PyInstaller sestavuje do jedinečné pracovní složky `dist-web/.dataship-build-*`, nikdy nemaže používanou instalaci. Až po ověření obou EXE a přidání NSSM se přenesou nastavení, úlohy a uživatelské soubory. Původní složka zůstane jako `dist-web/DataShip.backup-*`; při selhání přesunu nového buildu se obnoví. Při neúplné instalaci po starém neúspěšném buildu se chybějící nastavení načte z `build/dataship-preserved` (pokud tam původní skript stihl vytvořit zálohu). Tuto zálohu nemažte před úspěšným obnovením. Při prvním sestavení se nadále podporuje import nastavení z `dist-web/MailPilot-Web`.
+
 Heartbeat nového workeru obsahuje jeho sestavení. GUI upozorní na starý nebo neznámý worker místo běžného potvrzení čekání. Technický log workeru uvádí sestavení, PID, cestu konfigurace a u každé splatné úlohy její ID, název, plánovaný čas a čas kontroly.
 
 Každá úloha má vlastní čas. Worker termíny standardně kontroluje po 30 sekundách a úlohy zpracovává postupně. Po pozdním spuštění dohání již splatné úlohy; při delším exportu může být další úloha opožděná. Nejde o záruku odeslání na přesnou sekundu. Změna sestavení tento dosavadní režim dohánění sama nemění.
