@@ -1,6 +1,14 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.7.
+Verze 1.0.0-rc.10, sestavení 20261029.8.
+
+## Dvě oddělená hesla
+
+Vstupní dialog **Administrace** žádá **Heslo administrace** a kontroluje pouze administrační heslo aplikace. Databáze má samostatné pole **Heslo k databázi** uvnitř **Nastavení → Databáze** (nebo v následném průvodci připojením). Zadání hesla do jednoho pole nepřepíše druhé heslo a přihlášení do administrace samo netestuje databázové spojení.
+
+V systémovém trezoru jsou údaje oddělené: heslo administrace má vlastní účet; databázové heslo používá účet určený hostitelem, portem, databází a databázovým uživatelem. Aktualizace stávající hesla nemění. Hesla se neukládají do config.json.
+
+Závěrečná kontrola sestavení 20261029.8: 119 cílených testů prošlo pro první spuštění, oddělení hesel a jejich úložišť, administraci, plánovač a vlastní termíny úloh, kalendáře, export PDF bez e-mailu, e-mailové nastavení, NSSM operace a vlastní témata. Prošla kompilace Pythonu, kontrola syntaxe Bash a čísel sestavení obou zdrojových CLI. Skutečné Windows EXE/NSSM, zákaznická DB a živé odesílání z tohoto prostředí ověřené nejsou.
 
 ## Ověření skutečně spuštěné verze
 

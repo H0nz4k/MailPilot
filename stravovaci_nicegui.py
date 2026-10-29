@@ -647,11 +647,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 self.admin_dialog_help = ui.label(
                     "Zadejte heslo pro administraci."
                 ).classes("ui-help")
-                self.admin_password_input = ui.input("Heslo", password=True).classes(
+                self.admin_password_input = ui.input("Heslo administrace", password=True).classes(
                     "w-full"
                 ).on("keydown.enter.prevent", self._submit_admin_dialog)
                 self.admin_password_repeat = ui.input(
-                    "Heslo znovu", password=True
+                    "Heslo administrace znovu", password=True
                 ).classes("w-full").on("keydown.enter.prevent", self._submit_admin_dialog)
                 self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
                 ui.label("Administrace se po 10 minutách nečinnosti automaticky uzamkne.").classes("ui-help")
@@ -718,7 +718,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             else:
                 stored = get_admin_password() or ""
                 if password != stored:
-                    self.admin_dialog_error.set_text("Nesprávné heslo.")
+                    self.admin_dialog_error.set_text("Nesprávné heslo administrace.")
                     return
         except CredentialStoreError as exc:
             self.admin_dialog_error.set_text(str(exc))
@@ -826,7 +826,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     "Uživatel", db["user"], "Účet s právem čtení."
                 )
                 self.password_input = w.setting_input(
-                    "Heslo",
+                    "Heslo k databázi",
                     self._stored_password(),
                     "Ukládá se do Windows Credential Manageru, ne do config.json.",
                     password=True,
