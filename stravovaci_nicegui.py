@@ -13,22 +13,16 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-# PyInstaller --windowed nemá konzolové streamy; knihovny je přesto mohou použít.
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+from runtime_paths import application_directory
+from services.web_windowed_runtime import prepare_windowed_streams
+
+# A windowed EXE has no standard streams, but the web server still uses them.
+prepare_windowed_streams(application_directory())
 
 from nicegui import app, native, run, ui
 
 from automaticky_export import main as automatic_export_main
 from uzaverka import main as monthly_closing_main
-from funkce import (
-    FUNCTION_DAILY,
-    FUNCTION_LABELS,
-    apply_function_mails,
-    load_function_mails,
-)
 from hromadna_zprava import (
     FILTER_CATEGORY,
     FILTER_CLASS,
@@ -75,22 +69,9 @@ from credential_store import (
     write_config,
 )
 from pocty_nastaveni import all_client_categories, peek_client_categories
-from planovac import (
-    ACTION_CLOSING,
-    ACTION_CUSTOM,
-    ACTION_LABELS,
-    ACTION_POCTY,
-    ACTION_SPECIAL,
-    PlannedJob,
-    default_launcher_path,
-    format_schedule,
-    load_jobs,
-    parse_job,
-    save_jobs,
-    scheduler_config_path,
-)
 from env_store import EnvStoreError, get_resend_api_key, set_resend_api_key
 from mail_service import (
+    MailDispatchResult,
     cooking_status_message,
     fetch_cooking_status,
     mail_subject,
@@ -99,7 +80,6 @@ from mail_service import (
     send_pdf_via_mailsender,
     should_send_on_cooking_day,
 )
-from runtime_paths import application_directory
 from services.config_io import (
     CZECH_DATE_FORMAT,
     DEFAULT_PDF_OUTPUT,
@@ -112,8 +92,10 @@ from services.config_io import (
 from services.config_io import load_raw_config as load_ui_config
 from services.database import probe_connection
 from services.web_branding import (
-    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION, version_caption,
+    BRAND_NAME, BRAND_STAGE, BRAND_FOOTER, BRAND_ICON, BRAND_FAVICON, WEB_VERSION, WEB_BUILD, version_caption,
 )
+from services.web_mail_settings import load_settings, settings_path
+from services.web_mail_smtp import smtp_send
 from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
@@ -445,24 +427,12 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.bulk_diners: list[Any] = []
         self.bulk_selected: list[str] = []
         self.bulk_preview = None
-        self.mail_by_function = load_function_mails(self.raw)
-        self._mail_function_id = FUNCTION_DAILY
-        self.mail_recipients = list(self.mail_by_function[FUNCTION_DAILY]["prijemci"])
         self.last_pdf: Path | None = None
         self.last_mail_note = "zatím žádné"
         self.initial_status = ""
         self.admin_unlocked = False
         self.layout = dict(UI_LAYOUTS[peek_ui_layout(self.raw)])
         self._admin_target_section = "db"
-        self.scheduler_path = scheduler_config_path(self.config_path.parent)
-        try:
-            self.planned_jobs = load_jobs(
-                self.scheduler_path, self.config_path.parent
-            )
-        except ConfigError as exc:
-            self.planned_jobs = []
-            self.initial_status = str(exc)
-
         self._migrate_legacy_secrets()
 
     def _migrate_legacy_secrets(self) -> None:
@@ -628,7 +598,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             "app-nav"
         ) as self.tabs:
             self.daily_tab = ui.tab("daily", label="Přehledy", icon="today")
-            self.mail_tasks_tab = ui.tab("mail_tasks", label="Odesílání", icon="schedule_send")
+            self.mail_tasks_tab = ui.tab("mail_tasks", label="Plánovač", icon="schedule_send")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
@@ -659,45 +629,28 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 self._build_admin_panel()
 
     def _build_sending_panel(self) -> None:
-        """Everyday mail and scheduling are available without admin login."""
-        with ui.tabs().props("dense no-caps inline-label").classes("w-full") as sending_tabs:
-            ui.tab("reports", label="Plánované přehledy", icon="schedule_send")
-            ui.tab("function_mail", label="E-maily funkcí", icon="mail")
-            ui.tab("legacy", label="Původní plánovač", icon="schedule")
-        with ui.tab_panels(sending_tabs, value="reports").props("animated=false").classes("w-full min-w-0"):
-            with ui.tab_panel("reports"):
-                from services.web_mail_gui import build_mail_tasks_panel
-                self.mail_tasks_editor = build_mail_tasks_panel(
-                    self.config_path.parent, config_path=self.config_path,
-                    category_names=lambda: dict(self.categories),
-                    on_open_reports=self.go_home,
-                )
-            with ui.tab_panel("function_mail"):
-                ui.label(
-                    "Příjemce plánovaného PDF nastavte u konkrétního odesílání v Plánovaných přehledech. "
-                    "Zde jsou společné údaje a příjemci pro jednorázové e-maily, uzávěrku a původní funkce."
-                ).classes("ui-help")
-                self._build_mail_panel()
-            with ui.tab_panel("legacy"):
-                ui.label(
-                    "Pro odesílání uloženého přehledu a datum například na pozítří použijte Plánované přehledy. "
-                    "Původní plánovač spouští celé funkce nebo soubory a uložený přehled nevybírá. "
-                    "Existující úlohy zůstávají zachované; před přechodem vypněte odpovídající původní úlohu."
-                ).classes("ui-help")
-                self._build_scheduler_panel()
+        """The planner has one list; new reports start in the wizard."""
+        from services.web_mail_gui import build_mail_tasks_panel
+        self.mail_tasks_editor = build_mail_tasks_panel(
+            self.config_path.parent, config_path=self.config_path,
+            category_names=lambda: dict(self.categories),
+            on_open_reports=self.go_home,
+            on_new_plan=lambda: (self._wizard_new(), self.go_home()),
+        )
+        self.mail_tasks_refresh = self.mail_tasks_editor.refresh
 
     def _build_admin_dialog(self) -> None:
         with ui.dialog() as self.admin_dialog, ui.card().classes("w-[420px] gap-2"):
             with ui.column().classes("w-full gap-2"):
                 self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
                 self.admin_dialog_help = ui.label(
-                    "Zadejte heslo pro databázi a správu aplikace."
+                    "Zadejte heslo pro administraci."
                 ).classes("ui-help")
-                self.admin_password_input = ui.input("Heslo", password=True).classes(
+                self.admin_password_input = ui.input("Heslo administrace", password=True).classes(
                     "w-full"
                 ).on("keydown.enter.prevent", self._submit_admin_dialog)
                 self.admin_password_repeat = ui.input(
-                    "Heslo znovu", password=True
+                    "Heslo administrace znovu", password=True
                 ).classes("w-full").on("keydown.enter.prevent", self._submit_admin_dialog)
                 self.admin_dialog_error = ui.label("").classes("ui-help text-red-700")
                 ui.label("Administrace se po 10 minutách nečinnosti automaticky uzamkne.").classes("ui-help")
@@ -731,7 +684,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         else:
             self.admin_dialog_title.set_text("Administrace")
             self.admin_dialog_help.set_text(
-                "Zadejte heslo pro databázi a správu aplikace."
+                "Zadejte heslo pro administraci."
             )
             self.admin_password_repeat.set_visibility(False)
         self.admin_dialog.open()
@@ -764,7 +717,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             else:
                 stored = get_admin_password() or ""
                 if password != stored:
-                    self.admin_dialog_error.set_text("Nesprávné heslo.")
+                    self.admin_dialog_error.set_text("Nesprávné heslo administrace.")
                     return
         except CredentialStoreError as exc:
             self.admin_dialog_error.set_text(str(exc))
@@ -815,7 +768,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         """Apply persisted top-tab visibility immediately; admin remains protected."""
         settings = visible_tabs(self.raw)
         if hasattr(self, "daily_schedule_card"):
-            self.daily_schedule_card.set_visibility(settings["mail_tasks"])
+            self.daily_schedule_card.set_visibility(False if hasattr(self, "_wizard_step") else settings["mail_tasks"])
         for key, tab in getattr(self, "nav_tab_elements", {}).items():
             tab.set_visibility(settings[key])
         if getattr(self, "tabs", None) is not None:
@@ -872,7 +825,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     "Uživatel", db["user"], "Účet s právem čtení."
                 )
                 self.password_input = w.setting_input(
-                    "Heslo",
+                    "Heslo k databázi",
                     self._stored_password(),
                     "Ukládá se do Windows Credential Manageru, ne do config.json.",
                     password=True,
@@ -1584,12 +1537,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ui.notify("Nejprve zvolte třídu nebo kategorii.", type="warning")
             return
         try:
-            api_key = str(self.api_key_input.value or "").strip() or (
-                get_resend_api_key() or ""
-            )
+            api_key = get_resend_api_key() or ""
             if not api_key:
-                raise ConfigError("Zadejte Resend API klíč v Odesílání → E-maily funkcí.")
-            sender = normalize_recipient(self.sender_input.value)
+                raise ConfigError("Zadejte Resend API klíč v Nastavení → Služba a odesílání.")
+            sender = normalize_recipient(self._outgoing_sender())
             subject = str(self.bulk_subject.value or "").strip()
             body = str(self.bulk_body.value or "").strip()
             if not subject:
@@ -1758,7 +1709,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     self._build_category_settings_panel()
                 with ui.tab_panel("mail_settings"):
                     from services.web_mail_settings_gui import build_web_settings_panel
-                    build_web_settings_panel(self.config_path.parent, require_admin=self._require_admin, before_lock=self._admin_before_lock)
+                    build_web_settings_panel(
+                        self.config_path.parent, require_admin=self._require_admin,
+                        before_lock=self._admin_before_lock,
+                    )
                 with ui.tab_panel("navigation"):
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
@@ -2175,137 +2129,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             theme = UI_THEME_LABELS[appearance["schema"]]
             self.ui_text_status.set_text(f"Vzhled uložen. Barevné schéma: {theme}.")
 
-    def _build_scheduler_panel(self) -> None:
-        w.section_header(
-            "Plánovač úloh",
-            "Úlohy se zapisují do planovac.json.",
-            "schedule",
-        )
-        with w.card():
-            with w.form_grid(4):
-                self.job_name_input = w.setting_input(
-                    "Název úlohy", "Denní stav", "Musí být jedinečný."
-                )
-                self.job_action = w.setting_select(
-                    "Funkce", ACTION_LABELS, ACTION_POCTY, SCHEDULER_HELP_TEXT
-                )
-                self.job_schedule_type = w.setting_select(
-                    "Typ plánu",
-                    {
-                        "daily": "Denně",
-                        "hourly": "Každou hodinu",
-                        "interval": "Interval",
-                    },
-                    "daily",
-                    "Podle typu se použije čas, minuta v hodině, nebo interval.",
-                )
-                self.job_time_input = w.setting_input(
-                    "Čas (HH:MM)", "06:30", "Platí pro denní plán."
-                )
-                self.job_minute_input = w.setting_number(
-                    "Minuta v hodině", 0, 0, 59, 1, "Platí pro hodinový plán."
-                )
-                self.job_interval_input = w.setting_number(
-                    "Interval (minuty)", 15, 1, 1440, 1, "Platí pro intervalový plán."
-                )
-                self.job_path_input = w.setting_input(
-                    "Cesta ke spouštěči",
-                    str(default_launcher_path(ACTION_POCTY, self.config_path.parent)),
-                    "Doplní se automaticky podle vybrané funkce.",
-                )
-                self.job_enabled = w.setting_switch(
-                    "Úloha je aktivní", True, "Neaktivní úloha se neprovede."
-                )
-            self.job_action.on("update:model-value", lambda: self._sync_job_path())
-            with w.toolbar():
-                ui.button(
-                    "Přidat úlohu", icon="add", on_click=self.add_planned_job
-                ).props("outline dense no-caps")
-                ui.button(
-                    "Uložit plánovač", icon="save", on_click=self.save_planned_jobs
-                ).props("no-caps unelevated dense")
-                self.scheduler_status = ui.label(
-                    f"Načteno úloh: {len(self.planned_jobs)}"
-                ).classes("inline-status truncate")
-            self.job_list = ui.column().classes(
-                "w-full gap-0 p-1 max-h-[32vh] overflow-y-auto app-list app-note"
-            )
-            self.render_planned_jobs()
-
-    def _sync_job_path(self) -> None:
-        action = str(self.job_action.value or ACTION_CUSTOM)
-        if action in {ACTION_POCTY, ACTION_CLOSING, ACTION_SPECIAL}:
-            self.job_path_input.value = str(
-                default_launcher_path(action, self.config_path.parent)
-            )
-
-    def render_planned_jobs(self) -> None:
-        self.job_list.clear()
-        with self.job_list:
-            if not self.planned_jobs:
-                ui.label("Zatím není uložená žádná úloha.").classes("ui-help")
-                return
-            for index, job in enumerate(self.planned_jobs):
-                with ui.row().classes(
-                    "w-full items-center gap-2 px-2 py-0 app-row no-wrap"
-                ):
-                    ui.label(job.name).classes("app-label w-40 truncate")
-                    ui.label(ACTION_LABELS.get(job.action, job.action)).classes(
-                        "app-text w-44 truncate"
-                    )
-                    ui.label(format_schedule(job)).classes("app-text w-36 truncate")
-                    ui.label("Aktivní" if job.enabled else "Vypnuto").classes(
-                        "ui-help w-20"
-                    )
-                    ui.space()
-                    ui.button(
-                        icon="delete_outline",
-                        on_click=lambda i=index: self.delete_planned_job(i),
-                    ).props("flat round dense color=negative")
-
-    def add_planned_job(self) -> None:
-        schedule_type = str(self.job_schedule_type.value or "daily")
-        payload: dict[str, Any] = {
-            "name": str(self.job_name_input.value or "").strip(),
-            "action": str(self.job_action.value or ACTION_CUSTOM),
-            "path": str(self.job_path_input.value or "").strip(),
-            "enabled": bool(self.job_enabled.value),
-            "schedule": {"type": schedule_type},
-        }
-        if schedule_type == "daily":
-            payload["schedule"]["time"] = str(self.job_time_input.value or "").strip()
-        elif schedule_type == "hourly":
-            payload["schedule"]["minute"] = self.job_minute_input.value
-        else:
-            payload["schedule"]["minutes"] = self.job_interval_input.value
-        try:
-            job = parse_job(payload, self.config_path.parent)
-        except ConfigError as exc:
-            self.scheduler_status.set_text(str(exc))
-            return
-        if any(existing.name.casefold() == job.name.casefold() for existing in self.planned_jobs):
-            self.scheduler_status.set_text("Úloha se stejným názvem už existuje.")
-            return
-        self.planned_jobs.append(job)
-        self.render_planned_jobs()
-        self.scheduler_status.set_text(f"Přidána úloha '{job.name}'. Nezapomeňte uložit.")
-
-    def delete_planned_job(self, index: int) -> None:
-        if 0 <= index < len(self.planned_jobs):
-            removed = self.planned_jobs.pop(index)
-            self.render_planned_jobs()
-            self.scheduler_status.set_text(f"Odebrána úloha '{removed.name}'. Uložte změny.")
-
-    def save_planned_jobs(self) -> None:
-        try:
-            save_jobs(self.scheduler_path, self.planned_jobs)
-        except OSError as exc:
-            self.scheduler_status.set_text(f"Plánovač se nepodařilo uložit: {exc}")
-            return
-        self.scheduler_status.set_text(
-            f"Uloženo {len(self.planned_jobs)} úloh do {self.scheduler_path.name}."
-        )
-
     def _setting_switch(self, label: str, value: bool, help_text: str):
         return w.setting_switch(label, value, help_text)
 
@@ -2397,7 +2220,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     ).classes("inline-status truncate")
                     self.mail_subject_label.set_visibility(False)
                     ui.tooltip(
-                        "Příjemce jednorázového e-mailu nastavíte v Odesílání → E-maily funkcí."
+                        "Příjemce jednorázového e-mailu zadáte ve čtvrtém kroku průvodce."
                     )
             self.open_pdf_button = ui.button(
                 "Otevřít poslední", icon="open_in_new", on_click=self.open_last_pdf
@@ -2415,128 +2238,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             self.daily_summary_detail_button = ui.button(
                 "Detail porcí", icon="table_rows", on_click=lambda: self.daily_summary_dialog.open()
             ).props("outline no-caps")
-
-    def _build_mail_panel(self) -> None:
-        w.section_header(
-            "E-maily funkcí",
-            "Každá funkce má vlastní příjemce. Odesílatel a API klíč jsou společné.",
-            "mail",
-        )
-        with w.card():
-            with w.form_grid(3):
-                self.mail_function = w.setting_select(
-                    "Funkce",
-                    FUNCTION_LABELS,
-                    self._mail_function_id,
-                    "Denní stav, Uzávěrka a Speciál mají oddělené příjemce.",
-                )
-                self.api_key_input = w.setting_input(
-                    "Resend API klíč",
-                    self._stored_api_key(),
-                    "Načítá se ze souboru .env, ne z config.json.",
-                    password=True,
-                )
-                self.sender_input = w.setting_input(
-                    "Odesílatel",
-                    str(self.raw.get("mail_odesilatel", "podpora@altisima.cz")),
-                    "Musí být na doméně ověřené v Resendu.",
-                )
-            with w.toolbar():
-                self.recipient_input = w.setting_input(
-                    "Přidat příjemce", "", "Adresa se uloží k vybrané funkci."
-                )
-                self.recipient_input.props('placeholder="technik@example.cz"')
-                self.recipient_input.classes(remove="w-full").classes(
-                    "flex-grow min-w-[220px]"
-                )
-                self.recipient_input.on("keydown.enter", self.add_recipient)
-                ui.button("Přidat", icon="add", on_click=self.add_recipient).props(
-                    "outline dense no-caps"
-                )
-            self.recipient_container = ui.column().classes(
-                "w-full gap-0 p-1 max-h-[26vh] overflow-y-auto app-list app-note"
-            )
-            self.render_recipients()
-
-            daily_mail = self.mail_by_function[FUNCTION_DAILY]
-            self.mail_body_input = (
-                ui.textarea("Text v těle mailu", value=str(daily_mail["text"]))
-                .props("dense rows=4")
-                .classes("w-full")
-            )
-            self.mail_body_input.on("change", lambda: self.save_mail_assignment())
-
-            with w.toolbar():
-                self.only_cooking_days = ui.checkbox(
-                    "Odesílat jen ve varných dnech",
-                    value=bool(daily_mail["jen_varne_dny"]),
-                ).props("dense")
-                self.cooking_help = ui.icon("info_outline").classes("field-hint")
-                self.cooking_help.tooltip(
-                    "Kontrola public.varnedny se provádí jen pro typy stravy "
-                    "s objednávkami ve vybraných kategoriích."
-                )
-                ui.space()
-                self.mail_assign_status = ui.label("").classes("inline-status")
-        self.only_cooking_days.on(
-            "update:model-value", lambda: self.save_mail_assignment()
-        )
-        self.sender_input.on("change", lambda: self.save_mail_assignment())
-        self._show_mail_function(self._mail_function_id)
-        self.mail_function.on(
-            "update:model-value", lambda: self._on_mail_function_change()
-        )
-
-    def _flush_mail_editor(self) -> None:
-        if not hasattr(self, "mail_body_input"):
-            return
-        current = self.mail_by_function.setdefault(
-            self._mail_function_id, {"prijemci": [], "text": "", "jen_varne_dny": False}
-        )
-        current["prijemci"] = list(self.mail_recipients)
-        current["text"] = str(self.mail_body_input.value or "")
-        if self._mail_function_id == FUNCTION_DAILY and hasattr(self, "only_cooking_days"):
-            current["jen_varne_dny"] = bool(self.only_cooking_days.value)
-
-    def _show_mail_function(self, function_id: str) -> None:
-        data = self.mail_by_function.setdefault(
-            function_id, {"prijemci": [], "text": "", "jen_varne_dny": False}
-        )
-        self.mail_recipients = list(data["prijemci"])
-        data["prijemci"] = self.mail_recipients
-        if hasattr(self, "mail_body_input"):
-            self.mail_body_input.value = str(data.get("text") or "")
-        if hasattr(self, "only_cooking_days"):
-            self.only_cooking_days.value = bool(data.get("jen_varne_dny"))
-            self.only_cooking_days.set_visibility(function_id == FUNCTION_DAILY)
-        if hasattr(self, "cooking_help"):
-            self.cooking_help.set_visibility(function_id == FUNCTION_DAILY)
-        self.render_recipients()
-
-    def _on_mail_function_change(self) -> None:
-        self._flush_mail_editor()
-        self._mail_function_id = str(self.mail_function.value or FUNCTION_DAILY)
-        self._show_mail_function(self._mail_function_id)
-        self.save_mail_assignment()
-
-    def save_mail_assignment(self) -> None:
-        try:
-            self._flush_mail_editor()
-            raw = sanitize_config(self.raw)
-            raw = apply_function_mails(
-                raw,
-                self.mail_by_function,
-                sender=str(self.sender_input.value or ""),
-            )
-        except ConfigError as exc:
-            if hasattr(self, "mail_assign_status"):
-                self.mail_assign_status.set_text(str(exc))
-            return
-        write_config(self.config_path, raw)
-        self.raw = raw
-        if hasattr(self, "mail_assign_status"):
-            label = FUNCTION_LABELS.get(self._mail_function_id, self._mail_function_id)
-            self.mail_assign_status.set_text(f"Mail funkce {label} je uložený.")
 
     def set_status(self, message: str) -> None:
         text = str(message or "").strip()
@@ -2693,14 +2394,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         except ConfigError:
             existing_z17 = self.raw.get("z17")
             z17_block = dict(existing_z17) if isinstance(existing_z17, dict) else {}
-        self._flush_mail_editor()
         raw["uzaverka"] = closing_block
         raw["z17"] = z17_block
-        raw = apply_function_mails(
-            raw,
-            self.mail_by_function,
-            sender=str(self.sender_input.value or ""),
-        )
         raw.update(appearance_config(self._appearance_from_widgets()))
         raw.update(
             {
@@ -2869,45 +2564,6 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self._render_z17_selection()
         self.save_special_settings()
 
-    def render_recipients(self) -> None:
-        if not hasattr(self, "recipient_container"):
-            return
-        self.recipient_container.clear()
-        with self.recipient_container:
-            if not self.mail_recipients:
-                ui.label("Zatím není přidán žádný příjemce.").classes(
-                    "ui-help p-2"
-                )
-            for address in self.mail_recipients:
-                with ui.row().classes("ds-recipient-chip items-center no-wrap"):
-                    ui.icon("check_circle").props('aria-hidden="true"')
-                    ui.label(address).classes("app-text min-w-0")
-                    ui.space()
-                    ui.button(
-                        icon="delete_outline",
-                        on_click=lambda _event=None, item=address: self.delete_recipient(item),
-                    ).props("flat round").props(f'aria-label="Odebrat příjemce {address}"')
-
-    def add_recipient(self) -> None:
-        try:
-            address = normalize_recipient(self.recipient_input.value)
-        except ConfigError as exc:
-            ui.notify(str(exc), type="negative", position="top")
-            return
-        if address.casefold() not in {item.casefold() for item in self.mail_recipients}:
-            self.mail_recipients.append(address)
-            self.mail_by_function[self._mail_function_id]["prijemci"] = self.mail_recipients
-            self.render_recipients()
-        self.recipient_input.value = ""
-        self.save_mail_assignment()
-
-    def delete_recipient(self, address: str) -> None:
-        remaining = [item for item in self.mail_recipients if item != address]
-        self.mail_by_function[self._mail_function_id]["prijemci"] = remaining
-        self.mail_recipients = remaining
-        self.render_recipients()
-        self.save_mail_assignment()
-
     def update_mail_subject(self) -> None:
         try:
             selected = self._selected_date()
@@ -2918,6 +2574,16 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         if hasattr(self, "mail_subject_label"):
             self.mail_subject_label.set_text(value)
 
+    def _outgoing_mail_settings(self) -> dict:
+        try:
+            return load_settings(settings_path(self.config_path.parent))
+        except (OSError, ValueError) as exc:
+            raise ConfigError("Zkontrolujte odchozí e-mail v Nastavení → Služba a odesílání.") from exc
+
+    def _outgoing_sender(self) -> str:
+        settings = self._outgoing_mail_settings()
+        return str(settings["from_email"] or self.raw.get("mail_odesilatel") or "")
+
     async def _persist_settings(self, *, require_api_key: bool = False) -> str:
         """Automaticky uloží kompletní stav před vytvořením PDF."""
         raw = self._collect_config()
@@ -2925,13 +2591,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         if password:
             await run.io_bound(set_password, raw["databaze"], password)
 
-        api_key = str(self.api_key_input.value or "").strip()
-        if not api_key:
+        api_key = ""
+        if require_api_key:
             api_key = await run.io_bound(get_resend_api_key) or ""
         if require_api_key and not api_key:
-            raise ConfigError("Zadejte Resend API klíč.")
-        if api_key:
-            await run.io_bound(set_resend_api_key, api_key)
+            raise ConfigError("Zadejte Resend API klíč v Nastavení → Služba a odesílání.")
 
         await run.io_bound(write_config, self.config_path, raw)
         self.raw = raw
@@ -3085,18 +2749,21 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
             return
         try:
-            self._flush_mail_editor()
             categories = self._manual_daily_categories()
             allowed = tuple(self._allowed_category_order())
-            daily = self.mail_by_function[FUNCTION_DAILY]
-            recipients = normalize_recipients(daily["prijemci"])
-            api_key = await self._persist_settings(require_api_key=True)
-            sender = normalize_recipient(self.sender_input.value)
+            if not self.wizard_recipients.commit_pending():
+                return
+            recipients = normalize_recipients(self.wizard_recipients.addresses)
+            outgoing = self._outgoing_mail_settings()
+            api_key = await self._persist_settings(require_api_key=outgoing["transport"] == "resend")
+            sender = normalize_recipient(self._outgoing_sender())
+            template_data = {"report": "Denní stav", "date": self._selected_date().strftime("%d.%m.%Y")}
+            subject = outgoing["subject_template"].format(**template_data)
+            body = outgoing["body_template"].format(**template_data)
         except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
             ui.notify(str(exc), type="negative", position="top")
             return
 
-        subject = mail_subject(self._selected_date())
         if not await self._confirm_send(len(recipients), subject):
             return
 
@@ -3109,11 +2776,12 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 recipients,
                 api_key,
                 sender,
-                str(daily["text"] or ""),
-                bool(daily["jen_varne_dny"]),
+                body,
+                False,
                 self._selected_daily_meal_type(),
                 categories,
                 allowed,
+                subject=subject,
             )
         except Exception as exc:
             self.mail_status.set_text(f"Odeslání selhalo: {exc}")
@@ -3155,6 +2823,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         meal_type: str | None = None,
         categories: tuple[str, ...] | None = None,
         allowed_categories: tuple[str, ...] | None = None,
+        *, subject: str | None = None,
     ) -> dict[str, Any]:
         config = load_config(self.config_path)
         config = replace(
@@ -3172,14 +2841,16 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             if categories is not None and allowed_categories is not None else None
         )
         path = create_pdf(config, report, output_path=output_path)
-        dispatch = send_pdf_via_mailsender(
-            recipients,
-            mail_subject(config.report_date),
-            body,
-            path,
-            api_key=api_key,
-            sender_email=sender,
-        )
+        subject = subject or mail_subject(config.report_date)
+        settings = self._outgoing_mail_settings()
+        if settings["transport"] == "smtp":
+            dispatch = MailDispatchResult(
+                recipients=smtp_send(settings, recipients, subject, body, path), detail="SMTP",
+            )
+        else:
+            dispatch = send_pdf_via_mailsender(
+                recipients, subject, body, path, api_key=api_key, sender_email=sender,
+            )
         return {"skipped": False, "path": path, "dispatch": dispatch}
 
 
@@ -3227,8 +2898,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="provozní log automatického exportu nebo uzávěrky",
     )
     parser.add_argument(
-        "--version", action="version", version=f"{APP_TITLE} {APP_VERSION}"
+        "--version", action="version", version=f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}"
     )
+    export = parser.add_mutually_exclusive_group()
+    export.add_argument("--export-report", metavar="NÁZEV", help="bez GUI uložit PDF vybraného uloženého přehledu")
+    export.add_argument("--export-report-id", metavar="ID", help="bez GUI uložit PDF přehledu podle jeho jednoznačného ID")
+    export_day = parser.add_mutually_exclusive_group()
+    export_day.add_argument("--date", dest="report_date", metavar="RRRR-MM-DD", help="datum exportu uloženého přehledu; výchozí je dnešek")
+    export_day.add_argument("--days-ahead", type=int, metavar="N", help="export přehledu za N kalendářních dní (0–370)")
+    parser.add_argument("--output", dest="export_output", type=Path, metavar="SOUBOR.pdf", help="cílové PDF; relativní cesta platí vůči složce konfigurace")
+    parser.add_argument("--open-pdf", action="store_true", help="po exportu otevřít PDF ve výchozím prohlížeči PDF")
+    parser.add_argument("--version-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(remaining)
     args.uzaverka_current = period == CURRENT_CLOSING_PERIOD
     args.uzaverka_period = period if isinstance(period, tuple) else None
@@ -3236,6 +2916,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args.z17_year = z17_year
     args.z17 = z17_year is not None
     args.automatic = bool(args.automatic or args.poctyemailem)
+    saved_export = args.export_report is not None or args.export_report_id is not None
+    if saved_export and (args.browser or args.native or args.automatic or args.uzaverka or args.z17):
+        parser.error("Export uloženého přehledu nelze kombinovat s GUI, odesíláním ani jinou sestavou.")
+    if not saved_export and any((args.report_date is not None, args.days_ahead is not None,
+                                 args.export_output is not None, args.open_pdf)):
+        parser.error("Volby --date, --days-ahead, --output a --open-pdf patří k --export-report nebo --export-report-id.")
     return args
 
 
@@ -3246,6 +2932,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"CHYBA: {exc}", file=sys.stderr)
         return 2
+    if args.version_file is not None:
+        try:
+            args.version_file.write_text(f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"Verzi nelze zapsat: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.export_report is not None or args.export_report_id is not None:
+        from services.web_saved_report_cli import run_saved_report_export
+        return run_saved_report_export(args)
     if args.automatic and args.uzaverka:
         print(
             "Zvolte jen --poctyemailem / --automatic, nebo jen přepínač uzávěrky.",
@@ -3340,6 +3036,8 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
+
 
 
 

@@ -11,6 +11,8 @@ import logging
 import os
 import signal
 import time
+import threading
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -22,7 +24,7 @@ from services.jidelnasql_warning import (
 )
 from services.web_mail_task_store import load_tasks, task_file
 from services.web_mail_settings import load_settings, settings_path
-from services.web_branding import WEB_VERSION
+from services.web_branding import WEB_VERSION, WEB_BUILD
 from services.web_mail_smtp import smtp_send
 from services.jidelnasql_warning import JidelnaWarningSettings
 from services.web_mail_cooking_days import resolve_task_date, report_is_cooking_day
@@ -30,9 +32,20 @@ from services.web_daily_profiles import task_report_config
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
 from services.web_activity import record_event, friendly_error
+from services.web_worker_status import write_runtime
 
 LOG = logging.getLogger("mailpilot.web_worker")
 STOP = False
+RUNTIME = {"phase": "waiting", "task_id": None}
+
+
+def runtime_status(config_path, phase=None, task_id=None):
+    if phase is not None:
+        RUNTIME.update(phase=phase, task_id=task_id)
+    try:
+        write_runtime(config_path.parent, **RUNTIME.copy())
+    except OSError:
+        LOG.exception("Cannot update scheduler heartbeat")
 
 
 def request_stop(*_):
@@ -42,10 +55,30 @@ def request_stop(*_):
 
 def deliver_daily(config_path: Path, task, report_date: date) -> None:
     raw = read_saved_settings(config_path)
-    settings = load_settings(settings_path(config_path.parent))
     config = load_config(config_path, date_override=report_date.strftime("%d.%m.%Y"))
     config = task_report_config(config, raw, task, config_path.parent)
     report = fetch_report(config)
+    if getattr(task, "output_mode", "email") == "pdf":
+        from services.web_mail_tasks import validate_pdf_destination
+        folder, filename = validate_pdf_destination(task.output_directory, task.output_filename)
+        if not Path(folder).is_absolute():
+            raise ValueError("Složka PDF musí být úplná cesta platná v tomto systému.")
+        output = Path(folder) / filename.format(date=report_date.isoformat())
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".dataship-", suffix=".pdf", delete=False) as file:
+                temporary = Path(file.name)
+            create_pdf(config, report, output_path=temporary)
+            os.replace(temporary, output)
+        finally:
+            if temporary:
+                temporary.unlink(missing_ok=True)
+        record_event(config_path.parent, "exported", f"PDF uloženo: {output}",
+                     task_id=task.id, task_name=task.name, report_date=report_date)
+        LOG.info("Exported task=%s date=%s file=%s", task.id, report_date, output)
+        return
+    settings = load_settings(settings_path(config_path.parent))
     if getattr(task, "profile_id", None):
         # Profile outputs must not overwrite a global or other profile's PDF.
         from hashlib import sha256
@@ -120,15 +153,21 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
     for task in tasks:
         if not task.enabled or task.id in completed and completed[task.id] == now.date().isoformat():
             continue
+        if getattr(task, "first_send_date", None) and now.date() < date.fromisoformat(task.first_send_date):
+            continue
         hh, mm = map(int, task.send_time.split(":"))
         if (now.hour, now.minute) < (hh, mm):
             continue
         try:
+            LOG.info("Task due id=%s name=%s scheduled=%s checked=%s build=%s",
+                     task.id, task.name, task.send_time, now.isoformat(timespec="seconds"), WEB_BUILD)
+            runtime_status(config_path, "running", task.id)
             dispatch(config_path, task, now.date())
         except Exception as exc:
             LOG.exception("Task %s failed", task.name)
             summary = friendly_error(exc)
-            record_event(config_path.parent, "error", "Neodesláno: " + summary + " Další automatický pokus bude nejdříve zítra.", task_id=task.id, task_name=task.name)
+            failure = "PDF nebylo vytvořeno: " if task.output_mode == "pdf" else "Neodesláno: "
+            record_event(config_path.parent, "error", failure + summary + " Další automatický pokus bude nejdříve zítra.", task_id=task.id, task_name=task.name)
             # The warning only adds information; it must not mask delivery errors.
             try:
                 web_settings = load_settings(settings_path(config_path.parent))
@@ -137,7 +176,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
                     template_path=Path(web_settings["dashboard_path"]),
                 )
                 warning_error = show_jidelnasql_mail_warning(
-                    settings, message=f"MailShip: neodeslána úloha {task.name}. {summary}"
+                    settings, message=f"MailShip: úloha {task.name} selhala. {summary}"
                 )
                 if warning_error:
                     LOG.error("Dashboard warning: %s", warning_error)
@@ -147,14 +186,16 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
             # an explicit retry policy with backoff is implemented.
             completed[task.id] = now.date().isoformat()
             save_state(completed_path, completed)
+            runtime_status(config_path, "waiting")
             continue
         completed[task.id] = now.date().isoformat()
         save_state(completed_path, completed)
+        runtime_status(config_path, "waiting")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", action="version", version=f"DataShip Worker {WEB_VERSION}")
+    parser.add_argument("--version", action="version", version=f"DataShip Worker {WEB_VERSION} build {WEB_BUILD}")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--interval", type=int, default=30)
     args = parser.parse_args()
@@ -173,21 +214,34 @@ def main() -> int:
     )
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    LOG.info("DataShip scheduler started: %s", config_path)
+    LOG.info("DataShip scheduler started: %s build=%s pid=%s", config_path, WEB_BUILD, os.getpid())
     record_event(config_path.parent, "started", "Plánovač byl spuštěn.")
+    heartbeat_stop = threading.Event()
+    def heartbeat():
+        while not heartbeat_stop.wait(15):
+            runtime_status(config_path)
+    runtime_status(config_path, "waiting")
+    heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+    heartbeat_thread.start()
     while not STOP:
         try:
             tick(config_path)
         except Exception:
             LOG.exception("Scheduler tick failed")
             record_event(config_path.parent, "error", "Plánovač nemohl načíst nebo zpracovat úlohy. Zkontrolujte konfiguraci a technický log.")
+        runtime_status(config_path, "waiting")
         time.sleep(args.interval)
     LOG.info("DataShip scheduler stopped")
+    heartbeat_stop.set()
+    heartbeat_thread.join(timeout=2)
+    runtime_status(config_path, "stopped")
     record_event(config_path.parent, "stopped", "Plánovač byl zastaven.")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
 
 

@@ -27,6 +27,10 @@ def test_release_packages_only_program_and_clean_sample(tmp_path, monkeypatch):
     for path in paths[:2]:
         with ZipFile(path) as z:
             assert 'DataShip/_internal/runtime.dll' in z.namelist()
+            assert b'--export-report' in z.read('DataShip/EXPORT_PREHLEDU.md')
+            assert 'DataShip/NOVINKY.md' in z.namelist()
+            assert json.loads(z.read('DataShip/BUILD_INFO.json'))['build'] == release.WEB_BUILD
+            assert not any(name.lower().endswith('.vbs') for name in z.namelist())
             assert json.loads(z.read('DataShip/config.json')) == json.loads((release.ROOT / 'config.example.json').read_text(encoding="utf-8"))
             assert json.loads(z.read('DataShip/BUILD_INFO.json'))['commit'] == '0123456789abcdef'
             assert all(b'PRIVATE-DO-NOT-SHIP' not in z.read(name) for name in z.namelist())
@@ -143,3 +147,4 @@ def test_changed_fallback_bundle_is_not_cached(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match='checksum'):
         release.download_nssm_fallback(cache)
     assert not list(tmp_path.iterdir())
+

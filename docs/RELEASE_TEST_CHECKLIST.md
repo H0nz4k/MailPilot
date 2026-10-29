@@ -1,4 +1,4 @@
-# DataShip 1.0.0-rc.4 – kontrola před vydáním
+# DataShip 1.0.0-rc.11 – kontrola před vydáním
 
 Automatické testy používají izolované soubory a nahrazené DB/e-mailové transporty. Windows smoke kontrola ověřuje start skutečných sestavených EXE a HTTP odpověď GUI. Úspěšný build nepotvrzuje funkci zákaznické databáze ani účtu Windows služby.
 
@@ -6,7 +6,7 @@ Doplň datum, počítač, verzi z `BUILD_INFO.json` a výsledek každého bodu. 
 
 | Oblast | Co ověřit u sebe na Windows | Výsledek |
 |---|---|---|
-| Čisté spuštění | Rozbal celý ZIP mimo zdroje, otevři START_WEB.cmd; GUI se otevře bez instalace Pythonu. | ☐ |
+| Čisté spuštění | Rozbal celý ZIP mimo zdroje, otevři DataShip.exe; web se otevře bez konzole, VBS a instalace Pythonu. | ☐ |
 | Databáze | Správný server a jídelna, TEST uspěje; chybné údaje ukážou srozumitelnou chybu. | ☐ |
 | Přístup | Běžný uživatel vidí jen povolené nabídky/kategorie; Nastavení vyžaduje heslo a znovu se zamkne. | ☐ |
 | Denní počty | Datum 21.10.2026 v referenční DB: oběd 627, snídaně 36, večeře 32, celkem 695; ISŠ celkem 170. Pokud se data od referenčního exportu změnila, porovnej aktuální shodný okamžik. | ☐ |
@@ -23,3 +23,16 @@ Doplň datum, počítač, verzi z `BUILD_INFO.json` a výsledek každého bodu. 
 | Aktualizace | Po výměně programu zůstávají přehledy, příjemci, úlohy a nastavení; lze obnovit zálohu původní složky. | ☐ |
 
 Známé omezení: nepodporovaný starý typ „Souhrn počtu jídel“ se neposílá. Neúspěšná úloha nového webového workeru se v ten den automaticky znovu neopakuje; chybu je nutné zjistit z logu a vyřešit. Nepovažuj testovací RC za potvrzené produkční vydání, dokud neprojde tento seznam.
+
+
+
+## Rc.11: uložený přehled přes parametr
+
+- Uložit pojmenovaný přehled s vybranými kategoriemi, stravou a vzhledem PDF.
+- Spustit `DataShip.exe --export-report "mujprehled"`: vznikne dnešní PDF, neotevře se web a nic se neodešle.
+- Vyzkoušet zástupce s `--open-pdf`, pevné `--date`, `--days-ahead 1` a `--output` s mezerami a diakritikou.
+- Při duplicitním názvu zkontrolovat chybu bez náhodného výběru; ověřit `--export-report-id`.
+- Chybějící přehled, chybějící DB heslo, nedostupná DB a nepovolená cílová cesta musí skončit chybou v logu bez otevření GUI.
+- Při selhání exportu nesmí zmizet dřívější cílové PDF; nesmějí zůstat dočasné soubory.
+- Ověřit, že změna administrátorem povolených kategorií platí i pro export přes parametr.
+- Ověřit windowed GUI přes `scripts/verify_web_build.py`; GUI ani headless export nesmějí vyžadovat VBS.

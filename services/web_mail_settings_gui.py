@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 from nicegui import ui
+from env_store import DEFAULT_ENV_PATH, EnvStoreError, get_resend_api_key, set_resend_api_key
 from services.web_mail_settings import load_settings, save_settings, settings_path
 from services.web_mail_nssm import service_command, windows_admin_state, ADMIN_HELP
 from services.web_path_picker import pick_local_file
@@ -17,6 +18,7 @@ from services.jidelnasql_warning import (
 def build_web_settings_panel(
     directory: Path, *, require_admin: Callable[[], bool] | None = None,
     before_lock: list[Callable[[], None]] | None = None,
+    on_api_key_saved: Callable[[str], None] | None = None,
 ) -> None:
     path = settings_path(directory)
     try:
@@ -90,6 +92,31 @@ def build_web_settings_panel(
                         button = ui.button(caption, on_click=lambda op=action: control(op)).props("outline no-caps")
                         button.set_enabled(elevated is not False or action == "status")
                         service_buttons.append((button, action))
+                removal_target = {"name": ""}
+                with ui.dialog() as removal_dialog, ui.card().classes("w-full max-w-lg gap-3"):
+                    ui.label("Odstranit službu?").classes("app-heading")
+                    removal_name = ui.label("")
+                    ui.label("Běžící služba se nejprve zastaví a potom odstraní z Windows. Automatické odesílání touto službou přestane fungovat. Uložené úlohy, API klíč i ostatní nastavení zůstanou zachované.").classes("ui-help")
+                    async def confirm_removal():
+                        removal_dialog.close()
+                        if str(name.value or "").strip() != removal_target["name"]:
+                            ui.notify("Název služby se změnil. Potvrďte odstranění znovu.", type="warning")
+                            return
+                        await control("remove")
+                    with ui.row().classes("w-full justify-end gap-2"):
+                        ui.button("Zrušit", on_click=removal_dialog.close).props("outline no-caps").mark("cancel-service-removal")
+                        ui.button("Ano, odstranit službu", color="negative", on_click=confirm_removal).props("no-caps").mark("confirm-service-removal")
+
+                def request_removal():
+                    if busy["value"] or not allowed() or elevated is False:
+                        return
+                    removal_target["name"] = str(name.value or "").strip()
+                    removal_name.set_text(f'Služba: {removal_target["name"]}')
+                    removal_dialog.open()
+
+                remove_button = ui.button("Odstranit službu", icon="delete_outline", color="negative", on_click=request_removal).props("outline no-caps").mark("remove-service")
+                remove_button.set_enabled(elevated is not False)
+                service_buttons.append((remove_button, "remove"))
                 ui.label("Po přesunu DataShipu zastavené službě opravte cesty. Oprava zachová stejnou službu a sama ji nespustí.").classes("ui-help")
 
             with ui.card().classes("ds-settings-card"):
@@ -143,7 +170,71 @@ def build_web_settings_panel(
                     username = ui.input("SMTP přihlašovací jméno", value=values["smtp_username"]).props("outlined dense").classes("w-full")
                     ui.label("Heslo SMTP ukládejte do prostředí služby jako MAILPILOT_SMTP_PASSWORD, ne do JSON souboru.").classes("text-caption")
                 smtp_fields.bind_visibility_from(transport, "value", backward=lambda value: value == "smtp")
-                ui.label("Resend API klíč nastavíte v Nastavení → E-maily.").classes("ui-help").bind_visibility_from(transport, "value", backward=lambda value: value == "resend")
+                with ui.column().classes("w-full gap-2") as resend_fields:
+                    api_key = ui.input(
+                        "Resend API klíč", password=True, password_toggle_button=True,
+                    ).props("outlined dense autocomplete=off").classes("w-full").mark("resend-api-key")
+                    ui.label("Pole slouží pro zadání nového klíče. Po uložení se vyprázdní; uložený klíč zůstává k dispozici.").classes("ui-help")
+                    with ui.row().classes("ds-api-key-state w-full items-center no-wrap").props('role="status" aria-live="polite" aria-atomic="true"').mark("resend-key-state") as key_state:
+                        key_icon = ui.icon("info", size="24px").props('aria-hidden="true"').mark("resend-key-icon")
+                        key_status = ui.label("").classes("ds-api-key-status-text").mark("resend-key-status")
+                    ui.label(f"Soubor s klíčem: {DEFAULT_ENV_PATH}").classes("ui-help break-all").mark("resend-key-location")
+
+                    def show_key_status(kind: str, message: str, icon: str):
+                        key_state.classes(
+                            remove="ds-api-key-state--positive ds-api-key-state--warning ds-api-key-state--negative",
+                            add=f"ds-api-key-state--{kind}",
+                        )
+                        key_icon.props(f'name={icon}')
+                        key_status.set_text(message)
+
+                    def refresh_key_status():
+                        try:
+                            loaded = get_resend_api_key()
+                        except (EnvStoreError, OSError):
+                            show_key_status("negative", "Uložený API klíč se nepodařilo načíst.", "error_outline")
+                            return
+                        if loaded:
+                            show_key_status("positive", "API klíč je uložený a načtený.", "check_circle")
+                        else:
+                            show_key_status("warning", "API klíč zatím není nastaven.", "key_off")
+
+                    def key_changed():
+                        if str(api_key.value or "").strip():
+                            show_key_status("warning", "Nový API klíč ještě není uložený.", "edit_note")
+                        else:
+                            refresh_key_status()
+
+                    refresh_key_status()
+                    api_key.on_value_change(lambda _event: key_changed())
+
+                    def save_api_key():
+                        if not allowed():
+                            return
+                        value = str(api_key.value or "").strip()
+                        if not value:
+                            refresh_key_status()
+                            return
+                        try:
+                            set_resend_api_key(value)
+                        except (EnvStoreError, OSError):
+                            show_key_status("negative", "API klíč se nepodařilo uložit. Ověřte právo zápisu do složky aplikace.", "error_outline")
+                            return
+                        try:
+                            loaded = get_resend_api_key()
+                        except (EnvStoreError, OSError):
+                            loaded = None
+                        if loaded != value:
+                            show_key_status("negative", "API klíč byl zapsán, ale jeho načtení se nepodařilo ověřit. Zkuste jej uložit znovu.", "error_outline")
+                            return
+                        if on_api_key_saved is not None:
+                            on_api_key_saved(value)
+                        api_key.value = ""
+                        show_key_status("positive", "API klíč je uložený a načtený.", "check_circle")
+
+                    api_key.on("keydown.enter.prevent", save_api_key)
+                    ui.button("Uložit API klíč", icon="save", on_click=save_api_key).props("outline no-caps")
+                resend_fields.bind_visibility_from(transport, "value", backward=lambda value: value == "resend")
                 from_email = ui.input("E-mail odesílatele", value=values["from_email"]).props("outlined dense").classes("w-full")
                 from_name = ui.input("Zobrazované jméno odesílatele", value=values["from_name"]).props("outlined dense").classes("w-full")
                 subject = ui.input("Výchozí předmět", value=values["subject_template"]).props("outlined dense").classes("w-full")
@@ -210,4 +301,5 @@ def build_web_settings_panel(
         field.on("blur", flush)
     if before_lock is not None:
         before_lock.append(flush)
+
 

@@ -36,26 +36,35 @@ jobs:
         run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
       - name: Package clean portable and NSSM distributions
         run: .venv-web/Scripts/python.exe scripts/package_web_release.py --commit "$GITHUB_SHA"
-      - name: Publish verified Windows rc.9 directly to GitHub Releases
-        if: github.ref == 'refs/heads/feat/dataship-design-integration'
+      - name: Upload verified Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: DataShip-Windows-${{ github.sha }}
+          path: release-dist/**/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Prepare Windows rc.11 draft release
+        if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feat/dataship-report-wizard') || startsWith(github.ref, 'refs/tags/dataship-v')
         run: |
           set -Eeuo pipefail
           version="$(tr -d '\r\n' < VERSION)"
-          # Release only this explicitly planned candidate; other versions
-          # require an intentional change to the release workflow.
-          [[ "$version" == "1.0.0-rc.9" ]] || exit 0
+          [[ "$version" == "1.0.0-rc.11" ]] || exit 0
           tag="dataship-v$version"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo 'Tag and VERSION disagree; refusing to prepare the release.' >&2
+            exit 1
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite it."
             exit 0
           fi
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' > "$RUNNER_TEMP/tag-sha" 2>/dev/null; then
             [[ "$(cat "$RUNNER_TEMP/tag-sha")" == "$GITHUB_SHA" ]] || {
-              echo 'Tag exists at a different commit; refusing to publish it.' >&2
+              echo 'Tag exists at a different commit; refusing to prepare the release.' >&2
               exit 1
             }
           fi
           gh release create "$tag" release-dist/"$version"/* \
             --target "$GITHUB_SHA" --title "DataShip $version" \
             --notes-file "docs/releases/$version.md" \
-            --prerelease --latest=false
+            --draft --prerelease --latest=false

@@ -45,7 +45,7 @@ html.theme-tmave .dataship-ui {
     width: 36px; height: 36px; color: var(--ds-on-primary);
     background: var(--app-primary); border-radius: 6px;
 }
-.dataship-ui .app-title { font-size: 26px; font-weight: 700; }
+.dataship-ui .app-title { font-size: 26px; font-weight: 600; }
 .dataship-ui .db-chip { padding: 0; background: transparent; border: 0; flex-wrap: wrap; gap: 5px; }
 .dataship-ui .connection-caption { display: none; }
 .dataship-ui .connection-name { font-size: var(--app-help); white-space: normal; overflow-wrap: anywhere; }
@@ -194,6 +194,25 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 .ds-settings-card .q-field__control { border-radius: 4px; }
 .ds-settings-card .ds-service-status { padding: 12px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-block); overflow-wrap: anywhere; width: 100%; }
 .ds-settings-card .q-btn__content { white-space: normal; }
+/* Credentials use a persistent status box with an icon and words, not color alone. */
+.ds-api-key-state { padding: 12px 14px; gap: 10px; border: 1px solid; border-radius: 6px; }
+.ds-api-key-state .q-icon { flex: 0 0 auto; }
+.ds-api-key-state .ds-api-key-status-text { font-size: var(--app-text); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.ds-api-key-state--positive { background: #ecfdf3; border-color: #15803d; color: #14532d; }
+.ds-api-key-state--warning { background: #fffbeb; border-color: #b45309; color: #78350f; }
+.ds-api-key-state--negative { background: #fef2f2; border-color: #b91c1c; color: #991b1b; }
+html.theme-tmave .ds-api-key-state--positive { background: #102e22; border-color: #4ade80; color: #a7f3d0; }
+html.theme-tmave .ds-api-key-state--warning { background: #38280f; border-color: #fbbf24; color: #fde68a; }
+html.theme-tmave .ds-api-key-state--negative { background: #3b171b; border-color: #f87171; color: #fecaca; }
+.ds-api-key-state .ds-api-key-status-text, .ds-api-key-state .q-icon { color: inherit !important; }
+.ds-scheduler-notice { padding: 16px; gap: 12px; border: 2px solid; border-radius: 8px; }
+.ds-scheduler-notice-text { font-size: var(--app-text); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.ds-scheduler-notice--positive { background: #ecfdf3; border-color: #15803d; color: #14532d; }
+.ds-scheduler-notice--warning { background: #fffbeb; border-color: #b45309; color: #78350f; }
+.ds-scheduler-notice--pending { background: var(--app-primary-soft); border-color: var(--app-primary); color: var(--app-ink); }
+html.theme-tmave .ds-scheduler-notice--positive { background: #102e22; border-color: #4ade80; color: #a7f3d0; }
+html.theme-tmave .ds-scheduler-notice--warning { background: #38280f; border-color: #fbbf24; color: #fde68a; }
+.ds-scheduler-notice .ds-scheduler-notice-text, .ds-scheduler-notice .q-icon, .ds-scheduler-notice .q-btn { color: inherit !important; }
 .ds-settings-save { width: 100%; justify-content: flex-end; padding: 12px 0; }
 .ds-mail-task { border: 1.5px solid var(--app-border); padding: 18px; border-radius: 8px; box-shadow: none; }
 .ds-mail-task .ds-task-title { font-size: var(--app-heading); font-weight: var(--app-weight-heading); }
@@ -260,5 +279,92 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 @media (prefers-reduced-motion: reduce) {
     *, *:before, *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
-"""
 
+/* Four-step workspace: one clear primary action and a stable visual hierarchy. */
+.ds-wizard { max-width: 1040px; margin-inline: auto; --ds-wizard-radius: 14px; }
+.ds-wizard-intro { color: var(--app-muted); line-height: 1.6; margin-bottom: 12px; }
+.ds-wizard-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.ds-wizard-indicator { padding: 14px 12px; gap: 10px; border: 1px solid var(--app-border); border-radius: 12px; margin: 0; background: var(--app-surface); color: var(--app-muted); }
+.ds-wizard-number { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; border: 1px solid var(--app-border); font-size: 16px; font-weight: 600; background: var(--app-block); }
+.ds-wizard-step-title { font-size: max(16px, var(--app-help)); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.ds-wizard-current { border: 2px solid var(--app-primary); background: var(--app-primary-soft); color: var(--app-primary); padding: 13px 11px; }
+.ds-wizard-current .ds-wizard-number { background: var(--app-primary); color: var(--ds-on-primary); border-color: var(--app-primary); }
+.ds-wizard-done { color: var(--app-ink); }
+.ds-wizard-done .ds-wizard-number { color: var(--app-primary); border-color: var(--app-primary); background: var(--app-primary-soft); }
+.ds-wizard-context { color: var(--app-muted); font-size: max(16px, var(--app-help)); line-height: 1.6; margin-bottom: 10px; overflow-wrap: anywhere; }
+.ds-wizard > .text-negative:empty { display: none; }
+.dataship-ui .ds-wizard .app-card { padding: 24px; border-radius: var(--ds-wizard-radius); gap: 18px; box-shadow: 0 4px 18px rgb(0 0 0 / 4%); }
+.ds-wizard .ui-help { line-height: 1.6; max-width: 72ch; }
+.ds-wizard-content { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ds-wizard-content .q-radio { min-height: 80px; padding: 12px; gap: 6px; border: 1px solid var(--app-field-border); border-radius: 12px; align-items: center; margin: 0; }
+.ds-wizard-content .q-radio__label { font-weight: 600; line-height: 1.5; }
+.ds-wizard-content .q-radio:has(.q-radio__inner--truthy) { border: 2px solid var(--app-primary); background: var(--app-primary-soft); padding: 11px; }
+.ds-wizard-preview { padding: 18px 20px; border: 1px solid var(--app-field-border); border-left: 4px solid var(--app-primary); border-radius: 10px; background: var(--app-primary-soft); width: 100%; line-height: 1.7; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.ds-wizard-actions { padding-block: 12px; gap: 12px; }
+.ds-wizard-actions .q-btn { min-width: 150px; min-height: 52px; padding-inline: 24px; border-radius: 10px; font-weight: 600; }
+.ds-wizard-actions .q-btn.bg-primary { min-width: 240px; margin-left: auto; }
+.ds-wizard-receipt { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; padding: 24px; }
+.ds-wizard-receipt .ds-wizard-preview { background: var(--app-block); border-left-color: var(--q-positive); }
+.dataship-ui .ds-mail-task { border-radius: 14px; border: 1px solid var(--app-border); padding: 24px; gap: 12px; }
+@media (max-width: 700px) {
+    .ds-wizard-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .ds-wizard-indicator { padding: 10px; gap: 8px; }
+    .ds-wizard-current { padding: 9px; }
+    .dataship-ui .ds-wizard .app-card, .ds-wizard-receipt, .dataship-ui .ds-mail-task { padding: 16px; }
+    .ds-wizard-content { grid-template-columns: minmax(0, 1fr); }
+    .ds-wizard-actions .q-btn, .ds-wizard-actions .q-btn.bg-primary { width: 100%; min-width: 0; }
+    .ds-wizard-preview { padding: 14px; }
+}
+
+/* Three type roles, one family; icon ligatures keep their own icon font. */
+body, .dataship-ui, .q-dialog, .q-menu {
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+.q-field, .q-field__native, .q-field__input, .q-btn, .q-tab__label, .q-item__label {
+    font-family: inherit;
+}
+.dataship-ui .app-title, .dataship-ui .ds-page-title, .ds-dialog-title,
+.ds-mail-task .ds-task-title, .dataship-ui .ds-summary-total {
+    font-size: var(--app-heading); font-weight: var(--app-weight-heading);
+}
+.dataship-ui .q-btn, .ds-mail-dialog .q-btn, .dataship-ui .app-nav .q-tab__label {
+    font-size: var(--app-text); font-weight: 600;
+}
+.ds-wizard-number, .ds-wizard-step-title, .ds-wizard-context {
+    font-size: var(--app-help); font-weight: 600;
+}
+.ds-wizard-context { font-weight: var(--app-weight-help); }
+.ds-summary-name, .ds-wizard-content .q-radio__label { font-weight: 600; }
+.q-field--dense .q-field__control, .q-field__control {
+    min-height: max(60px, var(--app-field-min));
+}
+.q-field--dense .q-field__marginal, .q-field__marginal { height: 60px; }
+.q-field--labeled.q-field--float .q-field__label {
+    top: 5px; transform: none; font-size: var(--app-help); line-height: 1.2;
+}
+.q-field--labeled.q-field--float .q-field__native {
+    padding-top: 26px; padding-bottom: 6px;
+}
+.q-select__dropdown-icon, .q-expansion-item__toggle-icon {
+    font-size: 28px; width: 44px; min-height: 44px;
+    color: var(--app-primary); border-radius: 8px;
+    background: var(--app-primary-soft);
+}
+.q-menu .q-item { min-height: 48px; }
+.ds-day-stepper { gap: 8px; }
+.ds-day-stepper > .q-btn { flex: 0 0 48px; width: 48px; min-height: 48px; }
+.ds-day-stepper > .q-btn .q-icon { font-size: 26px; }
+.ds-stepper-input input[type=number] { appearance: textfield; -moz-appearance: textfield; }
+.ds-stepper-input input::-webkit-inner-spin-button,
+.ds-stepper-input input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ds-output-choice { width: 100%; padding: 8px 12px; border: 1px solid var(--app-border);
+    border-radius: 10px; background: var(--app-primary-soft); }
+.ds-output-choice .q-checkbox__label { font-weight: 600; }
+.ds-output-path { gap: 10px; }
+.ds-output-path .q-btn { min-height: 48px; }
+@media(max-width: 600px) {
+    .ds-output-path { flex-wrap: wrap !important; }
+    .ds-output-path > .q-field { flex-basis: 100%; }
+}
+
+"""

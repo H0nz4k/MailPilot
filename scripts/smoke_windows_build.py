@@ -13,7 +13,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from services.web_branding import WEB_VERSION
+from scripts.verify_web_build import verify
 
 
 def stop(process):
@@ -105,15 +105,22 @@ def main():
     parser.add_argument('--service', action='store_true', help='Also install/start/remove an isolated temporary service; administrator required.')
     args = parser.parse_args()
     app = args.app.resolve()
-    for executable in ['DataShip.exe', 'DataShip-Worker.exe']:
-        version = subprocess.check_output([str(app / executable), '--version'], text=True, timeout=120)
-        if WEB_VERSION not in version:
-            raise RuntimeError(f'Incorrect version: {version}')
+    verify(app)
     with tempfile.TemporaryDirectory(prefix='dataship-smoke-') as tmp:
         tmp = Path(tmp)
         config = tmp / 'config.json'
         shutil.copy2(ROOT / 'config.example.json', config)
         (tmp / 'web_mail_tasks.json').write_text('{"version":1,"tasks":[]}', encoding='utf-8')
+        # A missing saved report must fail headlessly, without opening UI or
+        # asking for DB/email credentials. The test uses no customer profiles.
+        headless_log = tmp / 'headless-export.log'
+        headless = subprocess.run(
+            [str(app / 'DataShip.exe'), '--config', str(config), '--export-report',
+             '__smoke_missing_report__', '--log', str(headless_log)],
+            capture_output=True, timeout=60,
+        )
+        if headless.returncode != 2 or not headless_log.is_file() or 'nebyl nalezen' not in headless_log.read_text(encoding='utf-8'):
+            raise RuntimeError('Headless saved-report error handling failed.')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
@@ -161,3 +168,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

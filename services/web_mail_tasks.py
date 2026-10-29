@@ -7,12 +7,39 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path, PureWindowsPath
+from string import Formatter
 from typing import Callable, Literal
 from uuid import uuid4
 
 DateMode = Literal["today", "tomorrow", "offset", "next_cooking_day", "fixed"]
 ReportType = Literal["daily", "meal_summary"]
 MAX_LOOKAHEAD_DAYS = 370
+
+
+def validate_pdf_destination(directory: object, filename: object) -> tuple[str, str]:
+    folder = str(directory or "").strip()
+    if not folder or not (Path(folder).is_absolute() or PureWindowsPath(folder).is_absolute()):
+        raise ValueError("Zadejte úplnou cestu ke složce pro PDF.")
+    if any(ord(char) < 32 for char in folder):
+        raise ValueError("Cesta ke složce obsahuje neplatné znaky.")
+    template = str(filename or "").strip()
+    try:
+        if any(field not in (None, "date") or spec or conversion
+               for _literal, field, spec, conversion in Formatter().parse(template)):
+            raise ValueError()
+        sample = template.format(date="2026-10-29")
+    except (KeyError, ValueError, IndexError, AttributeError) as exc:
+        raise ValueError("Název PDF může obsahovat pouze proměnnou {date}.") from exc
+    if (not sample.lower().endswith(".pdf") or sample in (".pdf", "..pdf")
+            or any(char in sample for char in '<>:"/\\|?*')
+            or any(ord(char) < 32 for char in sample)
+            or "{" in sample or "}" in sample):
+        raise ValueError("Zadejte název souboru s příponou .pdf, bez cesty a speciálních znaků.")
+    stem = sample.split(".")[0].rstrip(" .").upper()
+    if stem in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}:
+        raise ValueError("Tento název souboru je ve Windows vyhrazený.")
+    return folder, template
 
 
 @dataclass(frozen=True)
@@ -29,6 +56,10 @@ class MailTask:
     profile_id: str | None = None
     cooking_meal_type: str | tuple[str, ...] | None = None
     only_cooking_days: bool = False
+    first_send_date: str | None = None
+    output_mode: Literal["email", "pdf"] = "email"
+    output_directory: str | None = None
+    output_filename: str = "Prehled_{date}.pdf"
 
     @classmethod
     def from_dict(cls, raw: dict) -> "MailTask":
@@ -39,8 +70,16 @@ class MailTask:
         name = str(raw.get("name", "")).strip()
         if not name:
             raise ValueError("Chybí název úlohy.")
-        recipients = tuple(normalize_recipients(raw.get("recipients", [])))
-        if not recipients:
+        output_mode = raw.get("output_mode", "email")
+        if output_mode not in ("email", "pdf"):
+            raise ValueError("Neznámý způsob výstupu úlohy.")
+        output_directory, output_filename = None, "Prehled_{date}.pdf"
+        if output_mode == "pdf":
+            output_directory, output_filename = validate_pdf_destination(
+                raw.get("output_directory"), raw.get("output_filename", output_filename),
+            )
+        recipients = () if output_mode == "pdf" else tuple(normalize_recipients(raw.get("recipients", [])))
+        if output_mode == "email" and not recipients:
             raise ValueError("Úloha musí mít alespoň jednoho příjemce.")
         report = str(raw.get("report", "daily"))
         if report not in ("daily", "meal_summary"):
@@ -65,6 +104,12 @@ class MailTask:
         if not -MAX_LOOKAHEAD_DAYS <= offset <= MAX_LOOKAHEAD_DAYS:
             raise ValueError("Posun dne je mimo povolený rozsah.")
         fixed = raw.get("fixed_date") or None
+        first_send_date = raw.get("first_send_date") or None
+        if first_send_date is not None:
+            try:
+                date.fromisoformat(first_send_date)
+            except (ValueError, TypeError) as exc:
+                raise ValueError("Neplatný první den odeslání.") from exc
         if mode == "fixed":
             try:
                 date.fromisoformat(str(fixed))
@@ -101,6 +146,9 @@ class MailTask:
             day_offset=offset, fixed_date=str(fixed) if fixed else None,
             enabled=enabled, profile_id=profile_id,
             cooking_meal_type=cooking_meal_type, only_cooking_days=only_cooking_days,
+            first_send_date=first_send_date,
+            output_mode=output_mode, output_directory=output_directory,
+            output_filename=output_filename,
         )
 
     def to_dict(self) -> dict:
@@ -113,6 +161,9 @@ class MailTask:
             "cooking_meal_type": list(self.cooking_meal_type)
             if isinstance(self.cooking_meal_type, tuple) else self.cooking_meal_type,
             "only_cooking_days": self.only_cooking_days,
+            "first_send_date": self.first_send_date,
+            "output_mode": self.output_mode, "output_directory": self.output_directory,
+            "output_filename": self.output_filename,
         }
 
 
@@ -153,5 +204,9 @@ def next_send_at(task: MailTask, now: datetime) -> datetime | None:
     result = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if result <= now:
         result += timedelta(days=1)
+    if task.first_send_date and result.date() < date.fromisoformat(task.first_send_date):
+        result = datetime.combine(date.fromisoformat(task.first_send_date), result.timetz())
     return result
+
+
 

@@ -12,7 +12,10 @@ from services.web_daily_profiles import DailyProfile, load_profiles, profile_fil
 from stravovaci_sestava import AppConfig, fetch_report
 
 
-class DailyDesignMixin:
+from services.web_report_wizard import ReportWizardMixin
+
+
+class DailyDesignMixin(ReportWizardMixin):
     def _build_daily_workspace(self) -> None:
         self.daily_profiles_path = profile_file(self.config_path.parent)
         self.daily_profiles = []
@@ -26,50 +29,63 @@ class DailyDesignMixin:
         except (OSError, ValueError) as exc:
             self.initial_status = f"Přehledy se nepodařilo načíst: {exc}"
             self.set_status(self.initial_status)
-        with ui.column().classes("ui-block ds-daily w-full"):
-            with ui.row().classes("ds-page-heading w-full items-center justify-between"):
-                ui.label("Přehledy").classes("ds-page-title").props('role="heading" aria-level="1"')
-            with w.card().classes("ds-report-toolbar"):
-                self.daily_profile_choices = ui.row().classes("ds-profile-choices")
-                self.daily_profile_status = ui.label("").classes("ui-help ds-preview-state").props('role="status" aria-live="polite"')
-                with ui.row().classes("ds-editor-actions"):
-                    self.daily_new_button = ui.button("Uložit výběr…", on_click=lambda: self.open_daily_save_dialog(as_new=True)).props("outline no-caps").style("width: 240px; min-height: 44px; max-width: 100%").mark("daily-save-new")
-                    self.daily_update_button = ui.button("Uložit změny…", on_click=lambda: self.open_daily_save_dialog(as_new=False)).props("outline no-caps").style("width: 240px; min-height: 44px; max-width: 100%").mark("daily-save-update")
-                    self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("outline no-caps").style("width: 240px; min-height: 44px; max-width: 100%")
-            with ui.element("div").classes("ds-daily-grid"):
-                with w.card().classes("ds-editor"):
-                    with ui.row().classes("w-full items-center justify-between"):
-                        ui.label("Co zobrazit").classes("app-heading")
-                    with ui.element("div").classes("ds-daily-fields"):
-                        self._build_date_field()
-                        self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
-                        self.date_input.props["label"] = "Datum náhledu"
-                        self.meal_type_select = ui.select({}, value=[], multiple=True, label="Typy stravy").classes("hidden")
-                        self.meal_types_button = ui.button("Typy stravy: všechny", icon="checklist", on_click=self._open_meal_types_dialog).props("outline no-caps").classes("w-full")
-                        self.meal_type_select.on_value_change(lambda _e: self._meal_types_changed())
-                    self._build_category_panel()
-                    self.daily_pdf_settings_button = ui.button(
-                        "Nastavení PDF", icon="tune", on_click=lambda: self.daily_pdf_settings_dialog.open()
-                    ).props("outline no-caps").classes("ds-secondary-action")
-                with ui.column().classes("w-full gap-4 min-w-0"):
-                    with w.card().classes("ds-summary"):
-                        with ui.row().classes("ds-summary-heading w-full items-center justify-between"):
-                            with ui.column().classes("gap-1 min-w-0"):
-                                ui.label("Počty porcí").classes("app-heading")
-                                self.daily_summary_name = ui.label("Vlastní výběr").classes("ds-summary-name")
-                                self.daily_summary_meta = ui.label("").classes("ui-help")
-                            with ui.row().classes("items-center gap-3"):
-                                with ui.column().classes("gap-0"):
-                                    self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem"')
-                                    ui.label("porcí celkem").classes("ui-help")
-                                ui.button(icon="refresh", on_click=self.refresh_daily_summary).props('flat round aria-label="Obnovit souhrn"')
-                        self._build_pdf_panel()
-                        with ui.row().classes("ds-next-step w-full items-center justify-end") as self.daily_schedule_card:
-                            self.daily_schedule_button = ui.button("Nastavit odesílání", icon="schedule_send", on_click=self.schedule_daily_profile).props("outline no-caps")
-                        self.daily_schedule_card.set_visibility(self.mail_tasks_tab.visible)
-                        self.daily_summary_status = ui.label("Počty se zobrazí po připojení k Jídelně.").classes("ui-help").props('role="status" aria-live="polite" aria-atomic="true"')
+        with ui.column().classes("ui-block ds-daily ds-wizard w-full"):
+            ui.label("Přehledy").classes("ds-page-title").props('role="heading" aria-level="1"')
+            ui.label("Připravte přehled a naplánujte e-mail nebo uložení PDF.").classes("ds-wizard-intro")
+            self._build_wizard_header()
+            with w.card().classes("w-full") as selection:
+                ui.label("Co zobrazit").classes("app-heading")
+                self._build_date_field()
+                self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
+                self.date_input.props["label"] = "Datum náhledu"
+                ui.label("Výchozí je dnešek. Toto datum slouží pro náhled; pravidelné odesílání nastavíte ve třetím kroku.").classes("ui-help")
+                self.meal_type_select = ui.select({}, value=[], multiple=True, label="Typy stravy").classes("hidden")
+                self.meal_types_button = ui.button("Typy stravy: všechny", icon="checklist", on_click=self._open_meal_types_dialog).props("outline no-caps").classes("w-full")
+                self.meal_type_select.on_value_change(lambda _e: self._meal_types_changed())
+                self._build_category_panel()
+                with ui.expansion("Uložené přehledy (volitelné)", icon="folder_open").classes("w-full"):
+                    self.daily_profile_choices = ui.row().classes("ds-profile-choices w-full")
+                    self.daily_profile_status = ui.label("").classes("ui-help ds-preview-state").props('role="status" aria-live="polite"')
+                    with ui.row().classes("ds-editor-actions"):
+                        self.daily_new_button = ui.button("Uložit výběr…", on_click=lambda: self.open_daily_save_dialog(as_new=True)).props("outline no-caps").mark("daily-save-new")
+                        self.daily_update_button = ui.button("Uložit změny…", on_click=lambda: self.open_daily_save_dialog(as_new=False)).props("outline no-caps").mark("daily-save-update")
+                        self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("outline no-caps")
+            self._wizard_cards.append(selection)
+            with w.card().classes("w-full") as pdf:
+                ui.label("Co má být v PDF?").classes("app-heading")
+                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam"}, value="names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("ds-wizard-content w-full")
+                self.daily_pdf_settings_button = ui.button("Nastavení PDF", icon="tune", on_click=lambda: self.daily_pdf_settings_dialog.open()).props("outline no-caps")
+                with ui.row().classes("ds-summary-heading w-full items-center justify-between"):
+                    with ui.column().classes("gap-1 min-w-0"):
+                        ui.label("Počty porcí").classes("app-heading")
+                        self.daily_summary_name = ui.label("Vlastní výběr").classes("ds-summary-name")
+                        self.daily_summary_meta = ui.label("").classes("ui-help")
+                    with ui.column().classes("gap-0"):
+                        self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem"')
+                        ui.label("porcí celkem").classes("ui-help")
+                self._build_pdf_panel()
+                self.generate_button.props(remove="unelevated").props("outline")
+                with ui.row().classes("ds-next-step w-full") as self.daily_schedule_card:
+                    self.daily_schedule_button = ui.button("Nastavit odesílání", icon="schedule_send", on_click=self.schedule_daily_profile).props("outline no-caps")
+                self.daily_schedule_card.set_visibility(False)
+                self.daily_summary_status = ui.label("Počty se zobrazí po připojení k Jídelně.").classes("ui-help").props('role="status" aria-live="polite"')
+            self._wizard_cards.append(pdf)
+            with w.card().classes("w-full") as day:
+                self._build_wizard_date()
+            self._wizard_cards.append(day)
+            with w.card().classes("w-full") as email:
+                self._build_wizard_email()
+                with ui.expansion("Jednorázové odeslání (volitelné)", icon="mail_outline").classes("w-full") as one_off:
+                    ui.label("Odešle PDF pro datum náhledu z prvního kroku výše uvedeným příjemcům. Čas a pravidlo dne pro plánovač se nepoužijí.").classes("ui-help")
+                    self.send_button.move(one_off)
+                    self.mail_status.move(one_off)
+                one_off.bind_visibility_from(self.wizard_output.pdf_only, "value", backward=lambda value: not value)
+            self._wizard_cards.append(email)
+            self._build_wizard_footer()
 
         self._build_daily_pdf_settings_dialog()
+        self.wizard_content.on_value_change(lambda e: self.show_diner_list.set_value(e.value == "names"))
+        self.show_diner_list.on_value_change(lambda e: self.wizard_content.set_value("names" if e.value else "counts"))
         self._build_daily_summary_dialog()
         self._build_daily_save_dialog()
         self._render_daily_profile_choices()
@@ -126,6 +142,7 @@ class DailyDesignMixin:
         else:
             status = "Prohlížení"
         self.daily_profile_status.set_text(status)
+        self._wizard_update_caption()
         title = profile.name if profile else "Vlastní výběr"
         self.daily_summary_name.set_text(title + " – náhled změn" if profile and self._daily_dirty else title)
         self.daily_new_button.set_text("Uložit jako nový…" if profile else "Uložit výběr…")
@@ -143,7 +160,9 @@ class DailyDesignMixin:
             ui.label("Nastavení PDF").classes("ds-dialog-title")
             with ui.column().classes("ds-dialog-body w-full"):
                 self._build_pdf_settings_section()
-                for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list):
+                for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list,
+                              self.pdf_orientation, self.pdf_data_size, self.pdf_label_size, self.pdf_bold,
+                              self.language_input, self.menu_number):
                     field.on_value_change(lambda _e: self._mark_daily_dirty())
             with ui.row().classes("ds-dialog-footer w-full justify-end"):
                 ui.button("Hotovo", on_click=self.daily_pdf_settings_dialog.close).props("no-caps unelevated")
@@ -198,10 +217,12 @@ class DailyDesignMixin:
             self._open_daily_schedule(self.daily_profile_id)
 
     def schedule_daily_profile(self) -> None:
-        if self.daily_profile_id and not self._daily_dirty:
-            self._open_daily_schedule(self.daily_profile_id)
-        else:
-            self.open_daily_save_dialog(as_new=True, schedule=True)
+        try:
+            self._wizard_validate(1)
+            self._wizard_validate(2)
+            self._wizard_show_step(3)
+        except (ValueError, TypeError) as exc:
+            self.wizard_error.set_text(str(exc))
 
     def _open_daily_schedule(self, profile_id: str) -> None:
         self.tabs.value = "mail_tasks"
@@ -232,6 +253,12 @@ class DailyDesignMixin:
             "show_by_categories": bool(self.show_categories.value),
             "show_by_norms": bool(self.show_norms.value),
             "show_diner_list": bool(self.show_diner_list.value),
+            "pdf_orientation": self.pdf_orientation.value,
+            "pdf_data_font_size": self.pdf_data_size.value,
+            "pdf_label_font_size": self.pdf_label_size.value,
+            "pdf_bold": bool(self.pdf_bold.value),
+            "language": self.language_input.value,
+            "menu_list_number": self.menu_number.value,
         })
 
     def save_daily_profile(self, *, as_new: bool = False) -> bool:
@@ -293,6 +320,17 @@ class DailyDesignMixin:
                                  (self.show_norms, profile.show_by_norms),
                                  (self.show_diner_list, profile.show_diner_list)):
                 field.value = value
+            for field, key, raw_key, default in (
+                (self.pdf_orientation, "pdf_orientation", "pdf_orientace", "na_vysku"),
+                (self.pdf_data_size, "pdf_data_font_size", "pdf_velikost_dat", 8.5),
+                (self.pdf_label_size, "pdf_label_font_size", "pdf_velikost_popisku", 9.0),
+                (self.pdf_bold, "pdf_bold", "pdf_tucne", False),
+                (self.language_input, "language", "jazyk_jidelnicku", "česky"),
+                (self.menu_number, "menu_list_number", "cislo_jidelnicku", 1),
+            ):
+                value = getattr(profile, key)
+                field.value = value if value is not None else self.raw.get(raw_key, default)
+            self.wizard_name.value = profile.name
             self._render_daily_selection()
             self._daily_dirty = False
         finally:
@@ -358,5 +396,7 @@ class DailyDesignMixin:
         # The verified session password is already in the snapshot. Reading the
         # credential store here would fail on a first TEST before PDF saves it.
         return fetch_report(config)
+
+
 
 

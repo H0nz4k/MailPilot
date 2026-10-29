@@ -27,8 +27,7 @@ async def test_idle_expiry_closes_admin_dialogs_and_rejects_late_writes(tmp_path
          patch.object(NiceGuiApp, "_stored_api_key", return_value=""), \
          patch.object(NiceGuiApp, "_schedule_first_run"), \
          patch("stravovaci_nicegui.get_admin_password", return_value="secret"), \
-         patch("services.web_admin_session.monotonic", side_effect=lambda: clock[0]), \
-         patch("stravovaci_nicegui.save_jobs") as save_jobs:
+         patch("services.web_admin_session.monotonic", side_effect=lambda: clock[0]):
         async with user_simulation(root) as user:
             await user.open("/")
             with user:
@@ -50,8 +49,8 @@ async def test_idle_expiry_closes_admin_dialogs_and_rejects_late_writes(tmp_path
                 assert page.tabs.value == "daily"
                 page._record_admin_activity()
                 assert not page.admin_unlocked
-                page.save_planned_jobs()
-                save_jobs.assert_called_once()
+                assert page.mail_tasks_editor is not None
+                assert not hasattr(page, "job_name_input")
                 assert "10 minutách" in page.status_label.text
                 with patch.object(page, "test_connection", new_callable=AsyncMock) as probe:
                     assert not await page._test_admin_connection()
@@ -70,3 +69,4 @@ async def test_idle_expiry_closes_admin_dialogs_and_rejects_late_writes(tmp_path
                 page.lock_admin()
                 assert page.tabs.value == "mail_tasks"
                 assert not page.admin_unlocked
+

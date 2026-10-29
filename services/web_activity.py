@@ -11,6 +11,12 @@ LOG = logging.getLogger(__name__)
 
 def friendly_error(error):
     text = str(error)
+    if text.startswith(("V Jídelně chybí kalendář", "V Jídelně má kalendář", "V Jídelně je pro")):
+        return text
+    missing = re.search(r"Pro (\d+/\d+) neexistuje v public\.varnedny kalendář typu služby '([^']+)'", text)
+    if missing:
+        month, meal = missing.groups()
+        return f"V Jídelně chybí kalendář {meal} pro {month}. Doplňte jej nebo zvolte existující kalendář."
     calendar = re.search(r"Kalendář varnedny pro (\d+/\d+) a typ služby '([^']+)' má (\d+) záznamů", text)
     if calendar:
         month, meal, count = calendar.groups()
@@ -54,3 +60,4 @@ def activity_rows(directory):
         return read_events(directory, 2000)
     except (OSError, sqlite3.Error):
         return []
+
