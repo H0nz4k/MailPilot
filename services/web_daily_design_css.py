@@ -261,20 +261,39 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
     *, *:before, *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 
-/* Single-question flow, with readable progress and controls on narrow screens. */
-.ds-wizard { max-width: 1000px; margin-inline: auto; }
-.ds-wizard-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.ds-wizard-indicator { padding: 12px; border: 1px solid var(--app-border); border-radius: 8px; overflow-wrap: anywhere; }
-.ds-wizard-current { border: 2px solid var(--app-primary); font-weight: 700; background: var(--app-primary-soft); }
-.ds-wizard-done { font-weight: 600; }
-.ds-wizard-preview { padding: 16px; border: 1px solid var(--app-border); border-radius: 8px; width: 100%; line-height: 1.6; overflow-wrap: anywhere; }
+/* Four-step workspace: one clear primary action and a stable visual hierarchy. */
+.ds-wizard { max-width: 1040px; margin-inline: auto; --ds-wizard-radius: 14px; }
+.ds-wizard-intro { color: var(--app-muted); line-height: 1.6; margin-bottom: 12px; }
+.ds-wizard-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.ds-wizard-indicator { padding: 14px 12px; gap: 10px; border: 1px solid var(--app-border); border-radius: 12px; margin: 0; background: var(--app-surface); color: var(--app-muted); }
+.ds-wizard-number { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; border: 1px solid var(--app-border); font-size: 16px; font-weight: 700; background: var(--app-block); }
+.ds-wizard-step-title { font-size: max(16px, var(--app-help)); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.ds-wizard-current { border: 2px solid var(--app-primary); background: var(--app-primary-soft); color: var(--app-primary); padding: 13px 11px; }
+.ds-wizard-current .ds-wizard-number { background: var(--app-primary); color: var(--ds-on-primary); border-color: var(--app-primary); }
+.ds-wizard-done { color: var(--app-ink); }
+.ds-wizard-done .ds-wizard-number { color: var(--app-primary); border-color: var(--app-primary); background: var(--app-primary-soft); }
+.ds-wizard-context { color: var(--app-muted); font-size: max(16px, var(--app-help)); line-height: 1.6; margin-bottom: 10px; overflow-wrap: anywhere; }
+.ds-wizard > .text-negative:empty { display: none; }
+.dataship-ui .ds-wizard .app-card { padding: 24px; border-radius: var(--ds-wizard-radius); gap: 18px; box-shadow: 0 4px 18px rgb(0 0 0 / 4%); }
+.ds-wizard .ui-help { line-height: 1.6; max-width: 72ch; }
+.ds-wizard-content { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ds-wizard-content .q-radio { min-height: 80px; padding: 12px; gap: 6px; border: 1px solid var(--app-field-border); border-radius: 12px; align-items: center; margin: 0; }
+.ds-wizard-content .q-radio__label { font-weight: 600; line-height: 1.5; }
+.ds-wizard-content .q-radio:has(.q-radio__inner--truthy) { border: 2px solid var(--app-primary); background: var(--app-primary-soft); padding: 11px; }
+.ds-wizard-preview { padding: 18px 20px; border: 1px solid var(--app-field-border); border-left: 4px solid var(--app-primary); border-radius: 10px; background: var(--app-primary-soft); width: 100%; line-height: 1.7; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .ds-wizard-actions { padding-block: 12px; gap: 12px; }
-.ds-wizard-actions .q-btn { min-width: 150px; }
-@media (max-width: 600px) {
-    .ds-wizard-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .ds-wizard-indicator { padding: 8px; }
-    .ds-wizard-actions .q-btn { width: 100%; }
+.ds-wizard-actions .q-btn { min-width: 150px; min-height: 52px; padding-inline: 24px; border-radius: 10px; font-weight: 600; }
+.ds-wizard-actions .q-btn.bg-primary { min-width: 240px; margin-left: auto; }
+.ds-wizard-receipt { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; padding: 24px; }
+.ds-wizard-receipt .ds-wizard-preview { background: var(--app-block); border-left-color: var(--q-positive); }
+.dataship-ui .ds-mail-task { border-radius: 14px; border: 1px solid var(--app-border); padding: 24px; gap: 12px; }
+@media (max-width: 700px) {
+    .ds-wizard-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .ds-wizard-indicator { padding: 10px; gap: 8px; }
+    .ds-wizard-current { padding: 9px; }
+    .dataship-ui .ds-wizard .app-card, .ds-wizard-receipt, .dataship-ui .ds-mail-task { padding: 16px; }
+    .ds-wizard-content { grid-template-columns: minmax(0, 1fr); }
+    .ds-wizard-actions .q-btn, .ds-wizard-actions .q-btn.bg-primary { width: 100%; min-width: 0; }
+    .ds-wizard-preview { padding: 14px; }
 }
 """
-
-

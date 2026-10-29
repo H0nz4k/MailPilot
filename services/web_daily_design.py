@@ -31,6 +31,7 @@ class DailyDesignMixin(ReportWizardMixin):
             self.set_status(self.initial_status)
         with ui.column().classes("ui-block ds-daily ds-wizard w-full"):
             ui.label("Přehledy").classes("ds-page-title").props('role="heading" aria-level="1"')
+            ui.label("Připravte přehled a nastavte jeho pravidelné odesílání.").classes("ds-wizard-intro")
             self._build_wizard_header()
             with w.card().classes("w-full") as selection:
                 ui.label("Co zobrazit").classes("app-heading")
@@ -51,7 +52,8 @@ class DailyDesignMixin(ReportWizardMixin):
                         self.daily_reset_button = ui.button("Vrátit uložený výběr", on_click=self._restore_daily_profile).props("outline no-caps")
             self._wizard_cards.append(selection)
             with w.card().classes("w-full") as pdf:
-                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam"}, value="names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("w-full")
+                ui.label("Co má být v PDF?").classes("app-heading")
+                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam"}, value="names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("ds-wizard-content w-full")
                 self.daily_pdf_settings_button = ui.button("Nastavení PDF", icon="tune", on_click=lambda: self.daily_pdf_settings_dialog.open()).props("outline no-caps")
                 with ui.row().classes("ds-summary-heading w-full items-center justify-between"):
                     with ui.column().classes("gap-1 min-w-0"):
@@ -62,6 +64,9 @@ class DailyDesignMixin(ReportWizardMixin):
                         self.daily_summary_total = ui.label("—").classes("ds-summary-total").props('aria-label="Počet porcí celkem"')
                         ui.label("porcí celkem").classes("ui-help")
                 self._build_pdf_panel()
+                self.generate_button.props(remove="unelevated").props("outline")
+                with ui.expansion("Jednorázové odeslání (volitelné)", icon="mail_outline").classes("w-full") as one_off:
+                    self.send_button.move(one_off)
                 with ui.row().classes("ds-next-step w-full") as self.daily_schedule_card:
                     self.daily_schedule_button = ui.button("Nastavit odesílání", icon="schedule_send", on_click=self.schedule_daily_profile).props("outline no-caps")
                 self.daily_schedule_card.set_visibility(False)
@@ -134,6 +139,7 @@ class DailyDesignMixin(ReportWizardMixin):
         else:
             status = "Prohlížení"
         self.daily_profile_status.set_text(status)
+        self._wizard_update_caption()
         title = profile.name if profile else "Vlastní výběr"
         self.daily_summary_name.set_text(title + " – náhled změn" if profile and self._daily_dirty else title)
         self.daily_new_button.set_text("Uložit jako nový…" if profile else "Uložit výběr…")

@@ -15,6 +15,12 @@ Zpět zachovává rozepsaný výběr. Uložené přehledy lze v prvním kroku po
 
 Po uložení se zobrazí potvrzení, nejbližší plánovaný termín a stav služby. Otevřít plánovač vede na uložené úlohy s možností úprav, pozastavení a zobrazením posledního výsledku. Vytvořit další úlohu začne opět dnešním datem.
 
+## Vzhled a čitelnost
+
+Vizuální úprava vychází z pravidel UI/UX Pro Max: stálé pořadí kroků, číslované indikátory s výrazným aktivním krokem, kontrastní ovládání a viditelné zaměření klávesnicí. Pracovní plocha má omezenou šířku, větší karty a klidné pozadí. Volba součtů nebo jmenného seznamu je zobrazena jako dvě velké přepínací karty. Průběžný popis připomíná datum, stravu, počet kategorií a vybraný obsah.
+
+Hlavní barevná akce je Pokračovat / Uložit do plánovače. Vytvoření zkušebního PDF je vedlejší akce; jednorázový e-mail je ve volitelném rozbalení. Malé obrazovky skládají volby a tlačítka pod sebe. Všechny barvy používají dosavadní proměnné vzhledu, takže funguje světlý, tmavý i vlastní motiv. Nezavádí se nové závislosti ani externí fonty.
+
 ## Význam stavu
 
 Uložená/zapnutá úloha sama nepotvrzuje běžící službu. Aktualizovaný worker zapisuje heartbeat každých 15 sekund, i když právě vytváří PDF nebo odesílá e-mail. GUI stav kontroluje každých 10 sekund:

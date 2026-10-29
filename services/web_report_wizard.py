@@ -13,6 +13,7 @@ from services.web_mail_tasks import MailTask, next_send_at, target_date
 from services.web_mail_cooking_days import available_cooking_calendars, resolve_task_date
 from services.web_recipient_editor import RecipientEditor
 from services.web_worker_status import observed_status
+from services.web_meal_types import meal_filter_caption
 
 RULES = {"today": "Dnes", "tomorrow": "Zítra", "after_tomorrow": "Pozítří (2 dny dopředu)",
          "next_cooking_day": "Následující varný den", "offset": "Jiný počet dní dopředu"}
@@ -42,9 +43,12 @@ class ReportWizardMixin:
         self._wizard_indicators = []
         with ui.element("div").classes("ds-wizard-progress w-full").props('aria-label="Postup vytvoření přehledu"'):
             for index, title in enumerate(STEPS, 1):
-                label = ui.label(f"{index}. {title}").classes("ds-wizard-indicator")
-                self._wizard_indicators.append(label)
+                with ui.row().classes("ds-wizard-indicator items-center no-wrap") as indicator:
+                    ui.label(str(index)).classes("ds-wizard-number").props('aria-hidden="true"')
+                    ui.label(title).classes("ds-wizard-step-title")
+                self._wizard_indicators.append(indicator)
         self.wizard_heading = ui.label().classes("app-heading").props('role="heading" aria-level="2"')
+        self.wizard_selection_caption = ui.label("").classes("ds-wizard-context")
         self.wizard_error = ui.label("").classes("text-negative").props('role="alert"')
 
     def _build_wizard_date(self):
@@ -79,8 +83,10 @@ class ReportWizardMixin:
         with ui.row().classes("ds-wizard-actions w-full items-center justify-between") as self.wizard_navigation:
             self.wizard_back = ui.button("Zpět", icon="arrow_back", on_click=lambda: self._wizard_show_step(self._wizard_step - 1)).props("outline no-caps")
             self.wizard_next = ui.button("Pokračovat", icon="arrow_forward", on_click=self._wizard_next_step).props("no-caps unelevated").mark("wizard-next")
-        with ui.column().classes("w-full gap-3") as self.wizard_receipt:
-            ui.label("Úloha byla uložena do plánovače").classes("app-heading")
+        with ui.column().classes("ds-wizard-receipt w-full gap-3") as self.wizard_receipt:
+            with ui.row().classes("items-center gap-3"):
+                ui.icon("check_circle", color="positive", size="32px").props('aria-hidden="true"')
+                ui.label("Úloha byla uložena do plánovače").classes("app-heading")
             self.wizard_receipt_summary = ui.label("").classes("ds-wizard-preview")
             self.wizard_receipt_status = ui.label("").props('role="status" aria-live="polite"')
             with ui.row().classes("gap-3"):
@@ -104,11 +110,24 @@ class ReportWizardMixin:
                 if index < self._wizard_step:
                     label.classes("ds-wizard-done")
         self.wizard_heading.set_text(f"Krok {self._wizard_step} ze 4 · {STEPS[self._wizard_step - 1]}")
+        self._wizard_update_caption()
         self.wizard_back.set_visibility(self._wizard_step > 1)
         self.wizard_next.set_text("Uložit do plánovače" if self._wizard_step == 4 else "Pokračovat")
         self.wizard_next.set_visibility(self._wizard_step < 3 or self.mail_tasks_tab.visible)
         if self._wizard_step >= 3:
             self._wizard_queue_preview()
+
+    def _wizard_update_caption(self):
+        if not hasattr(self, "show_diner_list"):
+            return
+        try:
+            day = self._selected_date()
+            meals = meal_filter_caption(self._selected_daily_meal_type())
+            count = len(self._selected_category_order())
+            content = "součty a jména" if self.show_diner_list.value else "jen součty"
+            self.wizard_selection_caption.set_text(f"Náhled {day:%d.%m.%Y} · {meals} · kategorií: {count} · {content}")
+        except ValueError:
+            self.wizard_selection_caption.set_text("Zkontrolujte datum náhledu.")
 
     def _wizard_validate(self, number):
         if number == 1:
