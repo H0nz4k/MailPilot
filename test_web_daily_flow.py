@@ -66,10 +66,10 @@ async def test_preview_switch_and_restore_never_update_saved_reports(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_schedule_handoff_prefills_exact_report_and_cancel_sends_nothing(tmp_path):
-    first = DailyProfile.from_dict({'name': 'Obědy', 'categories': ['1']})
+async def test_schedule_handoff_keeps_exact_report_without_intermediate_save(tmp_path):
     dinner = DailyProfile.from_dict({'name': 'Večeře pro hosty', 'categories': ['3'], 'meal_type': 'Večeře'})
-    root, pages = setup_page(tmp_path, [first, dinner])
+    root, pages = setup_page(tmp_path, [dinner])
+    before = profile_file(tmp_path).read_bytes()
     with patch.object(NiceGuiApp, '_stored_password', return_value=''), \
          patch.object(NiceGuiApp, '_stored_api_key', return_value=''), \
          patch.object(NiceGuiApp, '_schedule_first_run'), \
@@ -78,21 +78,24 @@ async def test_schedule_handoff_prefills_exact_report_and_cancel_sends_nothing(t
             await user.open('/')
             with user:
                 page = pages[0]
-                page._choose_daily_profile(dinner)
                 page.date_input.value = '31.12.2026'
-            user.find('Nastavit odesílání').click()
+            user.find(marker='wizard-next').click()
+            user.find(marker='wizard-next').click()
             with user:
-                assert page.tabs.value == 'mail_tasks'
-                assert field(user, ui.select, 'Uložený přehled').value == dinner.id
-                assert field(user, ui.select, 'Za který den posílat?').value == 'today'
-                assert field(user, ui.input, 'Název odesílání').value == 'Večeře pro hosty – odesílání'
-            user.find('Zrušit').click()
+                assert page._wizard_step == 3
+                assert page.wizard_mode.value == 'today'
+                assert page.wizard_name.value == dinner.name
+                assert page._selected_daily_meal_type() == 'večeře'
+                assert page.selected_categories == {'3'}
+                page._wizard_show_step(1)
+                assert page.date_input.value == '31.12.2026'
+            assert profile_file(tmp_path).read_bytes() == before
             assert not task_file(tmp_path).exists()
             send.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_new_preview_requires_save_before_scheduling_and_invalid_name_stays_open(tmp_path):
+async def test_wizard_invalid_name_stays_open_and_single_final_save(tmp_path):
     root, pages = setup_page(tmp_path)
     with patch.object(NiceGuiApp, '_stored_password', return_value=''), \
          patch.object(NiceGuiApp, '_stored_api_key', return_value=''), \
@@ -102,26 +105,24 @@ async def test_new_preview_requires_save_before_scheduling_and_invalid_name_stay
             with user:
                 page = pages[0]
                 page._apply_daily_categories(['1', '2'])
-            user.find('Nastavit odesílání').click()
+            for _ in range(3):
+                user.find(marker='wizard-next').click()
             assert not profile_file(tmp_path).exists()
             with user:
-                page.daily_profile_name.value = ''
-            user.find('Uložit a pokračovat').click()
-            assert page.daily_save_dialog.value
-            assert page.daily_save_error.text
-            assert not profile_file(tmp_path).exists()
+                page.wizard_name.value = ''
+                page.wizard_recipients.input.value = 'test@example.org'
+            user.find(marker='wizard-next').click()
+            assert page._wizard_step == 4
+            assert page.wizard_error.text
+            assert not task_file(tmp_path).exists()
             with user:
-                page.daily_profile_name.value = 'Škola'
-            user.find('Uložit a pokračovat').click()
+                page.wizard_name.value = 'Škola'
+            user.find(marker='wizard-next').click()
             stored = load_profiles(profile_file(tmp_path))
             assert len(stored) == 1
             assert stored[0].categories == ('1', '2')
-            assert not page.daily_save_dialog.value
-            with user:
-                assert field(user, ui.select, 'Uložený přehled').value == stored[0].id
-                field(user, ui.input, 'E-mail příjemce').value = 'test@example.org'
-            user.find(marker='mail-task-save').click()
             assert load_tasks(task_file(tmp_path))[0].profile_id == stored[0].id
+            assert page.wizard_receipt.visible
 
 
 @pytest.mark.asyncio
@@ -151,3 +152,4 @@ async def test_updating_a_report_requires_explicit_save_and_copy_keeps_original(
             assert len(stored) == 2
             assert stored[0] == updated
             assert stored[1].id != updated.id
+

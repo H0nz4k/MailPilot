@@ -260,5 +260,21 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 @media (prefers-reduced-motion: reduce) {
     *, *:before, *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Single-question flow, with readable progress and controls on narrow screens. */
+.ds-wizard { max-width: 1000px; margin-inline: auto; }
+.ds-wizard-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.ds-wizard-indicator { padding: 12px; border: 1px solid var(--app-border); border-radius: 8px; overflow-wrap: anywhere; }
+.ds-wizard-current { border: 2px solid var(--app-primary); font-weight: 700; background: var(--app-primary-soft); }
+.ds-wizard-done { font-weight: 600; }
+.ds-wizard-preview { padding: 16px; border: 1px solid var(--app-border); border-radius: 8px; width: 100%; line-height: 1.6; overflow-wrap: anywhere; }
+.ds-wizard-actions { padding-block: 12px; gap: 12px; }
+.ds-wizard-actions .q-btn { min-width: 150px; }
+@media (max-width: 600px) {
+    .ds-wizard-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ds-wizard-indicator { padding: 8px; }
+    .ds-wizard-actions .q-btn { width: 100%; }
+}
 """
+
 

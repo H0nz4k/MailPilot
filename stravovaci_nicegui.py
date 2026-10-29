@@ -628,7 +628,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             "app-nav"
         ) as self.tabs:
             self.daily_tab = ui.tab("daily", label="Přehledy", icon="today")
-            self.mail_tasks_tab = ui.tab("mail_tasks", label="Odesílání", icon="schedule_send")
+            self.mail_tasks_tab = ui.tab("mail_tasks", label="Plánovač", icon="schedule_send")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
             self.bulk_tab = ui.tab("bulk", label="Hromadná zpráva", icon="campaign")
@@ -671,7 +671,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     self.config_path.parent, config_path=self.config_path,
                     category_names=lambda: dict(self.categories),
                     on_open_reports=self.go_home,
+                    on_new_plan=lambda: (self._wizard_new(), self.go_home()),
                 )
+                self.mail_tasks_refresh = self.mail_tasks_editor.refresh
             with ui.tab_panel("function_mail"):
                 ui.label(
                     "Příjemce plánovaného PDF nastavte u konkrétního odesílání v Plánovaných přehledech. "
@@ -815,7 +817,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         """Apply persisted top-tab visibility immediately; admin remains protected."""
         settings = visible_tabs(self.raw)
         if hasattr(self, "daily_schedule_card"):
-            self.daily_schedule_card.set_visibility(settings["mail_tasks"])
+            self.daily_schedule_card.set_visibility(False if hasattr(self, "_wizard_step") else settings["mail_tasks"])
         for key, tab in getattr(self, "nav_tab_elements", {}).items():
             tab.set_visibility(settings[key])
         if getattr(self, "tabs", None) is not None:
@@ -3340,6 +3342,7 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
 
 
 

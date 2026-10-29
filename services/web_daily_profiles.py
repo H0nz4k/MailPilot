@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +21,13 @@ class DailyProfile:
     show_by_categories: bool = True
     show_by_norms: bool = True
     show_diner_list: bool = True
+    # None preserves the global setting for reports saved by older versions.
+    pdf_orientation: str | None = None
+    pdf_data_font_size: float | None = None
+    pdf_label_font_size: float | None = None
+    pdf_bold: bool | None = None
+    language: str | None = None
+    menu_list_number: int | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "DailyProfile":
@@ -40,8 +48,28 @@ class DailyProfile:
             flags[key] = raw.get(key, True)
             if not isinstance(flags[key], bool):
                 raise ValueError(f"{key} musí být true nebo false.")
+        pdf = {key: raw.get(key) for key in (
+            "pdf_orientation", "pdf_data_font_size", "pdf_label_font_size",
+            "pdf_bold", "language", "menu_list_number",
+        )}
+        if pdf["pdf_orientation"] not in (None, "na_vysku", "na_sirku"):
+            raise ValueError("Neplatná orientace PDF.")
+        for key in ("pdf_data_font_size", "pdf_label_font_size"):
+            value = pdf[key]
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 5 <= value <= 18:
+                    raise ValueError("Velikost písma PDF musí být 5–18 bodů.")
+        if pdf["pdf_bold"] is not None and not isinstance(pdf["pdf_bold"], bool):
+            raise ValueError("Neplatná volba tučného písma.")
+        if pdf["language"] is not None and (not isinstance(pdf["language"], str) or not pdf["language"].strip()):
+            raise ValueError("Vyplňte jazyk jídelníčku.")
+        number = pdf["menu_list_number"]
+        if number is not None and (isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number) or int(number) != number or not 1 <= number <= 99):
+            raise ValueError("Číslo jídelníčku musí být 1–99.")
+        if number is not None:
+            pdf["menu_list_number"] = int(number)
         return cls(str(raw.get("id") or uuid4()), name, categories,
-                   meal, **flags)
+                   meal, **flags, **pdf)
 
     def to_dict(self) -> dict:
         raw = asdict(self)
@@ -103,11 +131,15 @@ def apply_profile(config, profile: DailyProfile, raw: dict):
         categories = tuple(code for code in categories if code in allowed)
     if not categories:
         raise ValueError("Žádná kategorie uloženého přehledu již není povolena správcem.")
+    pdf = {key: getattr(profile, key) for key in (
+        "pdf_orientation", "pdf_data_font_size", "pdf_label_font_size",
+        "pdf_bold", "language", "menu_list_number",
+    ) if getattr(profile, key) is not None}
     return replace(config, categories=categories, meal_type=profile.meal_type,
                    category_separation=profile.category_separation,
                    show_by_categories=profile.show_by_categories,
                    show_by_norms=profile.show_by_norms,
-                   show_diner_list=profile.show_diner_list)
+                   show_diner_list=profile.show_diner_list, **pdf)
 
 
 def task_report_config(config, raw: dict, task, directory: Path):
@@ -119,4 +151,5 @@ def task_report_config(config, raw: dict, task, directory: Path):
     if profile is None:
         raise ValueError("Uložený přehled této úlohy neexistuje; zvolte jej znovu.")
     return apply_profile(config, profile, raw)
+
 

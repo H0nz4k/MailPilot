@@ -11,6 +11,7 @@ import logging
 import os
 import signal
 import time
+import threading
 from datetime import date, datetime
 from pathlib import Path
 
@@ -30,9 +31,20 @@ from services.web_daily_profiles import task_report_config
 from stravovaci_sestava import load_config, fetch_report, create_pdf
 
 from services.web_activity import record_event, friendly_error
+from services.web_worker_status import write_runtime
 
 LOG = logging.getLogger("mailpilot.web_worker")
 STOP = False
+RUNTIME = {"phase": "waiting", "task_id": None}
+
+
+def runtime_status(config_path, phase=None, task_id=None):
+    if phase is not None:
+        RUNTIME.update(phase=phase, task_id=task_id)
+    try:
+        write_runtime(config_path.parent, **RUNTIME.copy())
+    except OSError:
+        LOG.exception("Cannot update scheduler heartbeat")
 
 
 def request_stop(*_):
@@ -120,10 +132,13 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
     for task in tasks:
         if not task.enabled or task.id in completed and completed[task.id] == now.date().isoformat():
             continue
+        if getattr(task, "first_send_date", None) and now.date() < date.fromisoformat(task.first_send_date):
+            continue
         hh, mm = map(int, task.send_time.split(":"))
         if (now.hour, now.minute) < (hh, mm):
             continue
         try:
+            runtime_status(config_path, "running", task.id)
             dispatch(config_path, task, now.date())
         except Exception as exc:
             LOG.exception("Task %s failed", task.name)
@@ -147,9 +162,11 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
             # an explicit retry policy with backoff is implemented.
             completed[task.id] = now.date().isoformat()
             save_state(completed_path, completed)
+            runtime_status(config_path, "waiting")
             continue
         completed[task.id] = now.date().isoformat()
         save_state(completed_path, completed)
+        runtime_status(config_path, "waiting")
 
 
 def main() -> int:
@@ -175,19 +192,31 @@ def main() -> int:
     signal.signal(signal.SIGINT, request_stop)
     LOG.info("DataShip scheduler started: %s", config_path)
     record_event(config_path.parent, "started", "Plánovač byl spuštěn.")
+    heartbeat_stop = threading.Event()
+    def heartbeat():
+        while not heartbeat_stop.wait(15):
+            runtime_status(config_path)
+    runtime_status(config_path, "waiting")
+    heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+    heartbeat_thread.start()
     while not STOP:
         try:
             tick(config_path)
         except Exception:
             LOG.exception("Scheduler tick failed")
             record_event(config_path.parent, "error", "Plánovač nemohl načíst nebo zpracovat úlohy. Zkontrolujte konfiguraci a technický log.")
+        runtime_status(config_path, "waiting")
         time.sleep(args.interval)
     LOG.info("DataShip scheduler stopped")
+    heartbeat_stop.set()
+    heartbeat_thread.join(timeout=2)
+    runtime_status(config_path, "stopped")
     record_event(config_path.parent, "stopped", "Plánovač byl zastaven.")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 

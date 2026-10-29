@@ -22,6 +22,7 @@ from services.web_mail_cooking_days import (
 from services.web_daily_profiles import load_profiles, profile_file
 from services.web_recipient_editor import RecipientEditor
 from services.web_meal_types import meal_filter_caption, meal_filter_values
+from services.web_worker_status import observed_status
 
 REPORTS = {"daily": "Denní PDF přehled", "meal_summary": "Původní souhrn (nepodporováno)"}
 LEGACY_PROFILE_LABEL = "Dosavadní společné nastavení"
@@ -35,12 +36,17 @@ def build_mail_tasks_panel(
     config_directory: Path, config_path: Path | None = None,
     category_names: Callable[[], dict[str, str]] | None = None,
     on_open_reports: Callable[[], None] | None = None,
+    on_new_plan: Callable[[], None] | None = None,
 ) -> Callable:
     """Mount task management as a tab in the existing NiceGUI application."""
     path = task_file(Path(config_directory))
     active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
-    ui.label("Odesílání přehledů").classes("ds-page-title").props('role="heading" aria-level="1"')
+    ui.label("Plánovač přehledů").classes("ds-page-title").props('role="heading" aria-level="1"')
+    worker_status = ui.label(observed_status(config_directory)).props('role="status" aria-live="polite"')
+    ui.timer(10, lambda: worker_status.set_text(observed_status(config_directory)))
     ui.label(
+        "Novou úlohu vytvoříte průvodcem. Zde vidíte uložené úlohy, další spuštění a výsledky."
+        if on_new_plan else
         "1. Vyberte uložený přehled (typ stravy a vzhled PDF). "
         "2. Zadejte příjemce. 3. Nastavte čas a den přehledu, například 2 dny dopředu."
     ).classes("ui-help")
@@ -74,6 +80,8 @@ def build_mail_tasks_panel(
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label(task.name).classes("ds-task-title")
                     ui.badge("Nelze odeslat" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá", color=None).classes("ds-task-badge")
+                status_label = ui.label(observed_status(config_directory, task)).classes("ds-task-line").props('role="status"')
+                ui.timer(10, lambda label=status_label, t=task: label.set_text(observed_status(config_directory, t)))
                 ui.label(f"Každý den v {task.send_time}").classes("ds-task-line")
                 ui.label(f"Příjemci: {', '.join(task.recipients)}").classes("ds-task-line")
                 date_label = f"Den přehledu: {DATE_MODES[task.date_mode]}"
@@ -406,7 +414,11 @@ def build_mail_tasks_panel(
                             "only_cooking_days": only_cooking.value,
                             "profile_id": profile.value or None,
                             "cooking_meal_type": explicit_calendar,
+                            "first_send_date": task.first_send_date if task and not duplicate else None,
                         })
+                        if task is None or duplicate:
+                            first = next_send_at(new, datetime.now())
+                            new = replace(new, first_send_date=first.date().isoformat() if first else None)
                         if new.profile_id and new.profile_id not in profile_options():
                             raise ValueError("Vyberte existující uložený přehled.")
                     except (OSError, ValueError, TypeError) as exc:
@@ -421,12 +433,14 @@ def build_mail_tasks_panel(
         asyncio.create_task(refresh_calendars())
 
     with ui.row():
-        ui.button("Nové odesílání", icon="add", on_click=lambda: editor()).props("color=primary").style("color: var(--ds-on-primary) !important")
+        ui.button("Nová úloha – průvodce" if on_new_plan else "Nové odesílání", icon="add", on_click=on_new_plan or (lambda: editor())).props("color=primary").style("color: var(--ds-on-primary) !important")
         ui.button("Obnovit", icon="refresh", on_click=table.refresh).props("outline")
         if on_open_reports:
             ui.button("Přejít do Přehledů", icon="today", on_click=on_open_reports).props("flat no-caps")
     table()
+    editor.refresh = table.refresh
     return editor
+
 
 
 

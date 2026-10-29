@@ -29,6 +29,7 @@ class MailTask:
     profile_id: str | None = None
     cooking_meal_type: str | tuple[str, ...] | None = None
     only_cooking_days: bool = False
+    first_send_date: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "MailTask":
@@ -65,6 +66,12 @@ class MailTask:
         if not -MAX_LOOKAHEAD_DAYS <= offset <= MAX_LOOKAHEAD_DAYS:
             raise ValueError("Posun dne je mimo povolený rozsah.")
         fixed = raw.get("fixed_date") or None
+        first_send_date = raw.get("first_send_date") or None
+        if first_send_date is not None:
+            try:
+                date.fromisoformat(first_send_date)
+            except (ValueError, TypeError) as exc:
+                raise ValueError("Neplatný první den odeslání.") from exc
         if mode == "fixed":
             try:
                 date.fromisoformat(str(fixed))
@@ -101,6 +108,7 @@ class MailTask:
             day_offset=offset, fixed_date=str(fixed) if fixed else None,
             enabled=enabled, profile_id=profile_id,
             cooking_meal_type=cooking_meal_type, only_cooking_days=only_cooking_days,
+            first_send_date=first_send_date,
         )
 
     def to_dict(self) -> dict:
@@ -113,6 +121,7 @@ class MailTask:
             "cooking_meal_type": list(self.cooking_meal_type)
             if isinstance(self.cooking_meal_type, tuple) else self.cooking_meal_type,
             "only_cooking_days": self.only_cooking_days,
+            "first_send_date": self.first_send_date,
         }
 
 
@@ -153,5 +162,8 @@ def next_send_at(task: MailTask, now: datetime) -> datetime | None:
     result = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if result <= now:
         result += timedelta(days=1)
+    if task.first_send_date and result.date() < date.fromisoformat(task.first_send_date):
+        result = datetime.combine(date.fromisoformat(task.first_send_date), result.timetz())
     return result
+
 
