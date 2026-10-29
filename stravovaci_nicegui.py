@@ -693,7 +693,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             with ui.column().classes("w-full gap-2"):
                 self.admin_dialog_title = ui.label("Administrace").classes("app-heading")
                 self.admin_dialog_help = ui.label(
-                    "Zadejte heslo pro databázi a správu aplikace."
+                    "Zadejte heslo pro administraci."
                 ).classes("ui-help")
                 self.admin_password_input = ui.input("Heslo", password=True).classes(
                     "w-full"
@@ -733,7 +733,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         else:
             self.admin_dialog_title.set_text("Administrace")
             self.admin_dialog_help.set_text(
-                "Zadejte heslo pro databázi a správu aplikace."
+                "Zadejte heslo pro administraci."
             )
             self.admin_password_repeat.set_visibility(False)
         self.admin_dialog.open()

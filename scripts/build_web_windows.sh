@@ -39,6 +39,7 @@ done
 echo "[2/4] Sestavuji webovou aplikaci pro prohlizec..."
 "$PY" -m PyInstaller --noconfirm --clean --onedir --console --noupx \
   --name DataShip \
+  --icon "$WIN_ROOT\\assets\\dataship.ico" \
   --distpath "$DIST" \
   --workpath "$ROOT/build/web-gui" \
   --specpath "$ROOT/build/web-spec" \
@@ -54,6 +55,7 @@ echo "[2/4] Sestavuji webovou aplikaci pro prohlizec..."
 echo "[3/4] Sestavuji bezobsluznou sluzbu pro NSSM..."
 "$PY" -m PyInstaller --noconfirm --clean --onefile --console --noupx \
   --name DataShip-Worker \
+  --icon "$WIN_ROOT\\assets\\dataship-worker.ico" \
   --distpath "$ROOT/dist-web-worker" \
   --workpath "$ROOT/build/web-worker" \
   --specpath "$ROOT/build/web-spec" \
@@ -90,4 +92,5 @@ echo "[4/4] Pridavam overeny NSSM pro Windows sluzbu..."
 echo "HOTOVO: $APP/DataShip.exe"
 echo "OTEVRENI: v Git Bash spust ./dist-web/DataShip/DataShip.exe --browser"
 echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."
+
 

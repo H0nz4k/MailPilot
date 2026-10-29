@@ -1,6 +1,14 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.3.
+Verze 1.0.0-rc.10, sestavení 20261029.4.
+
+## Ikony Windows aplikací
+
+`DataShip.exe` má ikonu lodičky podle motivu záložky v prohlížeči. `DataShip-Worker.exe` používá stejnou lodičku doplněnou ozubeným kolečkem vpravo nahoře. Windows build vkládá každému EXE jeho vlastní soubor ICO; všechny velikosti od 16 do 256 pixelů jsou součástí ikon. Po aktualizaci zdrojů je nutné EXE znovu sestavit pomocí `bash scripts/build_web_windows.sh`.
+
+Zdrojem ikon je `tools/generate_dataship_icons.py` (pro přegenerování vyžaduje Pillow). Soubory `assets/dataship.ico` a `assets/dataship-worker.ico` jsou uložené v repozitáři, takže běžný build ikony nekreslí ani nestahuje. Původní ikona staré Qt aplikace se nemění.
+
+Přihlašovací dialog uvádí „Zadejte heslo pro administraci.“ Jde o heslo nastavení aplikace; přihlašovací údaje databáze se zadávají zvlášť v nastavení databáze.
 
 ## Odstranění Windows služby
 
