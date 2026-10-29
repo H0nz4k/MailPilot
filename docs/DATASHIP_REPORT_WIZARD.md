@@ -1,6 +1,12 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.1.
+Verze 1.0.0-rc.10, sestavení 20261029.2.
+
+## Nastavení Resend API
+
+V **Nastavení → Služba a odesílání → Odchozí e-mail** vyberte **Resend API**, vložte klíč do pole **Resend API klíč** a klikněte na **Uložit API klíč** (nebo stiskněte Enter). Zobrazí se potvrzení uložení a pole se vyprázdní. Existující klíč se při otevření stránky nevypisuje, zobrazí se pouze stav. Prázdné pole uložený klíč nemaže.
+
+Klíč se zapisuje do stávajícího souboru `.env` vedle aplikace, nikoli do JSON nastavení. Stejný klíč používá GUI i worker. Ostatní volby odchozího e-mailu se dál ukládají automaticky; API klíč má samostatné potvrzení uložení. Uložení neodesílá zprávu ani nespouští službu. Nastavení klíče vyžaduje odemknutou administraci aplikace, nikoli oprávnění správce Windows.
 
 ## Ovládání
 
@@ -50,3 +56,4 @@ Je nutné aktualizovat GUI i DataShip-Worker.exe ze stejné verze a restartovat 
 Ověření v Linuxu: průchod reálnou NiceGUI stránkou, dnešní výchozí datum, součty bez jmen, více typů stravy, vlastní uložený vzhled, konkrétní datum dalšího varného dne z nahrazeného kalendáře, validace příjemců, ochrana před duplicitou a okamžitým odesláním po uložení, čerstvý/zastaralý heartbeat a regresní testy filtrů, oprávnění a workeru s nahrazeným transportem.
 
 Skutečná zákaznická DB, živé e-maily, Windows EXE a NSSM nebyly v tomto prostředí ověřeny. Grafická kontrola v Chromiu se nepodařila: stažení prohlížeče vrátilo neplatný archiv. Funkční testy používají skutečné NiceGUI komponenty a simulaci uživatelských akcí.
+

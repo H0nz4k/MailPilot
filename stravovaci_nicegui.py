@@ -1590,7 +1590,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 get_resend_api_key() or ""
             )
             if not api_key:
-                raise ConfigError("Zadejte Resend API klíč v Odesílání → E-maily funkcí.")
+                raise ConfigError("Zadejte Resend API klíč v Nastavení → Služba a odesílání.")
             sender = normalize_recipient(self.sender_input.value)
             subject = str(self.bulk_subject.value or "").strip()
             body = str(self.bulk_body.value or "").strip()
@@ -1760,7 +1760,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                     self._build_category_settings_panel()
                 with ui.tab_panel("mail_settings"):
                     from services.web_mail_settings_gui import build_web_settings_panel
-                    build_web_settings_panel(self.config_path.parent, require_admin=self._require_admin, before_lock=self._admin_before_lock)
+                    build_web_settings_panel(
+                        self.config_path.parent, require_admin=self._require_admin,
+                        before_lock=self._admin_before_lock,
+                        on_api_key_saved=self.api_key_input.set_value,
+                    )
                 with ui.tab_panel("navigation"):
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
@@ -3342,6 +3346,7 @@ if __name__ in {"__main__", "__mp_main__"}:
 
     freeze_support()
     raise SystemExit(main())
+
 
 
 

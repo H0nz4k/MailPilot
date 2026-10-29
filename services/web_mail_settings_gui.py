@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 from nicegui import ui
+from env_store import EnvStoreError, get_resend_api_key, set_resend_api_key
 from services.web_mail_settings import load_settings, save_settings, settings_path
 from services.web_mail_nssm import service_command, windows_admin_state, ADMIN_HELP
 from services.web_path_picker import pick_local_file
@@ -17,6 +18,7 @@ from services.jidelnasql_warning import (
 def build_web_settings_panel(
     directory: Path, *, require_admin: Callable[[], bool] | None = None,
     before_lock: list[Callable[[], None]] | None = None,
+    on_api_key_saved: Callable[[str], None] | None = None,
 ) -> None:
     path = settings_path(directory)
     try:
@@ -143,7 +145,39 @@ def build_web_settings_panel(
                     username = ui.input("SMTP přihlašovací jméno", value=values["smtp_username"]).props("outlined dense").classes("w-full")
                     ui.label("Heslo SMTP ukládejte do prostředí služby jako MAILPILOT_SMTP_PASSWORD, ne do JSON souboru.").classes("text-caption")
                 smtp_fields.bind_visibility_from(transport, "value", backward=lambda value: value == "smtp")
-                ui.label("Resend API klíč nastavíte v Nastavení → E-maily.").classes("ui-help").bind_visibility_from(transport, "value", backward=lambda value: value == "resend")
+                with ui.column().classes("w-full gap-2") as resend_fields:
+                    api_key = ui.input(
+                        "Resend API klíč", password=True, password_toggle_button=True,
+                    ).props("outlined dense autocomplete=off").classes("w-full").mark("resend-api-key")
+                    ui.label("Klíč se ukládá do souboru .env vedle aplikace. Prázdné pole ponechá uložený klíč beze změny.").classes("ui-help")
+                    key_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"').mark("resend-key-status")
+                    try:
+                        key_status.set_text("API klíč je nastaven." if get_resend_api_key() else "API klíč zatím není nastaven.")
+                    except EnvStoreError:
+                        key_status.set_text("Uložený API klíč se nepodařilo načíst.")
+
+                    def save_api_key():
+                        if not allowed():
+                            return
+                        value = str(api_key.value or "").strip()
+                        if not value:
+                            key_status.set_text("Zadejte nový Resend API klíč. Uložený klíč zůstává beze změny.")
+                            return
+                        try:
+                            set_resend_api_key(value)
+                        except (EnvStoreError, OSError):
+                            key_status.set_text("API klíč se nepodařilo uložit. Ověřte právo zápisu do složky aplikace.")
+                            key_status.classes(add="text-negative")
+                            return
+                        if on_api_key_saved is not None:
+                            on_api_key_saved(value)
+                        api_key.value = ""
+                        key_status.set_text("API klíč byl uložen.")
+                        key_status.classes(remove="text-negative")
+
+                    api_key.on("keydown.enter.prevent", save_api_key)
+                    ui.button("Uložit API klíč", icon="save", on_click=save_api_key).props("outline no-caps")
+                resend_fields.bind_visibility_from(transport, "value", backward=lambda value: value == "resend")
                 from_email = ui.input("E-mail odesílatele", value=values["from_email"]).props("outlined dense").classes("w-full")
                 from_name = ui.input("Zobrazované jméno odesílatele", value=values["from_name"]).props("outlined dense").classes("w-full")
                 subject = ui.input("Výchozí předmět", value=values["subject_template"]).props("outlined dense").classes("w-full")
@@ -210,4 +244,5 @@ def build_web_settings_panel(
         field.on("blur", flush)
     if before_lock is not None:
         before_lock.append(flush)
+
 
