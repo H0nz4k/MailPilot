@@ -71,7 +71,12 @@ for executable in DataShip.exe DataShip-Worker.exe; do
 done
 cp "$ROOT/config.example.json" "$APP/config.example.json"
 cp "$APP/config.example.json" "$APP/config.json"
+cp "$ROOT/scripts/START_WEB.vbs" "$APP/START_WEB.vbs"
 cat > "$APP/START_WEB.cmd" <<'CMD'
+@echo off
+wscript.exe "%~dp0START_WEB.vbs"
+CMD
+cat > "$APP/START_WEB_DEBUG.cmd" <<'CMD'
 @echo off
 cd /d "%~dp0"
 "%~dp0DataShip.exe" --browser
@@ -92,5 +97,6 @@ echo "[5/5] Nasazuji overene sestaveni a zachovavam nastaveni..."
 # in its named backup beside DataShip; it is never deleted by this script.
 rm -rf "$STAGE_ROOT"
 echo "HOTOVO: $INSTALL_APP/DataShip.exe"
-echo "OTEVRENI: v Git Bash spust ./dist-web/DataShip/DataShip.exe --browser"
+echo "OTEVRENI BEZ KONZOLE: dvojklik na $INSTALL_APP/START_WEB.vbs"
+echo "DIAGNOSTIKA: $INSTALL_APP/START_WEB_DEBUG.cmd"
 echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."

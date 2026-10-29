@@ -140,3 +140,12 @@ Po úspěšném uložení zapnuté úlohy v průvodci i editoru, po kopírován�
 Stejně se ohlásí chybějící služba, jiná instalace či konfigurace, neúspěšný nebo nepotvrzený start. Automatická kontrola službu sama neinstaluje, neopravuje, nerestartuje ani nezastavuje a nevyvolává zvýšení oprávnění. U vypnuté nebo smazané úlohy nic nespouští. Uložení definice úlohy je oddělené od výsledku spuštění služby. Stav „Zapnutá“ označuje povolenou úlohu; skutečný běh plánovače se nadále potvrzuje jeho heartbeat. V Plánovači je výrazný stavový rámeček, který upozorňuje i po znovuotevření stránky, pokud jsou zapnuté úlohy bez potvrzeného běhu plánovače.
 
 Spuštěný worker může dohnat již splatné starší úlohy podle dosavadních pravidel. Nová úloha z průvodce má nadále první budoucí termín. Skutečné NSSM/Windows spuštění a doručení e-mailu je nutné ověřit na cílovém počítači.
+
+
+### Běžné otevření bez černého okna
+
+Dvojklik na `START_WEB.vbs` vedle `DataShip.exe` otevře webové rozhraní v prohlížeči a spustí DataShip se skrytou konzolí. Na tento soubor lze vytvořit zástupce na ploše. `START_WEB.cmd` také používá tento skrytý spouštěč. Pro zobrazení výpisu při problému slouží `START_WEB_DEBUG.cmd`; přímé spuštění `DataShip.exe --browser` nadále konzoli ukazuje. Spouštěč nevyžaduje zvýšení oprávnění, sám neinstaluje ani nespouští službu workeru.
+
+Zavření záložky neukončuje webový proces na pozadí. Opakované spouštění aktuální aplikace může vytvořit další webový proces; místní server je potřeba ponechat běžet po dobu práce ve webu. Plánované úlohy zpracovává samostatná služba `DataShipScheduler`, která na otevřeném webu nezávisí.
+
+Pro doplnění spouštěče do již sestavené instalace stačí po aktualizaci zdrojů zkopírovat `scripts/START_WEB.vbs` do `dist-web/DataShip/START_WEB.vbs`. Další sestavení EXE kvůli tomu není nutné. Před přechodem zavřete dosavadní konzolové okno DataShipu a poté používejte nový spouštěč. Windows Script Host je pro tento způsob spuštění potřebný; samotný start skrytého EXE zde na Windows ověřen nebyl.

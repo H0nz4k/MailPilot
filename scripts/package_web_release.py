@@ -25,7 +25,7 @@ NSSM_SHA256 = '99f5045fffbffb745d67fe3a065a953c4a3d9c253b868892d9b685b0ee7d07b8'
 # NSSM payload is reused; no older GUI, worker or configuration is extracted.
 NSSM_FALLBACK_ASSET = 'repos/H0nz4k/MailPilot/releases/assets/666037948'
 NSSM_FALLBACK_SHA256 = '6cc4eb73e25a8a43d28fbd865918136459db586a48bb52eb1ca50d49d02feaa9'
-REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'START_WEB.cmd', 'START_WORKER_MANUAL.cmd')
+REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'START_WEB.cmd', 'START_WEB.vbs', 'START_WEB_DEBUG.cmd', 'START_WORKER_MANUAL.cmd')
 
 
 def verified_nssm(archive: Path) -> bytes:
@@ -174,3 +174,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+

@@ -21,6 +21,7 @@ def layout(tmp_path):
     for name in ('DataShip.exe', 'DataShip-Worker.exe', '_internal/library', 'nssm/win64/nssm.exe'):
         put(stage, name)
     put(stage, 'config.json', 'example')
+    put(stage, 'START_WEB.vbs', 'new launcher')
     return stage, app, tmp_path / 'recovery', tmp_path / 'legacy'
 
 
@@ -29,7 +30,7 @@ def test_install_preserves_settings_logs_and_custom_files_including_backup(tmp_p
     for name in ('DataShip.exe', 'DataShip-Worker.exe', '_internal/stale.dll',
                  'config.json', '.env', 'web_mail_tasks.json', 'web_mail_worker_state.json',
                  'logy/history.log', 'exports/report.pdf', 'custom.txt',
-                 'web_mail_worker_runtime.json'):
+                 'web_mail_worker_runtime.json', 'START_WEB.vbs'):
         put(app, name, 'old')
     put(recovery, 'config.json', 'stale recovery')
     put(legacy, 'config.json', 'legacy')
@@ -40,6 +41,7 @@ def test_install_preserves_settings_logs_and_custom_files_including_backup(tmp_p
                  'logy/history.log', 'exports/report.pdf', 'custom.txt'):
         assert (app / name).read_text() == 'old'
     assert (app / 'DataShip-Worker.exe').read_text() == 'new'
+    assert (app / 'START_WEB.vbs').read_text() == 'new launcher'
     assert not (app / '_internal/stale.dll').exists()
     assert not (app / 'web_mail_worker_runtime.json').exists()
     assert not stage.exists()
