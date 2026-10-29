@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import ctypes
+from dataclasses import dataclass
 import locale
 import logging
 import os
 import re
+import shlex
+from threading import Lock
 import subprocess
 import sys
 from pathlib import Path, PureWindowsPath
@@ -98,9 +101,7 @@ def _run_nssm(command: list[str]) -> str:
     return output
 
 
-def service_command(config_directory: Path, action: str) -> str:
-    if action not in ('install', 'repair', 'start', 'stop', 'restart', 'status', 'remove'):
-        raise ValueError('Neznámá operace služby.')
+def _service_setup(config_directory: Path) -> tuple[Path, str]:
     settings = load_settings(settings_path(config_directory))
     nssm = Path(settings['nssm_path'])
     if not nssm.is_file():
@@ -108,6 +109,59 @@ def service_command(config_directory: Path, action: str) -> str:
     name = str(settings['service_name']).strip()
     if not name or not all(c.isascii() and (c.isalnum() or c in '_-') for c in name):
         raise ValueError('Název služby smí obsahovat jen písmena bez diakritiky, číslice, pomlčku a podtržítko.')
+    return nssm, name
+
+
+@dataclass(frozen=True)
+class ServiceReadiness:
+    running: bool
+    message: str
+
+
+_START_LOCK = Lock()
+
+
+def ensure_scheduler_running(config_directory: Path) -> ServiceReadiness:
+    """Start only this installation's existing service; never install or elevate."""
+    with _START_LOCK:
+        try:
+            require_service_rights('status')
+            nssm, name = _service_setup(config_directory)
+            base = [str(nssm)]
+            frozen = getattr(sys, 'frozen', False)
+            expected = Path(sys.executable).resolve()
+            if frozen:
+                expected = expected.with_name(WORKER_EXE_NAME)
+            registered = _run_nssm(base + ['get', name, 'Application']).strip().strip('"')
+            if PureWindowsPath(registered) != PureWindowsPath(str(expected)):
+                raise ValueError('Služba odkazuje na jiný program nebo jinou složku. V Nastavení → Služba a odesílání ověřte název služby a opravte její cesty.')
+            parameters = _run_nssm(base + ['get', name, 'AppParameters'])
+            args = [part.strip('"') for part in shlex.split(parameters, posix=False)]
+            prefix = [] if frozen else ['-m', 'services.web_mail_worker']
+            if (len(args) != len(prefix) + 2 or args[:len(prefix)] != prefix
+                    or args[-2] != '--config'
+                    or PureWindowsPath(args[-1]) != PureWindowsPath(str((Path(config_directory) / 'config.json').resolve()))):
+                raise ValueError('Služba používá jinou konfiguraci. V Nastavení → Služba a odesílání opravte její cesty.')
+            state = _run_nssm(base + ['status', name]).strip()
+            if state == 'SERVICE_RUNNING':
+                return ServiceReadiness(True, f'Služba {name} běží. Automatické úlohy zpracovává i po zavření aplikace.')
+            if state == 'SERVICE_START_PENDING':
+                return ServiceReadiness(False, 'Služba se spouští; její běh zatím není potvrzený. Za chvíli klikněte na Znovu ověřit a spustit službu.')
+            if state != 'SERVICE_STOPPED':
+                raise ValueError('Služba není připravená ke spuštění. V Nastavení → Služba a odesílání ověřte její stav a log workeru.')
+            require_service_rights('start')
+            _run_nssm(base + ['start', name])
+            if _run_nssm(base + ['status', name]).strip() != 'SERVICE_RUNNING':
+                raise ValueError('Po spuštění se nepodařilo potvrdit běh služby. Ověřte její stav a log workeru v Nastavení → Služba a odesílání.')
+            return ServiceReadiness(True, f'Služba {name} byla automaticky spuštěna. Úlohy zpracovává i po zavření aplikace.')
+        except (OSError, RuntimeError, ValueError) as exc:
+            return ServiceReadiness(False, f'Automatické spuštění úlohy zatím není zajištěné. {exc}')
+
+
+def service_command(config_directory: Path, action: str) -> str:
+    if action not in ('install', 'repair', 'start', 'stop', 'restart', 'status', 'remove'):
+        raise ValueError('Neznámá operace služby.')
+    nssm, name = _service_setup(config_directory)
     require_service_rights(action)
     config = (Path(config_directory) / 'config.json').resolve()
     base = [str(nssm)]

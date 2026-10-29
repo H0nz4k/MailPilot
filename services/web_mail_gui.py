@@ -1,6 +1,6 @@
 """NiceGUI editor for independently scheduled MailPilot reports.
 
-This screen edits persistent task definitions; saving never sends mail.
+Task definitions are persisted before checking or starting their Windows service.
 """
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ from services.web_meal_types import meal_filter_caption, meal_filter_values
 from services.web_worker_status import observed_status
 from services.web_task_output import TaskOutputEditor
 from services.web_controls import day_stepper
+from services.web_scheduler_notice import SchedulerServiceNotice
 
 REPORTS = {"daily": "Denní PDF přehled", "meal_summary": "Původní souhrn (nepodporováno)"}
 LEGACY_PROFILE_LABEL = "Dosavadní společné nastavení"
@@ -44,20 +45,41 @@ def build_mail_tasks_panel(
     path = task_file(Path(config_directory))
     active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
     ui.label("Plánovač přehledů").classes("ds-page-title").props('role="heading" aria-level="1"')
-    worker_status = ui.label(observed_status(config_directory)).props('role="status" aria-live="polite"')
-    ui.timer(10, lambda: worker_status.set_text(observed_status(config_directory)))
+    with ui.row().classes("ds-scheduler-notice w-full items-center no-wrap").props('role="status" aria-live="polite"').mark("scheduler-health") as worker_health:
+        worker_icon = ui.icon("info", size="28px").props('aria-hidden="true"')
+        worker_status = ui.label("").classes("ds-scheduler-notice-text")
     ui.label(
         "Novou úlohu vytvoříte průvodcem. Zde vidíte uložené úlohy, další spuštění a výsledky."
         if on_new_plan else
         "1. Vyberte uložený přehled (typ stravy a vzhled PDF). "
         "2. Zadejte příjemce. 3. Nastavte čas a den přehledu, například 2 dny dopředu."
     ).classes("ui-help")
+    service_notice = SchedulerServiceNotice(config_directory)
+
     def read():
         try:
             return load_tasks(path)
         except (OSError, ValueError) as exc:
             ui.notify(f"Nelze načíst úlohy: {exc}", type="negative")
             return None
+
+    def refresh_worker_status():
+        status = observed_status(config_directory)
+        try:
+            active = any(task.enabled for task in load_tasks(path))
+        except (OSError, ValueError):
+            active = False
+        confirmed = status == "Plánovač běží · čeká na další spuštění"
+        kind = "positive" if confirmed else "warning" if active else "pending"
+        worker_health.classes(remove="ds-scheduler-notice--positive ds-scheduler-notice--warning ds-scheduler-notice--pending",
+                              add=f"ds-scheduler-notice--{kind}")
+        worker_icon.props('name=' + ('check_circle' if confirmed else 'warning_amber' if active else 'info'))
+        worker_status.set_text(status + (
+            ". Máte zapnuté úlohy, ale automatické spuštění zatím není zajištěné. Ověřte službu v Nastavení → Služba a odesílání."
+            if active and not confirmed else ""))
+
+    refresh_worker_status()
+    ui.timer(10, refresh_worker_status)
 
     def profile_options():
         return {
@@ -81,7 +103,7 @@ def build_mail_tasks_panel(
             with ui.card().classes("ds-mail-task w-full"):
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label(task.name).classes("ds-task-title")
-                    ui.badge("Nepodporováno" if task.report != "daily" else "Aktivní" if task.enabled else "Vypnutá", color=None).classes("ds-task-badge")
+                    ui.badge("Nepodporováno" if task.report != "daily" else "Zapnutá" if task.enabled else "Vypnutá", color=None).classes("ds-task-badge")
                 status_label = ui.label(observed_status(config_directory, task)).classes("ds-task-line").props('role="status"')
                 ui.timer(10, lambda label=status_label, t=task: label.set_text(observed_status(config_directory, t)))
                 ui.label(f"Každý den v {task.send_time}").classes("ds-task-line")
@@ -143,13 +165,16 @@ def build_mail_tasks_panel(
                     ).props("outline")
                     ui.button("Smazat", on_click=lambda t=task: confirm_delete(t)).props("outline color=negative")
 
-    def persist(items):
+    def persist(items, *, active_task=None):
         try:
             save_tasks(path, items)
         except (OSError, ValueError) as exc:
             ui.notify(f"Uložení selhalo: {exc}", type="negative")
             return False
         table.refresh()
+        refresh_worker_status()
+        if active_task is not None:
+            service_notice.activate(active_task.enabled)
         ui.notify("Úloha byla uložena.", type="positive")
         return True
 
@@ -160,7 +185,8 @@ def build_mail_tasks_panel(
         tasks = read()
         if tasks is None:
             return
-        persist([replace(t, enabled=not t.enabled) if t.id == task.id else t for t in tasks])
+        changed = replace(task, enabled=not task.enabled)
+        persist([changed if t.id == task.id else t for t in tasks], active_task=changed)
 
     def confirm_delete(task):
         with ui.dialog() as dialog, ui.card():
@@ -434,7 +460,7 @@ def build_mail_tasks_panel(
                         ui.notify(f"Úlohu nelze uložit: {exc}", type="negative")
                         return
                     items = [t for t in tasks if t.id != new.id] + [new]
-                    if persist(items):
+                    if persist(items, active_task=new):
                         dialog.close()
                 ui.button("Uložit", on_click=save).props("color=primary").style("color: var(--ds-on-primary) !important").mark("mail-task-save")
         dialog.open()

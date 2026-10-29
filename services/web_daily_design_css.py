@@ -205,6 +205,14 @@ html.theme-tmave .ds-api-key-state--positive { background: #102e22; border-color
 html.theme-tmave .ds-api-key-state--warning { background: #38280f; border-color: #fbbf24; color: #fde68a; }
 html.theme-tmave .ds-api-key-state--negative { background: #3b171b; border-color: #f87171; color: #fecaca; }
 .ds-api-key-state .ds-api-key-status-text, .ds-api-key-state .q-icon { color: inherit !important; }
+.ds-scheduler-notice { padding: 16px; gap: 12px; border: 2px solid; border-radius: 8px; }
+.ds-scheduler-notice-text { font-size: var(--app-text); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.ds-scheduler-notice--positive { background: #ecfdf3; border-color: #15803d; color: #14532d; }
+.ds-scheduler-notice--warning { background: #fffbeb; border-color: #b45309; color: #78350f; }
+.ds-scheduler-notice--pending { background: var(--app-primary-soft); border-color: var(--app-primary); color: var(--app-ink); }
+html.theme-tmave .ds-scheduler-notice--positive { background: #102e22; border-color: #4ade80; color: #a7f3d0; }
+html.theme-tmave .ds-scheduler-notice--warning { background: #38280f; border-color: #fbbf24; color: #fde68a; }
+.ds-scheduler-notice .ds-scheduler-notice-text, .ds-scheduler-notice .q-icon, .ds-scheduler-notice .q-btn { color: inherit !important; }
 .ds-settings-save { width: 100%; justify-content: flex-end; padding: 12px 0; }
 .ds-mail-task { border: 1.5px solid var(--app-border); padding: 18px; border-radius: 8px; box-shadow: none; }
 .ds-mail-task .ds-task-title { font-size: var(--app-heading); font-weight: var(--app-weight-heading); }

@@ -1,6 +1,6 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.9.
+Verze 1.0.0-rc.10, sestavení 20261029.10.
 
 ## Dvě oddělená hesla
 
@@ -131,3 +131,12 @@ Skutečná zákaznická DB, živé e-maily, Windows EXE a NSSM nebyly v tomto pr
 ### Viditelný stav Resend API klíče (20261029.9)
 
 Klíč zůstává v `RESEND_API_KEY` souboru `.env` vedle EXE; pole slouží k zadání nového klíče a po úspěšném uložení se vyprázdní. Nastavení zobrazuje přesnou cestu k souboru. Trvalý zelený rámeček s fajfkou a textem „API klíč je uložený a načtený.“ se objeví po načtení existujícího klíče i po uložení s ověřením zpětného načtení stejné hodnoty. Oranžový stav označí chybějící nebo rozepsaný neuložený klíč, červený chybu čtení, zápisu či ověření. Prázdné uložení uložený klíč nemění a znovu načte jeho stav. Zelená potvrzuje místní uložení a načtení; platnost klíče u poskytovatele se zde online neověřuje.
+
+
+### Automatické spuštění služby po uložení úlohy (20261029.10)
+
+Po úspěšném uložení zapnuté úlohy v průvodci i editoru, po kopírování zapnuté úlohy a po jejím zapnutí aplikace na pozadí ověří nainstalovanou službu. Kontroluje přesnou cestu workeru této instalace a parametr konfigurace. Běžící službu nechá běžet; zastavenou se pokusí spustit a následně ověří stav Windows. Již běžící služba nevyžaduje pro tuto kontrolu práva správce. Pokud služba stojí, práva správce jsou pro její spuštění potřeba. Bez nich se úloha neztratí: zůstane uložená a výrazné trvalé upozornění uvede, že automatické spuštění není zajištěné, včetně postupu a tlačítka „Znovu ověřit a spustit službu“.
+
+Stejně se ohlásí chybějící služba, jiná instalace či konfigurace, neúspěšný nebo nepotvrzený start. Automatická kontrola službu sama neinstaluje, neopravuje, nerestartuje ani nezastavuje a nevyvolává zvýšení oprávnění. U vypnuté nebo smazané úlohy nic nespouští. Uložení definice úlohy je oddělené od výsledku spuštění služby. Stav „Zapnutá“ označuje povolenou úlohu; skutečný běh plánovače se nadále potvrzuje jeho heartbeat. V Plánovači je výrazný stavový rámeček, který upozorňuje i po znovuotevření stránky, pokud jsou zapnuté úlohy bez potvrzeného běhu plánovače.
+
+Spuštěný worker může dohnat již splatné starší úlohy podle dosavadních pravidel. Nová úloha z průvodce má nadále první budoucí termín. Skutečné NSSM/Windows spuštění a doručení e-mailu je nutné ověřit na cílovém počítači.

@@ -1,4 +1,4 @@
-"""Four-step daily report creation. Saving config never sends an email."""
+"""Four-step report creation; save first, then ensure the enabled task service."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -16,6 +16,7 @@ from services.web_worker_status import observed_status
 from services.web_meal_types import meal_filter_caption
 from services.web_task_output import TaskOutputEditor
 from services.web_controls import day_stepper
+from services.web_scheduler_notice import SchedulerServiceNotice
 
 RULES = {"today": "Dnes", "tomorrow": "Zítra", "after_tomorrow": "Pozítří (2 dny dopředu)",
          "next_cooking_day": "Následující varný den", "offset": "Jiný počet dní dopředu"}
@@ -95,7 +96,7 @@ class ReportWizardMixin:
         self.wizard_enabled.update()
         self.wizard_save_help.set_text(
             "V zadaný čas se pouze vytvoří PDF ve zvolené složce. E-mail se neposílá."
-            if pdf else "Uložením se úloha zařadí do plánovače. E-mail se odešle až v naplánovaný čas."
+            if pdf else "Uložením se úloha zařadí do plánovače. U zapnuté úlohy ověříme a případně spustíme službu. E-mail se odešle v naplánovaný čas."
         )
         self._wizard_queue_preview()
 
@@ -109,6 +110,7 @@ class ReportWizardMixin:
                 ui.label("Úloha byla uložena do plánovače").classes("app-heading")
             self.wizard_receipt_summary = ui.label("").classes("ds-wizard-preview")
             self.wizard_receipt_status = ui.label("").props('role="status" aria-live="polite"')
+            self.wizard_service_notice = SchedulerServiceNotice(self.config_path.parent)
             with ui.row().classes("gap-3"):
                 ui.button("Otevřít plánovač", icon="schedule", on_click=lambda: self.tabs.set_value("mail_tasks")).props("outline no-caps")
                 ui.button("Vytvořit další úlohu", icon="add", on_click=self._wizard_new).props("no-caps unelevated")
@@ -270,6 +272,7 @@ class ReportWizardMixin:
         self.wizard_receipt_summary.set_text(f"{task.name} · každý den v {task.send_time} · {destination}. " + (f"Příští spuštění {upcoming:%d.%m.%Y v %H:%M}." if upcoming else "Automatické spouštění je vypnuté."))
         self.wizard_receipt.set_visibility(True)
         self._wizard_refresh_status()
+        self.wizard_service_notice.activate(task.enabled)
         if hasattr(self, "mail_tasks_refresh"):
             self.mail_tasks_refresh()
 
@@ -278,6 +281,7 @@ class ReportWizardMixin:
             self.wizard_receipt_status.set_text(observed_status(self.config_path.parent, self._wizard_saved_task))
 
     def _wizard_new(self):
+        self.wizard_service_notice.clear()
         self._wizard_saved = False
         self._wizard_task_id = str(uuid4())
         self._wizard_profile_id = str(uuid4())
