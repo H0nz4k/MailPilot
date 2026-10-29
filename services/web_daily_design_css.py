@@ -194,6 +194,17 @@ html.blocks-emphasized .dataship-ui .ds-daily { border: 0; }
 .ds-settings-card .q-field__control { border-radius: 4px; }
 .ds-settings-card .ds-service-status { padding: 12px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-block); overflow-wrap: anywhere; width: 100%; }
 .ds-settings-card .q-btn__content { white-space: normal; }
+/* Credentials use a persistent status box with an icon and words, not color alone. */
+.ds-api-key-state { padding: 12px 14px; gap: 10px; border: 1px solid; border-radius: 6px; }
+.ds-api-key-state .q-icon { flex: 0 0 auto; }
+.ds-api-key-state .ds-api-key-status-text { font-size: var(--app-text); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.ds-api-key-state--positive { background: #ecfdf3; border-color: #15803d; color: #14532d; }
+.ds-api-key-state--warning { background: #fffbeb; border-color: #b45309; color: #78350f; }
+.ds-api-key-state--negative { background: #fef2f2; border-color: #b91c1c; color: #991b1b; }
+html.theme-tmave .ds-api-key-state--positive { background: #102e22; border-color: #4ade80; color: #a7f3d0; }
+html.theme-tmave .ds-api-key-state--warning { background: #38280f; border-color: #fbbf24; color: #fde68a; }
+html.theme-tmave .ds-api-key-state--negative { background: #3b171b; border-color: #f87171; color: #fecaca; }
+.ds-api-key-state .ds-api-key-status-text, .ds-api-key-state .q-icon { color: inherit !important; }
 .ds-settings-save { width: 100%; justify-content: flex-end; padding: 12px 0; }
 .ds-mail-task { border: 1.5px solid var(--app-border); padding: 18px; border-radius: 8px; box-shadow: none; }
 .ds-mail-task .ds-task-title { font-size: var(--app-heading); font-weight: var(--app-weight-heading); }

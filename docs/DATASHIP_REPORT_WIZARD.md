@@ -1,6 +1,6 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.8.
+Verze 1.0.0-rc.10, sestavení 20261029.9.
 
 ## Dvě oddělená hesla
 
@@ -126,3 +126,8 @@ Ověření v Linuxu: průchod reálnou NiceGUI stránkou, dnešní výchozí dat
 
 Skutečná zákaznická DB, živé e-maily, Windows EXE a NSSM nebyly v tomto prostředí ověřeny. Grafická kontrola v Chromiu se nepodařila: stažení prohlížeče vrátilo neplatný archiv. Funkční testy používají skutečné NiceGUI komponenty a simulaci uživatelských akcí.
 
+
+
+### Viditelný stav Resend API klíče (20261029.9)
+
+Klíč zůstává v `RESEND_API_KEY` souboru `.env` vedle EXE; pole slouží k zadání nového klíče a po úspěšném uložení se vyprázdní. Nastavení zobrazuje přesnou cestu k souboru. Trvalý zelený rámeček s fajfkou a textem „API klíč je uložený a načtený.“ se objeví po načtení existujícího klíče i po uložení s ověřením zpětného načtení stejné hodnoty. Oranžový stav označí chybějící nebo rozepsaný neuložený klíč, červený chybu čtení, zápisu či ověření. Prázdné uložení uložený klíč nemění a znovu načte jeho stav. Zelená potvrzuje místní uložení a načtení; platnost klíče u poskytovatele se zde online neověřuje.

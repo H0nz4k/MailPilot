@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 from nicegui import ui
-from env_store import EnvStoreError, get_resend_api_key, set_resend_api_key
+from env_store import DEFAULT_ENV_PATH, EnvStoreError, get_resend_api_key, set_resend_api_key
 from services.web_mail_settings import load_settings, save_settings, settings_path
 from services.web_mail_nssm import service_command, windows_admin_state, ADMIN_HELP
 from services.web_path_picker import pick_local_file
@@ -174,31 +174,63 @@ def build_web_settings_panel(
                     api_key = ui.input(
                         "Resend API klíč", password=True, password_toggle_button=True,
                     ).props("outlined dense autocomplete=off").classes("w-full").mark("resend-api-key")
-                    ui.label("Klíč se ukládá do souboru .env vedle aplikace. Prázdné pole ponechá uložený klíč beze změny.").classes("ui-help")
-                    key_status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"').mark("resend-key-status")
-                    try:
-                        key_status.set_text("API klíč je nastaven." if get_resend_api_key() else "API klíč zatím není nastaven.")
-                    except EnvStoreError:
-                        key_status.set_text("Uložený API klíč se nepodařilo načíst.")
+                    ui.label("Pole slouží pro zadání nového klíče. Po uložení se vyprázdní; uložený klíč zůstává k dispozici.").classes("ui-help")
+                    with ui.row().classes("ds-api-key-state w-full items-center no-wrap").props('role="status" aria-live="polite" aria-atomic="true"').mark("resend-key-state") as key_state:
+                        key_icon = ui.icon("info", size="24px").props('aria-hidden="true"').mark("resend-key-icon")
+                        key_status = ui.label("").classes("ds-api-key-status-text").mark("resend-key-status")
+                    ui.label(f"Soubor s klíčem: {DEFAULT_ENV_PATH}").classes("ui-help break-all").mark("resend-key-location")
+
+                    def show_key_status(kind: str, message: str, icon: str):
+                        key_state.classes(
+                            remove="ds-api-key-state--positive ds-api-key-state--warning ds-api-key-state--negative",
+                            add=f"ds-api-key-state--{kind}",
+                        )
+                        key_icon.props(f'name={icon}')
+                        key_status.set_text(message)
+
+                    def refresh_key_status():
+                        try:
+                            loaded = get_resend_api_key()
+                        except (EnvStoreError, OSError):
+                            show_key_status("negative", "Uložený API klíč se nepodařilo načíst.", "error_outline")
+                            return
+                        if loaded:
+                            show_key_status("positive", "API klíč je uložený a načtený.", "check_circle")
+                        else:
+                            show_key_status("warning", "API klíč zatím není nastaven.", "key_off")
+
+                    def key_changed():
+                        if str(api_key.value or "").strip():
+                            show_key_status("warning", "Nový API klíč ještě není uložený.", "edit_note")
+                        else:
+                            refresh_key_status()
+
+                    refresh_key_status()
+                    api_key.on_value_change(lambda _event: key_changed())
 
                     def save_api_key():
                         if not allowed():
                             return
                         value = str(api_key.value or "").strip()
                         if not value:
-                            key_status.set_text("Zadejte nový Resend API klíč. Uložený klíč zůstává beze změny.")
+                            refresh_key_status()
                             return
                         try:
                             set_resend_api_key(value)
                         except (EnvStoreError, OSError):
-                            key_status.set_text("API klíč se nepodařilo uložit. Ověřte právo zápisu do složky aplikace.")
-                            key_status.classes(add="text-negative")
+                            show_key_status("negative", "API klíč se nepodařilo uložit. Ověřte právo zápisu do složky aplikace.", "error_outline")
+                            return
+                        try:
+                            loaded = get_resend_api_key()
+                        except (EnvStoreError, OSError):
+                            loaded = None
+                        if loaded != value:
+                            show_key_status("negative", "API klíč byl zapsán, ale jeho načtení se nepodařilo ověřit. Zkuste jej uložit znovu.", "error_outline")
                             return
                         if on_api_key_saved is not None:
                             on_api_key_saved(value)
                         api_key.value = ""
-                        key_status.set_text("API klíč byl uložen.")
-                        key_status.classes(remove="text-negative")
+                        show_key_status("positive", "API klíč je uložený a načtený.", "check_circle")
 
                     api_key.on("keydown.enter.prevent", save_api_key)
                     ui.button("Uložit API klíč", icon="save", on_click=save_api_key).props("outline no-caps")
