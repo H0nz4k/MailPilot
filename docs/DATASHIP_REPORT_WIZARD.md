@@ -1,6 +1,6 @@
 # Průvodce přehledem a odesíláním
 
-Verze 1.0.0-rc.10, sestavení 20261029.10.
+Verze 1.0.0-rc.10, sestavení 20261029.11.
 
 ## Dvě oddělená hesla
 
@@ -14,10 +14,11 @@ Závěrečná kontrola sestavení 20261029.8: 119 cílených testů prošlo pro 
 
 Ikony Windows jsou od sestavení 20261029.4, režim exportu PDF a velká tlačítka dní od 20261029.6. Pokud hlavička ukazuje 20261029.3, stále běží staré EXE. Aktualizace zdrojů sama běžící proces ani službu nevymění. Před sestavením zastavte službu a zavřete aplikaci včetně starých záložek. Po sestavení spusťte EXE z `dist-web/DataShip` a zkontrolujte sestavení v hlavičce.
 
-Od 20261029.7 vypisují obě EXE přes `--version` také číslo sestavení. Build oba programy zkontroluje a při nesouladu skončí chybou. V Git Bash lze ověřit:
+Build ověřuje číslo sestavení obou EXE. GUI od 20261029.11 nemá konzoli, proto ověření provádí pomocí `--version-file`; worker si ponechává výstup `--version`. V Git Bash lze ověřit:
 
 ```bash
-./dist-web/DataShip/DataShip.exe --version
+./dist-web/DataShip/DataShip.exe --version-file "$(cygpath -w "$PWD/dataship-version.txt")"
+cat ./dataship-version.txt
 ./dist-web/DataShip/DataShip-Worker.exe --version
 ```
 
@@ -142,10 +143,10 @@ Stejně se ohlásí chybějící služba, jiná instalace či konfigurace, neús
 Spuštěný worker může dohnat již splatné starší úlohy podle dosavadních pravidel. Nová úloha z průvodce má nadále první budoucí termín. Skutečné NSSM/Windows spuštění a doručení e-mailu je nutné ověřit na cílovém počítači.
 
 
-### Běžné otevření bez černého okna
+### Běžné otevření bez černého okna (20261029.11)
 
-Dvojklik na `START_WEB.vbs` vedle `DataShip.exe` otevře webové rozhraní v prohlížeči a spustí DataShip se skrytou konzolí. Na tento soubor lze vytvořit zástupce na ploše. `START_WEB.cmd` také používá tento skrytý spouštěč. Pro zobrazení výpisu při problému slouží `START_WEB_DEBUG.cmd`; přímé spuštění `DataShip.exe --browser` nadále konzoli ukazuje. Spouštěč nevyžaduje zvýšení oprávnění, sám neinstaluje ani nespouští službu workeru.
+Spouštějte přímo `DataShip.exe` dvojklikem nebo zástupcem na ploše. GUI se sestavuje pomocí PyInstaller `--windowed` a otevře web v prohlížeči bez konzolového okna. Nepoužívá VBS ani Windows Script Host. Volitelný `START_WEB.cmd` pouze otevře stejné EXE a skončí. Dřívější VBS spouštěč není součástí zdrojů ani balíčků; aktualizační nasazení jej nepřenáší ze staré instalace.
 
-Zavření záložky neukončuje webový proces na pozadí. Opakované spouštění aktuální aplikace může vytvořit další webový proces; místní server je potřeba ponechat běžet po dobu práce ve webu. Plánované úlohy zpracovává samostatná služba `DataShipScheduler`, která na otevřeném webu nezávisí.
+Místní webový server běží na pozadí. Zavření záložky jej neukončí; opakované spuštění může otevřít další proces. V případě potřeby lze ukončit příslušný `DataShip.exe` ve Správci úloh. Samostatný `DataShip-Worker.exe` běží přes NSSM a plánované úlohy na otevřeném webu nezávisí. Worker zůstává konzolové EXE vhodné pro NSSM a příkazovou řádku; pro běžné otevření aplikace jej nespouštějte ručně.
 
-Pro doplnění spouštěče do již sestavené instalace stačí po aktualizaci zdrojů zkopírovat `scripts/START_WEB.vbs` do `dist-web/DataShip/START_WEB.vbs`. Další sestavení EXE kvůli tomu není nutné. Před přechodem zavřete dosavadní konzolové okno DataShipu a poté používejte nový spouštěč. Windows Script Host je pro tento způsob spuštění potřebný; samotný start skrytého EXE zde na Windows ověřen nebyl.
+Při běhu GUI bez konzole se standardní diagnostický výstup ukládá do `logy/dataship_web.log` vedle EXE. Pokud složka není zapisovatelná, aplikace se kvůli samotnému logu nezablokuje. Ověření sestavení GUI před nasazením používá `--version-file` a zkontroluje soubor i návratový kód; worker se ověřuje přes `--version`. Tato změna vyžaduje nový Windows build. Nativní spuštění windowed EXE zde na Windows ověřené nebylo.

@@ -32,7 +32,7 @@ echo "[1/5] Instaluji zavislosti webove verze..."
 "$PY" -m pip install --disable-pip-version-check -r "$ROOT/requirements-web-build.txt"
 WIN_ROOT="$(cygpath -w "$ROOT")"
 echo "[2/5] Sestavuji webovou aplikaci pro prohlizec..."
-"$PY" -m PyInstaller --noconfirm --clean --onedir --console --noupx \
+"$PY" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx \
   --name DataShip \
   --icon "$WIN_ROOT\\assets\\dataship.ico" \
   --distpath "$STAGE_ROOT" \
@@ -59,28 +59,13 @@ echo "[3/5] Sestavuji bezobsluznou sluzbu pro NSSM..."
   "$WIN_ROOT\\web_mail_worker_main.py"
 
 cp "$STAGE_ROOT/worker/DataShip-Worker.exe" "$APP/"
-expected_build="$("$PY" -c 'from services.web_branding import WEB_BUILD; print(WEB_BUILD)')"
-for executable in DataShip.exe DataShip-Worker.exe; do
-  reported_version="$("$APP/$executable" --version)"
-  reported_version="${reported_version//$'\r'/}"
-  if [[ "$reported_version" != *" build $expected_build" ]]; then
-    echo "CHYBA: $executable nema ocekavane sestaveni $expected_build: $reported_version" >&2
-    exit 2
-  fi
-  echo "OVERENO: $executable: $reported_version"
-done
+"$PY" "$ROOT/scripts/verify_web_build.py" --app "$APP"
 cp "$ROOT/config.example.json" "$APP/config.example.json"
 cp "$APP/config.example.json" "$APP/config.json"
-cp "$ROOT/scripts/START_WEB.vbs" "$APP/START_WEB.vbs"
 cat > "$APP/START_WEB.cmd" <<'CMD'
 @echo off
-wscript.exe "%~dp0START_WEB.vbs"
-CMD
-cat > "$APP/START_WEB_DEBUG.cmd" <<'CMD'
-@echo off
 cd /d "%~dp0"
-"%~dp0DataShip.exe" --browser
-if errorlevel 1 pause
+start "" "%~dp0DataShip.exe" --browser
 CMD
 cat > "$APP/START_WORKER_MANUAL.cmd" <<'CMD'
 @echo off
@@ -97,6 +82,6 @@ echo "[5/5] Nasazuji overene sestaveni a zachovavam nastaveni..."
 # in its named backup beside DataShip; it is never deleted by this script.
 rm -rf "$STAGE_ROOT"
 echo "HOTOVO: $INSTALL_APP/DataShip.exe"
-echo "OTEVRENI BEZ KONZOLE: dvojklik na $INSTALL_APP/START_WEB.vbs"
-echo "DIAGNOSTIKA: $INSTALL_APP/START_WEB_DEBUG.cmd"
+echo "OTEVRENI BEZ KONZOLE: dvojklik na $INSTALL_APP/DataShip.exe"
+echo "DIAGNOSTIKA: $INSTALL_APP/logy/dataship_web.log"
 echo "NSSM instaluje sluzbu z DataShip-Worker.exe az po tvem kliknuti v nastaveni."

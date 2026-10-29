@@ -16,6 +16,7 @@ SETTINGS = (
 )
 PACKAGED = {
     'DataShip.exe', 'DataShip-Worker.exe', '_internal', 'nssm',
+    # Do not copy obsolete script launchers from a previous installation.
     'START_WEB.cmd', 'START_WEB.vbs', 'START_WEB_DEBUG.cmd',
     'START_WORKER_MANUAL.cmd', 'config.example.json',
     'BUILD_INFO.json', 'web_mail_worker_runtime.json',

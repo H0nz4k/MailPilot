@@ -13,11 +13,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-# PyInstaller --windowed nemá konzolové streamy; knihovny je přesto mohou použít.
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+from runtime_paths import application_directory
+from services.web_windowed_runtime import prepare_windowed_streams
+
+# A windowed EXE has no standard streams, but the web server still uses them.
+prepare_windowed_streams(application_directory())
 
 from nicegui import app, native, run, ui
 
@@ -80,7 +80,6 @@ from mail_service import (
     send_pdf_via_mailsender,
     should_send_on_cooking_day,
 )
-from runtime_paths import application_directory
 from services.config_io import (
     CZECH_DATE_FORMAT,
     DEFAULT_PDF_OUTPUT,
@@ -2901,6 +2900,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--version", action="version", version=f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}"
     )
+    parser.add_argument("--version-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(remaining)
     args.uzaverka_current = period == CURRENT_CLOSING_PERIOD
     args.uzaverka_period = period if isinstance(period, tuple) else None
@@ -2918,6 +2918,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"CHYBA: {exc}", file=sys.stderr)
         return 2
+    if args.version_file is not None:
+        try:
+            args.version_file.write_text(f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"Verzi nelze zapsat: {exc}", file=sys.stderr)
+            return 2
+        return 0
     if args.automatic and args.uzaverka:
         print(
             "Zvolte jen --poctyemailem / --automatic, nebo jen přepínač uzávěrky.",
