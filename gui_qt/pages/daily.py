@@ -139,6 +139,7 @@ class DailyPage(QWidget):
         self._date.setDate(QDate.currentDate())
         size_input(self._date, metrics, 124)
         self._date.setAccessibleName("Datum sestavy")
+        self._date.setToolTip("Vyberte den, za který chcete sestavu vytvořit.")
         self._date.dateChanged.connect(self._on_date_changed)
 
         today = secondary_button("Dnes")
@@ -152,6 +153,7 @@ class DailyPage(QWidget):
         grid.addWidget(today, 0, 2)
 
         self._selection_label = QLabel("0 vybráno")
+        self._selection_label.setAccessibleName("Počet vybraných kategorií")
         self._change_categories = secondary_button("Změnit…")
         self._change_categories.setToolTip(
             "Otevře dialog s hledáním a hromadným výběrem kategorií"
@@ -276,6 +278,7 @@ class DailyPage(QWidget):
         head.addStretch(1)
         self._refresh_overview = secondary_button("Načíst")
         self._refresh_overview.setShortcut("F9")
+        self._refresh_overview.setAccessibleName("Načíst přehled porcí")
         self._refresh_overview.setToolTip(
             "Načte souhrn porcí z databáze bez tvorby PDF (F9)"
         )
@@ -334,11 +337,14 @@ class DailyPage(QWidget):
         footer.addLayout(info, 1)
 
         self._open_last = ghost_button("Otevřít po&slední")
+        self._open_last.setAccessibleName("Otevřít poslední vytvořené PDF")
         self._open_last.clicked.connect(self.open_last_requested.emit)
         self._create = secondary_button("&Vytvořit PDF")
         self._create.setShortcut("F5")
+        self._create.setAccessibleName("Vytvořit PDF sestavy")
         self._create.clicked.connect(self.create_requested.emit)
         self._send = primary_button("Vytvořit a &odeslat")
+        self._send.setAccessibleName("Vytvořit PDF a odeslat e-mailem")
         self._send.clicked.connect(self.send_requested.emit)
 
         footer.addWidget(self._open_last)
@@ -433,6 +439,7 @@ class DailyPage(QWidget):
         self._create.setEnabled(state.can_create)
         self._send.setEnabled(state.can_send)
         self._open_last.setEnabled(state.can_open_last)
+        self._open_last.setToolTip("Otevře poslední vytvořené PDF" if state.can_open_last else (state.reason or "Poslední PDF není k dispozici."))
         tooltip = state.reason
         self._create.setToolTip(tooltip or "Vytvoří PDF denní sestavy (F5)")
         self._send.setToolTip(tooltip or "Vytvoří PDF a odešle je příjemcům")

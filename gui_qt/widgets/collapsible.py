@@ -29,6 +29,7 @@ class CollapsibleSection(QWidget):
         self._toggle = QToolButton(self)
         self._toggle.setObjectName("SectionToggle")
         self._toggle.setText(title)
+        self._toggle.setAccessibleName(title)
         self._toggle.setCheckable(True)
         self._toggle.setChecked(expanded)
         self._toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
@@ -37,6 +38,7 @@ class CollapsibleSection(QWidget):
         self._toggle.setFocusPolicy(Qt.StrongFocus)
         self._toggle.setCursor(Qt.PointingHandCursor)
         self._apply_arrow(expanded)
+        self._set_accessibility_state(expanded)
         self._toggle.toggled.connect(self._on_toggled)
 
         self._content = QWidget(self)
@@ -70,7 +72,16 @@ class CollapsibleSection(QWidget):
             muted_icon(name, self._palette, self._metrics.icon_size)
         )
 
+    def _set_accessibility_state(self, expanded: bool) -> None:
+        action = "Sbalit" if expanded else "Rozbalit"
+        self._toggle.setToolTip(f"{action}: {self._toggle.text()}")
+        self._toggle.setAccessibleDescription(
+            "Rozbalená sekce. Aktivací sbalíte." if expanded
+            else "Sbalená sekce. Aktivací rozbalíte."
+        )
+
     def _on_toggled(self, checked: bool) -> None:
         self._apply_arrow(checked)
+        self._set_accessibility_state(checked)
         self._content.setVisible(checked)
         self.toggled.emit(checked)

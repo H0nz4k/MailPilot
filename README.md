@@ -1,4 +1,4 @@
-# MailPilot v12.8
+# MailPilot v12.9
 
 Production-readiness release zamereny na spolehlivost scheduleru, retry chovani,
 warning integraci do JidelnaSQL a kompatibilitu cenove logiky (`PouzivatCenik=0/1`).
@@ -12,7 +12,13 @@ warning integraci do JidelnaSQL a kompatibilitu cenove logiky (`PouzivatCenik=0/
 - **Prehled**: posledni odeslani, chyby, runtime scheduleru, rucni retry
 - **Administrace**: DB, e-maily, planovac, PDF, vzhled, bez GUI, pokrocile
 
-## Co je nove ve v12.8
+## Novinky v12.9
+
+- Zpřehlednění přístupnosti pokročilých nastavení a hlavních akcí denní sestavy.
+- Odolnější čtení stavu plánovače, pokud chybí Windows nástroj sc (například při Linux testech).
+- Automatizované Linux testy a Windows sestavení s ověřením verze, dostupné přes GitHub Actions.
+
+## Co bylo nove ve v12.8
 
 - scheduler status je navazany na realny runtime stav (ne jen na JSON plan)
 - kontrola credential dostupnosti pro ucet runtime (NSSM / lokalni beh)
@@ -63,7 +69,7 @@ build_windows.bat
 Vysledkem je:
 
 ```text
-dist\MailPilot-v12.8-portable.zip
+dist\MailPilot-v12.9-portable.zip
 dist\MailPilot\MailPilot.exe
 ```
 

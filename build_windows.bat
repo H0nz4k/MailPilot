@@ -2,17 +2,17 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-rem MailPilot v12.8: jeden EXE bez konzole, ktery umi okno i bezobsluzne rezimy.
+rem MailPilot v12.9: jeden EXE bez konzole, ktery umi okno i bezobsluzne rezimy.
 
 set "BUILD_VENV=%~dp0.venv"
 if not exist "%BUILD_VENV%\Scripts\python.exe" set "BUILD_VENV=%~dp0.build-venv"
 set "BUILD_PYTHON=%BUILD_VENV%\Scripts\python.exe"
 set "OUTPUT=%~dp0dist\MailPilot"
-set "ARCHIVE=%~dp0dist\MailPilot-v12.8-portable.zip"
+set "ARCHIVE=%~dp0dist\MailPilot-v12.9-portable.zip"
 set "APP_ICON=%~dp0assets\app_icon.ico"
 set "NSSM_SOURCE=%~dp0..\nssm"
 
-echo [1/5] Pripravuji build prostredi (%BUILD_VENV%)...
+echo [1/6] Pripravuji build prostredi (%BUILD_VENV%)...
 if not exist "%BUILD_PYTHON%" py -m venv "%BUILD_VENV%"
 if errorlevel 1 goto :error
 
