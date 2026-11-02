@@ -175,7 +175,7 @@ def _service_exists(service_name: str) -> bool:
             check=False,
             timeout=1.2,
         )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         return False
     output = f"{done.stdout}\n{done.stderr}".upper()
     if "FAILED 1060" in output:
@@ -192,7 +192,7 @@ def _service_running(service_name: str) -> bool:
             check=False,
             timeout=1.2,
         )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         return False
     text = f"{done.stdout}\n{done.stderr}".upper()
     return "RUNNING" in text and done.returncode == 0
@@ -207,7 +207,7 @@ def _service_account(service_name: str) -> str:
             check=False,
             timeout=1.2,
         )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         return ""
     if done.returncode != 0:
         return ""
