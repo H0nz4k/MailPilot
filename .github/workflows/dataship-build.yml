@@ -14,6 +14,10 @@ on:
       - '.github/workflows/dataship-build.yml'
   workflow_dispatch:
 
+concurrency:
+  group: dataship-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   python-tests:
     name: Python tests / Linux
