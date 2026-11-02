@@ -53,12 +53,12 @@ jobs:
         shell: bash
         run: |
           test -f dist/MailPilot/MailPilot.exe
-          test -f dist/MailPilot-v12.8-portable.zip
+          test -f dist/MailPilot-v12.9-portable.zip
           dist/MailPilot/MailPilot.exe --version
       - name: Upload portable build for manual validation
         uses: actions/upload-artifact@v4
         with:
           name: dataship-windows-portable-build
-          path: dist/MailPilot-v12.8-portable.zip
+          path: dist/MailPilot-v12.9-portable.zip
           if-no-files-found: error
           retention-days: 7
