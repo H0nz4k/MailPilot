@@ -1,0 +1,43 @@
+name: Publish DataShip v12.9
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'gui_qt/__init__.py'
+      - '.github/workflows/dataship-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.repository == 'H0nz4k/MailPilot'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build portable Windows version
+        shell: cmd
+        run: call build_windows.bat
+      - name: Check release archive and version
+        shell: bash
+        run: |
+          test -s dist/MailPilot-v12.9-portable.zip
+          test -f dist/MailPilot/MailPilot.exe
+          dist/MailPilot/MailPilot.exe --version | grep -F 'v12.9'
+      - name: Publish v12.9 GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if ! gh release view v12.9 >/dev/null 2>&1; then
+            gh release create v12.9 dist/MailPilot-v12.9-portable.zip \
+              --target "$GITHUB_SHA" \
+              --title "MailPilot / DataShip v12.9" \
+              --notes "BUILD quality update: accessible daily report actions, advanced option state feedback, scheduler status robustness and automated Windows build."
+          fi
