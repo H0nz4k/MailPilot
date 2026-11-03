@@ -116,7 +116,7 @@ def test_service_name_is_never_inferred_from_obed_prefix(monkeypatch):
         (2026, 10, "Oběd-A"): [month_row(d26="A")],
     })
     with calendar.cooking_day_lookup({"dbname": "jidelna"}, "Oběd") as check:
-        with pytest.raises(ValueError, match="vyberte skutečný typ služby"):
+        with pytest.raises(ValueError, match="neexistuje.*kalendář typu služby"):
             check(date(2026, 10, 26))
     assert cursor.calls == [(2026, 10, "Oběd")]
 

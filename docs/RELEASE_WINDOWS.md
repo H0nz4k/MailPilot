@@ -1,13 +1,13 @@
 # DataShip – Windows build a vydání
 
-Aktuální testovací verze: **1.0.0-rc.11**, sestavení **20261029.12**. Původní Qt MailPilot zůstává samostatnou aplikací.
+Aktuální verze: **1.2.0**, sestavení **20261103.1**. Původní Qt MailPilot zůstává samostatnou aplikací.
 
 ## Stažení a spuštění
 
 Soubory patří do [GitHub Releases](https://github.com/H0nz4k/MailPilot/releases), nikoli mezi zdrojové soubory repozitáře:
 
-- `DataShip-1.0.0-rc.11-Windows-x64.zip` – celé GUI, worker a potřebné knihovny.
-- `DataShip-1.0.0-rc.11-Windows-x64-NSSM.zip` – navíc NSSM pro službu Windows.
+- `DataShip-1.2.0-Windows-x64.zip` – celé GUI, worker a potřebné knihovny.
+- `DataShip-1.2.0-Windows-x64-NSSM.zip` – navíc NSSM pro službu Windows.
 - `SHA256SUMS.txt` – kontrolní součty ZIPů.
 
 Rozbalte celý ZIP do stálé zapisovatelné složky, například `C:\DataShip`, a spusťte přímo **DataShip.exe**. Otevře web v prohlížeči bez černého konzolového okna. VBS ani Windows Script Host nejsou potřeba. Samotné EXE bez složky `_internal` nefunguje.
@@ -21,16 +21,14 @@ Potřebujete Windows 10/11 x64, Git Bash a Python 3.12 x64 včetně launcheru `p
 ```bash
 (
   set -e
-  git switch feat/dataship-report-wizard
-  git pull --ff-only origin feat/dataship-report-wizard
   bash scripts/build_web_windows.sh
   ./.venv-web/Scripts/python.exe scripts/package_web_release.py
 )
 ```
 
-EXE jsou v `dist-web/DataShip/`, ZIPy v `release-dist/1.0.0-rc.11/`. Build ověřuje oba programy: windowed GUI pomocí výstupu `--version-file`, konzolový worker přes `--version`. Sestavuje do pracovní složky a původní instalaci ponechá v záloze `DataShip.backup-*`.
+EXE jsou v `dist-web/DataShip/`, ZIPy v `release-dist/1.2.0/`. Build ověřuje oba programy: windowed GUI pomocí výstupu `--version-file`, konzolový worker přes `--version`. Sestavuje do pracovní složky a původní instalaci ponechá v záloze `DataShip.backup-*`.
 
-Existující balíčky se nepřepisují. Při opakovaném balení použijte například `--output release-dist/rc11-build20261029.12`.
+Existující balíčky se nepřepisují. Při opakovaném balení použijte například `--output release-dist/1.2.0-build20261103.1`.
 
 Doplňková kontrola skutečných EXE s oddělenou dočasnou konfigurací a bez e-mailových úloh:
 
@@ -42,9 +40,7 @@ Volba `--service` navíc ověřuje dočasnou NSSM službu a vyžaduje Git Bash j
 
 ## GitHub Releases
 
-V [novém vydání](https://github.com/H0nz4k/MailPilot/releases/new) vytvořte tag `dataship-v1.0.0-rc.11` na skutečně sestaveném commitu větve `feat/dataship-report-wizard`. Název: **DataShip 1.0.0-rc.11**. Vložte `docs/releases/1.0.0-rc.11.md`, nahrajte oba ZIPy a kontrolní součty, označte **pre-release** a po kontrole publikujte. Existující vydání stejné verze zpětně nepřepisujte.
-
-Workflow **Build DataShip Web (Windows)** lze také ručně spustit v Actions pro tuto větev. Po úspěšném sestavení a testu EXE uloží ZIPy jako artefakt na 30 dní a připraví **koncept rc.11** s přílohami na přesném sestaveném commitu. Veřejné vydání se samo nepublikuje. Existující release ani odlišný tag se nepřepisují. Push změn této pracovní větve sám tento Windows build nespouští.
+Vydání `dataship-v1.2.0` obsahuje ZIP s NSSM a kontrolní součty. Před aktualizací postupujte podle části Aktualizace a diagnostika níže.
 
 ## První nastavení a služba
 

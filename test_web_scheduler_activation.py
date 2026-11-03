@@ -91,6 +91,7 @@ async def test_wizard_saves_before_start_and_warns_without_losing_task(tmp_path)
             await user.open('/')
             with user:
                 page = pages[0]
+                page.wizard_name.value = 'Test sestava'
                 page._apply_daily_categories(['1'])
                 page.wizard_recipients.input.value = 'dummy@example.org'
                 page._wizard_save()
@@ -112,6 +113,7 @@ async def test_wizard_saves_before_start_and_warns_without_losing_task(tmp_path)
             assert len(load_tasks(task_file(tmp_path))) == 1
             with user:
                 page._wizard_new()
+                page.wizard_name.value = 'Druhá sestava'
                 page.wizard_enabled.value = False
                 page.wizard_recipients.input.value = 'disabled@example.org'
                 page._wizard_save()

@@ -124,3 +124,17 @@ def test_repair_rebinds_both_executables_without_recreating_or_starting_service(
     assert any(c[3] == 'AppParameters' and str(config) in c[4] for c in changes[1:])
     assert not any(c[1] in ('start', 'stop', 'restart', 'install', 'remove') for c in commands)
     assert not any('ObjectName' in c or 'Start' in c for c in changes)
+
+
+def test_startup_notice_distinguishes_missing_service_and_unknown_status(tmp_path):
+    values = {**settings.DEFAULTS, 'nssm_path': str(tmp_path / 'missing.exe'), 'service_name': 'DataShipScheduler'}
+    with patch.object(nssm, 'os', SimpleNamespace(name='nt', environ={})), \
+         patch.object(nssm, 'load_settings', return_value=values), \
+         patch.object(nssm, 'windows_admin_state', return_value=False), \
+         patch.object(nssm.subprocess, 'run', return_value=SimpleNamespace(returncode=1060)):
+        message = nssm.scheduler_installation_notice(tmp_path)
+        assert 'není nainstalovaný' in message and 'NSSM' in message and 'správce' in message
+    with patch.object(nssm, 'os', SimpleNamespace(name='nt', environ={})), \
+         patch.object(nssm, 'load_settings', return_value=values), \
+         patch.object(nssm.subprocess, 'run', return_value=SimpleNamespace(returncode=5)):
+        assert 'nepodařilo ověřit' in nssm.scheduler_installation_notice(tmp_path)

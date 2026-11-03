@@ -37,6 +37,9 @@ async def test_four_steps_save_snapshot_and_new_plan_starts_today(tmp_path):
                 page = pages[0]
                 assert page.date_input.value == date.today().strftime("%d.%m.%Y")
                 assert [c.visible for c in page._wizard_cards] == [True, False, False, False]
+                page._wizard_next_step()
+                assert page._wizard_step == 1 and "název" in page.wizard_error.text.lower()
+                page.wizard_name.value = "Počty pro hosty"
                 page._apply_daily_categories(["2"])
                 page.meal_type_select.set_options({"oběd-a": "Oběd-A", "večeře": "Večeře"}, value=["oběd-a", "večeře"])
                 page._wizard_next_step()
@@ -75,6 +78,7 @@ async def test_four_steps_save_snapshot_and_new_plan_starts_today(tmp_path):
                 assert len(load_tasks(task_file(tmp_path))) == 1
                 page._wizard_new()
                 assert page._wizard_step == 1
+                assert page.wizard_name.value == ""
                 assert page.date_input.value == date.today().strftime("%d.%m.%Y")
             send.assert_not_called()
 
@@ -96,6 +100,7 @@ async def test_wizard_validates_email_and_resolves_unsaved_cooking_filters(tmp_p
             await user.open("/")
             with user:
                 page = pages[0]
+                page.wizard_name.value = "Večeře"
                 page.meal_type_select.set_options({"večeře": "Večeře"}, value=["večeře"])
                 page.wizard_mode.value = "next_cooking_day"
                 page._wizard_show_step(3)

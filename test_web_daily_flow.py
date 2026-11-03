@@ -78,13 +78,14 @@ async def test_schedule_handoff_keeps_exact_report_without_intermediate_save(tmp
             await user.open('/')
             with user:
                 page = pages[0]
+                page.wizard_name.value = 'Nová večeře'
                 page.date_input.value = '31.12.2026'
             user.find(marker='wizard-next').click()
             user.find(marker='wizard-next').click()
             with user:
                 assert page._wizard_step == 3
                 assert page.wizard_mode.value == 'today'
-                assert page.wizard_name.value == dinner.name
+                assert page.wizard_name.value == 'Nová večeře'
                 assert page._selected_daily_meal_type() == 'večeře'
                 assert page.selected_categories == {'3'}
                 page._wizard_show_step(1)
@@ -105,18 +106,15 @@ async def test_wizard_invalid_name_stays_open_and_single_final_save(tmp_path):
             with user:
                 page = pages[0]
                 page._apply_daily_categories(['1', '2'])
+            user.find(marker='wizard-next').click()
+            assert page._wizard_step == 1 and page.wizard_error.text
+            with user:
+                page.wizard_name.value = 'Škola'
             for _ in range(3):
                 user.find(marker='wizard-next').click()
             assert not profile_file(tmp_path).exists()
             with user:
-                page.wizard_name.value = ''
                 page.wizard_recipients.input.value = 'test@example.org'
-            user.find(marker='wizard-next').click()
-            assert page._wizard_step == 4
-            assert page.wizard_error.text
-            assert not task_file(tmp_path).exists()
-            with user:
-                page.wizard_name.value = 'Škola'
             user.find(marker='wizard-next').click()
             stored = load_profiles(profile_file(tmp_path))
             assert len(stored) == 1

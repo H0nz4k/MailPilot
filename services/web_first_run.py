@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from typing import Any
-from nicegui import ui
+from nicegui import run, ui
+from services.web_mail_nssm import scheduler_installation_notice
 
 
 def database_error_message(error: Exception) -> str:
@@ -46,6 +47,12 @@ class FirstRunMixin:
         if self._startup_checked:
             return
         self._startup_checked = True
+        try:
+            notice = await run.io_bound(scheduler_installation_notice, self.config_path.parent)
+        except (OSError, ValueError):
+            notice = "Stav plánovače se nepodařilo ověřit. Zkontrolujte službu v nastavení."
+        if notice:
+            ui.notify(notice, type="warning", timeout=0, close_button="Zavřít", multi_line=True)
         if self.connection_ok:
             return
         if self._admin_password_is_set() and self._stored_password():

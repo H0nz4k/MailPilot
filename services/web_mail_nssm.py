@@ -158,6 +158,32 @@ def ensure_scheduler_running(config_directory: Path) -> ServiceReadiness:
             return ServiceReadiness(False, f'Automatické spuštění úlohy zatím není zajištěné. {exc}')
 
 
+def scheduler_installation_notice(config_directory: Path) -> str:
+    """Read service registration without starting or modifying the scheduler."""
+    if os.name != 'nt':
+        return ''
+    settings = load_settings(settings_path(config_directory))
+    name = str(settings.get('service_name', '')).strip()
+    if not name or not all(c.isascii() and (c.isalnum() or c in '_-') for c in name):
+        return 'Stav plánovače nelze ověřit. Zkontrolujte název služby v nastavení.'
+    sc = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' / 'sc.exe'
+    try:
+        result = subprocess.run([str(sc), 'query', name], capture_output=True, timeout=10,
+                                stdin=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return 'Stav plánovače se nepodařilo ověřit. Zkontrolujte službu v nastavení.'
+    if result.returncode == 0:
+        return ''
+    if result.returncode != 1060:
+        return 'Stav plánovače se nepodařilo ověřit. Zkontrolujte službu v nastavení.'
+    message = 'Plánovač úloh DataShip není nainstalovaný. Nainstalujte jej v Nastavení → Služba a odesílání.'
+    if not Path(settings.get('nssm_path') or '').is_file():
+        message += ' Chybí také NSSM; rozbalte kompletní balíček s NSSM.'
+    if windows_admin_state() is False:
+        message += ' ' + ADMIN_HELP
+    return message
+
+
 def service_command(config_directory: Path, action: str) -> str:
     if action not in ('install', 'repair', 'start', 'stop', 'restart', 'status', 'remove'):
         raise ValueError('Neznámá operace služby.')

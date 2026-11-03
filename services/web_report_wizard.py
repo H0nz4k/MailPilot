@@ -75,7 +75,6 @@ class ReportWizardMixin:
             field.on_value_change(lambda _e: self._wizard_queue_preview())
 
     def _build_wizard_email(self):
-        self.wizard_name = ui.input("Název úlohy", value="Nový přehled").props("outlined maxlength=80").classes("w-full")
         self.wizard_output = TaskOutputEditor(self.config_path.parent)
         self.wizard_recipients = self.wizard_output.recipients
         self.wizard_time = ui.input("Každý den odeslat v", value="08:00").props("outlined type=time").classes("w-full")
@@ -153,6 +152,9 @@ class ReportWizardMixin:
 
     def _wizard_validate(self, number):
         if number == 1:
+            name = str(self.wizard_name.value or "").strip()
+            if not name or len(name) > 80:
+                raise ValueError("Zadejte název sestavy (1–80 znaků).")
             self._selected_date()
             self._manual_daily_categories()
         if number == 2:
@@ -255,10 +257,15 @@ class ReportWizardMixin:
         task = replace(task, first_send_date=upcoming.date().isoformat() if upcoming else None)
         path = task_file(self.config_path.parent)
         tasks = load_tasks(path)
+        if any(t.id == task.id for t in tasks):
+            raise ValueError("Tato sestava již byla uložena. Vytvořte další sestavu.")
+        from services.web_daily_profiles import load_profiles
+        if any(p.id == profile.id for p in load_profiles(self.daily_profiles_path)):
+            raise ValueError("Identifikátor sestavy již existuje. Vytvořte další sestavu.")
         self.wizard_next.disable()
         try:
             profiles = save_profile(self.daily_profiles_path, profile)
-            save_tasks(path, [t for t in tasks if t.id != task.id] + [task])
+            save_tasks(path, tasks + [task])
         finally:
             self.wizard_next.enable()
         self.daily_profiles = profiles
@@ -288,7 +295,7 @@ class ReportWizardMixin:
         self.new_daily_profile()
         self.date_input.value = date.today().strftime("%d.%m.%Y")
         self.date_picker.value = date.today().isoformat()
-        self.wizard_name.value = "Nový přehled"
+        self.wizard_name.value = ""
         self.wizard_mode.value = "today"
         self.wizard_calendar_mode.value = "report"
         self.wizard_calendars.value = []

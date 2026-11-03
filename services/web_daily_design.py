@@ -35,6 +35,7 @@ class DailyDesignMixin(ReportWizardMixin):
             self._build_wizard_header()
             with w.card().classes("w-full") as selection:
                 ui.label("Co zobrazit").classes("app-heading")
+                self.wizard_name = ui.input("Název sestavy", placeholder="Například Počty pro kuchyni").props("outlined maxlength=80").classes("w-full").mark("wizard-report-name")
                 self._build_date_field()
                 self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
                 self.date_input.props["label"] = "Datum náhledu"
@@ -330,7 +331,6 @@ class DailyDesignMixin(ReportWizardMixin):
             ):
                 value = getattr(profile, key)
                 field.value = value if value is not None else self.raw.get(raw_key, default)
-            self.wizard_name.value = profile.name
             self._render_daily_selection()
             self._daily_dirty = False
         finally:

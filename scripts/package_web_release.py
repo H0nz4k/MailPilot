@@ -25,12 +25,13 @@ NSSM_SHA256 = '99f5045fffbffb745d67fe3a065a953c4a3d9c253b868892d9b685b0ee7d07b8'
 # NSSM payload is reused; no older GUI, worker or configuration is extracted.
 NSSM_FALLBACK_ASSET = 'repos/H0nz4k/MailPilot/releases/assets/666037948'
 NSSM_FALLBACK_SHA256 = '6cc4eb73e25a8a43d28fbd865918136459db586a48bb52eb1ca50d49d02feaa9'
+NSSM_RC8_SHA256 = '0c36e63cea5b8f9f6f96d497c4fc324909a76ab927c7683fafb45d71e1a8243a'
 REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'START_WEB.cmd', 'START_WORKER_MANUAL.cmd')
 
 
 def verified_nssm(archive: Path) -> bytes:
     data = archive.read_bytes()
-    if hashlib.sha256(data).hexdigest() not in (NSSM_SHA256, NSSM_FALLBACK_SHA256):
+    if hashlib.sha256(data).hexdigest() not in (NSSM_SHA256, NSSM_FALLBACK_SHA256, NSSM_RC8_SHA256):
         raise ValueError('NSSM archive checksum does not match the pinned upstream build.')
     return data
 
@@ -96,7 +97,8 @@ def make_zip(stage: Path, output: Path) -> None:
 
 def install_nssm(archive: Path, app: Path) -> None:
     data = verified_nssm(archive)
-    fallback = hashlib.sha256(data).hexdigest() == NSSM_FALLBACK_SHA256
+    digest = hashlib.sha256(data).hexdigest()
+    fallback = digest in (NSSM_FALLBACK_SHA256, NSSM_RC8_SHA256)
     nssm = app / 'nssm'
     (nssm / 'win64').mkdir(parents=True, exist_ok=True)
     with ZipFile(archive) as z:
@@ -108,7 +110,9 @@ def install_nssm(archive: Path, app: Path) -> None:
             (nssm / target).write_bytes(z.read(source))
     provenance = f'NSSM {NSSM_VERSION} (win64)\nPublic domain\n{NSSM_URL}\nSHA256: {NSSM_SHA256}\n'
     if fallback:
-        provenance += f'Fallback: https://api.github.com/{NSSM_FALLBACK_ASSET}\nBundle SHA256: {NSSM_FALLBACK_SHA256}\n'
+        source = (f'https://api.github.com/{NSSM_FALLBACK_ASSET}' if digest == NSSM_FALLBACK_SHA256
+                  else 'https://github.com/H0nz4k/MailPilot/releases/tag/dataship-v1.0.0-rc.8')
+        provenance += f'Fallback: {source}\nBundle SHA256: {digest}\n'
     (nssm / 'SOURCE.txt').write_text(provenance, encoding='utf-8')
 
 
