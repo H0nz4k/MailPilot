@@ -9,7 +9,7 @@ from nicegui import run, ui
 
 import ui_widgets as w
 from services.web_daily_profiles import DailyProfile, load_profiles, profile_file, save_profile
-from stravovaci_sestava import AppConfig, fetch_report
+from stravovaci_sestava import AppConfig, fetch_report, available_delivery_types
 
 
 from services.web_report_wizard import ReportWizardMixin
@@ -40,10 +40,18 @@ class DailyDesignMixin(ReportWizardMixin):
                 self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
                 self.date_input.props["label"] = "Datum náhledu"
                 ui.label("Výchozí je dnešek. Toto datum slouží pro náhled; pravidelné odesílání nastavíte ve třetím kroku.").classes("ui-help")
-                self.meal_type_select = ui.select({}, value=[], multiple=True, label="Typy stravy").classes("hidden")
-                self.meal_types_button = ui.button("Typy stravy: všechny", icon="checklist", on_click=self._open_meal_types_dialog).props("outline no-caps").classes("w-full")
-                self.meal_type_select.on_value_change(lambda _e: self._meal_types_changed())
-                self._build_category_panel()
+                with ui.element("div").classes("ds-report-filters w-full"):
+                    self.meal_type_select = ui.select({}, value=[], multiple=True, label="Typy stravy").classes("hidden")
+                    self.meal_types_button = ui.button("Typy stravy: všechny", icon="checklist", on_click=self._open_meal_types_dialog).props("outline no-caps").classes("ds-report-filter")
+                    self.meal_type_select.on_value_change(lambda _e: self._meal_types_changed())
+                    self._build_category_panel()
+                    saved_delivery = self.raw.get("typy_vydeje") or []
+                    if not isinstance(saved_delivery, list):
+                        saved_delivery = []
+                    self.delivery_type_select = ui.select({value: value for value in saved_delivery}, value=saved_delivery, multiple=True, label="Typy výdeje").classes("hidden")
+                    caption = f"Typy výdeje ({len(saved_delivery)})" if saved_delivery else "Typy výdeje: všechny"
+                    self.delivery_types_button = ui.button(caption, icon="local_shipping", on_click=self._open_delivery_types_dialog).props("outline no-caps").classes("ds-report-filter")
+                    self.delivery_type_select.on_value_change(lambda _e: self._delivery_types_changed())
                 with ui.expansion("Uložené přehledy (volitelné)", icon="folder_open").classes("w-full"):
                     self.daily_profile_choices = ui.row().classes("ds-profile-choices w-full")
                     self.daily_profile_status = ui.label("").classes("ui-help ds-preview-state").props('role="status" aria-live="polite"')
@@ -94,6 +102,49 @@ class DailyDesignMixin(ReportWizardMixin):
             self._load_daily_profile(self.daily_profiles[0])
         else:
             self._update_daily_preview_state()
+
+    def _delivery_types_changed(self):
+        values = self.delivery_type_select.value or []
+        self.delivery_types_button.set_text(f"Typy výdeje ({len(values)})" if values else "Typy výdeje: všechny")
+        self._daily_filters_changed()
+
+    async def _open_delivery_types_dialog(self):
+        if not self.connection_ok or not self._connection_password:
+            ui.notify("Nejprve proveďte TEST připojení k databázi.", type="warning")
+            return
+        try:
+            database = dict(self._collect_database(), password=self._connection_password)
+            values = await run.io_bound(available_delivery_types, database)
+        except Exception as exc:
+            ui.notify(f"Typy výdeje se nepodařilo načíst: {exc}", type="negative")
+            return
+        selected = set(self.delivery_type_select.value or [])
+        choices_available = sorted(set(values) | selected, key=str.casefold)
+        with ui.dialog() as dialog, ui.card().classes("ds-mail-dialog"):
+            ui.label("Typy výdeje v přehledu").classes("ds-dialog-title")
+            ui.label("Vyberte jeden nebo více typů výdeje. Výběr platí pro celý přehled.").classes("ui-help")
+            all_types = ui.checkbox("Všechny typy výdeje", value=not selected)
+            choices = {}
+            with ui.column().classes("w-full max-h-[50vh] overflow-y-auto"):
+                for value in choices_available:
+                    label = value if value in values else f"{value} (nenalezeno v databázi)"
+                    choices[value] = ui.checkbox(label, value=value in selected)
+            all_types.on_value_change(lambda event: [box.set_value(False) for box in choices.values()] if event.value else None)
+            for box in choices.values():
+                box.on_value_change(lambda event: all_types.set_value(False) if event.value else None)
+            error = ui.label("").classes("text-negative").props('role="alert"')
+            def apply():
+                chosen = [key for key, box in choices.items() if box.value]
+                if not all_types.value and not chosen:
+                    error.set_text("Vyberte alespoň jeden typ nebo všechny typy výdeje.")
+                    return
+                self.delivery_type_select.value = [] if all_types.value else chosen
+                self._delivery_types_changed()
+                dialog.close()
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Zrušit", on_click=dialog.close).props("flat no-caps")
+                ui.button("Použít výběr", on_click=apply).props("no-caps unelevated")
+        dialog.open()
 
     def _update_meal_types_button(self) -> None:
         values = meal_filter_values(self._selected_daily_meal_type())
@@ -250,6 +301,7 @@ class DailyDesignMixin(ReportWizardMixin):
             "id": self.daily_profile_id or str(uuid4()), "name": self.daily_profile_name.value,
             "categories": self._selected_category_order(),
             "meal_type": self._selected_daily_meal_type(),
+            "delivery_types": list(self.delivery_type_select.value or []),
             "category_separation": bool(self.category_separation.value),
             "show_by_categories": bool(self.show_categories.value),
             "show_by_norms": bool(self.show_norms.value),
@@ -286,6 +338,7 @@ class DailyDesignMixin(ReportWizardMixin):
         self.daily_profile_name.value = "Nový přehled"
         self.selected_categories = set(self.allowed_categories)
         self.meal_type_select.value = []
+        self.delivery_type_select.value = []
         self._render_daily_selection()
         self._mark_daily_dirty()
         self._render_daily_profile_choices()
@@ -318,6 +371,9 @@ class DailyDesignMixin(ReportWizardMixin):
             self.meal_type_select.options = {**self.meal_type_select.options, **{v: v for v in meals}}
             self.meal_type_select.value = meals
             self._update_meal_types_button()
+            self.delivery_type_select.options = {**self.delivery_type_select.options, **{value: value for value in profile.delivery_types}}
+            self.delivery_type_select.value = list(profile.delivery_types)
+            self._delivery_types_changed()
             for field, value in ((self.category_separation, profile.category_separation),
                                  (self.show_categories, profile.show_by_categories),
                                  (self.show_norms, profile.show_by_norms),
@@ -376,7 +432,7 @@ class DailyDesignMixin(ReportWizardMixin):
             self.daily_summary_meta.set_text(f"{day:%d.%m.%Y} · {meal_filter_caption(meal_type)}")
             self.daily_summary_status.set_text("Načítám počty porcí…")
             config = AppConfig(database=database, report_date=day, categories=categories,
-                meal_type=meal_type, language=str(self.language_input.value or "česky"),
+                meal_type=meal_type, delivery_types=tuple(self.delivery_type_select.value or []), language=str(self.language_input.value or "česky"),
                 menu_list_number=int(self.menu_number.value or 1), show_diner_list=False)
             report = await run.io_bound(self._fetch_daily_summary, config)
         except Exception as exc:

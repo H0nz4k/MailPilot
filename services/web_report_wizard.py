@@ -146,7 +146,10 @@ class ReportWizardMixin:
             meals = meal_filter_caption(self._selected_daily_meal_type())
             count = len(self._selected_category_order())
             content = "součty a jména" if self.show_diner_list.value else "jen součty"
-            self.wizard_selection_caption.set_text(f"Náhled {day:%d.%m.%Y} · {meals} · kategorií: {count} · {content}")
+            deliveries = getattr(self, "delivery_type_select", None)
+            chosen = deliveries.value if deliveries else []
+            delivery_label = f"typů výdeje: {len(chosen)}" if chosen else "všechny typy výdeje"
+            self.wizard_selection_caption.set_text(f"Náhled {day:%d.%m.%Y} · {meals} · {delivery_label} · kategorií: {count} · {content}")
         except ValueError:
             self.wizard_selection_caption.set_text("Zkontrolujte datum náhledu.")
 

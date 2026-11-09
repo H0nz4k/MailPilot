@@ -380,4 +380,10 @@ body, .dataship-ui, .q-dialog, .q-menu {
   .ds-palette-editor .q-field { min-width: 0; }
 }
 
+/* Three equal filters remain readable on narrow screens. */
+.ds-report-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ds-report-filters .ds-report-filter { width: 100%; min-width: 0; min-height: 52px; padding: 8px 12px; border-radius: 10px; }
+.ds-report-filters .ds-report-filter .q-btn__content { white-space: normal; text-align: center; line-height: 1.3; }
+@media (max-width: 700px) { .ds-report-filters { grid-template-columns: 1fr; gap: 8px; } }
+
 """

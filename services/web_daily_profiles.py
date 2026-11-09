@@ -17,6 +17,7 @@ class DailyProfile:
     name: str
     categories: tuple[str, ...]
     meal_type: str | tuple[str, ...] | None = None
+    delivery_types: tuple[str, ...] = ()
     category_separation: bool = True
     show_by_categories: bool = True
     show_by_norms: bool = True
@@ -45,6 +46,8 @@ class DailyProfile:
             raise ValueError("Kódy kategorií musí být neprázdné texty.")
         categories = tuple(dict.fromkeys(c.strip() for c in values))
         meal = normalize_meal_filter(raw.get("meal_type"))
+        from stravovaci_sestava import normalize_delivery_filter
+        delivery_types = normalize_delivery_filter(raw.get("delivery_types"))
         flags = {}
         for key in ("category_separation", "show_by_categories", "show_by_norms", "show_diner_list"):
             flags[key] = raw.get(key, True)
@@ -75,11 +78,12 @@ class DailyProfile:
         if number is not None:
             pdf["menu_list_number"] = int(number)
         return cls(str(raw.get("id") or uuid4()), name, categories,
-                   meal, **flags, **pdf)
+                   meal, delivery_types, **flags, **pdf)
 
     def to_dict(self) -> dict:
         raw = asdict(self)
         raw["categories"] = list(self.categories)
+        raw["delivery_types"] = list(self.delivery_types)
         if isinstance(self.meal_type, tuple):
             raw["meal_type"] = list(self.meal_type)
         return raw
@@ -141,7 +145,7 @@ def apply_profile(config, profile: DailyProfile, raw: dict):
         "pdf_orientation", "pdf_data_font_size", "pdf_label_font_size",
         "pdf_bold", "language", "menu_list_number",
     ) if getattr(profile, key) is not None}
-    return replace(config, categories=categories, meal_type=profile.meal_type,
+    return replace(config, categories=categories, meal_type=profile.meal_type, delivery_types=profile.delivery_types,
                    category_separation=profile.category_separation,
                    show_by_categories=profile.show_by_categories,
                    show_by_norms=profile.show_by_norms,

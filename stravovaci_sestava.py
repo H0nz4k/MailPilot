@@ -257,6 +257,7 @@ class AppConfig:
     pdf_bold: bool = False
     meal_type: str | tuple[str, ...] | None = None  # None = všechny
     show_diner_list: bool = True
+    delivery_types: tuple[str, ...] = ()
     show_delivery_summary: bool = False
     delivery_show_names: bool = False
 
@@ -603,6 +604,7 @@ def load_config(
         pdf_bold=pdf_bold,
         meal_type=meal_type,
         show_diner_list=show_diner_list,
+        delivery_types=normalize_delivery_filter(raw.get("typy_vydeje")),
         show_delivery_summary=delivery_summary,
         delivery_show_names=delivery_names,
     )
@@ -661,6 +663,41 @@ def _include_bulk_orders(
                            key=lambda r: (r.meal_type, r.norm or "", r.menu))),
         diners=tuple(diners),
     )
+
+
+def normalize_delivery_filter(value):
+    if value is None or value == [] or value == ():
+        return ()
+    if not isinstance(value, (list, tuple)) or any(not isinstance(x, str) or not x.strip() for x in value):
+        raise ConfigError("Výběr typů výdeje musí obsahovat platné názvy.")
+    return tuple(dict.fromkeys(x.strip() for x in value))
+
+
+def filter_delivery_orders(report, diners, bulk_rows, rate_rows, selection):
+    selected = {x.strip().casefold() for x in normalize_delivery_filter(selection)}
+    mapping = {}
+    for category, meal, delivery, _known in rate_rows:
+        if delivery:
+            mapping.setdefault((category, meal), set()).add(delivery.strip())
+    def allowed(code, meal):
+        values = mapping.get((code, meal.strip().lower()), set())
+        if len({value.casefold() for value in values}) > 1:
+            raise ConfigError(f"Kategorie {code}, {meal}: více typů výdeje v platných sazbách; opravte sazby.")
+        return bool(values and next(iter(values)).casefold() in selected)
+    kept = tuple(row for row in diners if allowed(row.category_code, row.meal_type))
+    bulk = [row for row in bulk_rows if allowed(row[1], row[3])]
+    menus, norms = {}, {}
+    categories = {row.code: replace(row, applications=0) for row in report.categories}
+    for row in kept:
+        key = (row.meal_type.strip().casefold(), row.menu)
+        previous = menus.get(key)
+        menus[key] = MenuSummary(row.meal_type, row.menu, 1, row.meal_name) if previous is None else replace(previous, portions=previous.portions + 1, meal_name=previous.meal_name or row.meal_name)
+        key_norm = (row.meal_type.strip().casefold(), row.norm, row.menu)
+        previous_norm = norms.get(key_norm)
+        norms[key_norm] = NormMenuSummary(row.meal_type, row.norm, row.menu, 1) if previous_norm is None else replace(previous_norm, portions=previous_norm.portions + 1)
+        categories[row.category_code] = replace(categories[row.category_code], applications=categories[row.category_code].applications + 1)
+    filtered = replace(report, menus=tuple(menus.values()), norms=tuple(norms.values()), categories=tuple(categories.values()), diners=kept)
+    return filtered, kept, bulk
 
 
 def build_delivery_rows(diners, bulk_rows, rate_rows):
@@ -814,7 +851,7 @@ def fetch_report(config: AppConfig) -> ReportData:
 
             # Summary-only PDF does not need to query/hold diners' names.
             diners: tuple[DinerOrder, ...] = ()
-            if config.show_diner_list or config.show_delivery_summary:
+            if config.show_diner_list or config.show_delivery_summary or config.delivery_types:
                 cursor.execute(
                     diner_query,
                     (
@@ -859,7 +896,7 @@ def fetch_report(config: AppConfig) -> ReportData:
                 ),
             )
             bulk_rows = cursor.fetchall()
-            if config.show_delivery_summary:
+            if config.show_delivery_summary or config.delivery_types:
                 cursor.execute("""
                     SELECT DISTINCT BTRIM(s.kategorie), LOWER(BTRIM(s.typstravy)),
                            NULLIF(BTRIM(s.typvydej), ''),
@@ -870,12 +907,24 @@ def fetch_report(config: AppConfig) -> ReportData:
                       AND (s.platnostod IS NULL OR s.platnostod <= %s)
                       AND (s.platnostdo IS NULL OR s.platnostdo >= %s)
                 """, (list(active_categories), config.report_date, config.report_date))
-                report = replace(report, delivery_rows=build_delivery_rows(diners, bulk_rows, cursor.fetchall()))
+                rate_rows = cursor.fetchall()
+                if config.delivery_types:
+                    report, diners, bulk_rows = filter_delivery_orders(report, diners, bulk_rows, rate_rows, config.delivery_types)
+                if config.show_delivery_summary:
+                    report = replace(report, delivery_rows=build_delivery_rows(diners, bulk_rows, rate_rows))
                 if not config.show_diner_list:
                     report = replace(report, diners=())
             return _include_bulk_orders(
                 report, bulk_rows, show_diner_list=config.show_diner_list,
             )
+
+
+def available_delivery_types(database):
+    import psycopg
+    with psycopg.connect(**database) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT BTRIM(typvydeje) FROM public.typvydej WHERE NULLIF(BTRIM(typvydeje), '') IS NOT NULL ORDER BY 1")
+            return tuple(row[0] for row in cursor.fetchall())
 
 
 def available_meal_types(database: dict[str, Any], report_date: date) -> tuple[str, ...]:
@@ -1376,6 +1425,9 @@ def create_pdf(
         Paragraph(escape(subject), title_style),
         Paragraph(document_title, subtitle_style),
     ]
+
+    if config.delivery_types:
+        story.append(Paragraph("Typy výdeje: " + escape(", ".join(config.delivery_types)), body_style))
 
     info_data = [
         [

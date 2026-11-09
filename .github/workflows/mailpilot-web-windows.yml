@@ -1,7 +1,7 @@
 name: Build DataShip Web (Windows)
 on:
   push:
-    branches: [feat/web-mail-scheduler, feat/dataship-design-integration, feat/dataship-vydej-menu]
+    branches: [feat/web-mail-scheduler, feat/dataship-design-integration, feat/dataship-vydej-menu, feat/dataship-filtr-vydeje]
     tags: ['dataship-v*']
   workflow_dispatch:
 permissions:
@@ -49,12 +49,12 @@ jobs:
           path: release-dist/**/*
           if-no-files-found: error
           retention-days: 30
-      - name: Publish DataShip 1.2.1 test release
-        if: github.ref == 'refs/heads/feat/dataship-vydej-menu'
+      - name: Publish DataShip 1.2.2 test release
+        if: github.ref == 'refs/heads/feat/dataship-filtr-vydeje'
         run: |
           set -Eeuo pipefail
           version="$(tr -d '\r\n' < VERSION)"
-          [[ "$version" == "1.2.1-rc.1" ]] || exit 0
+          [[ "$version" == "1.2.2-rc.1" ]] || exit 0
           tag="dataship-v$version"
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo 'Tag and VERSION disagree; refusing to prepare the release.' >&2

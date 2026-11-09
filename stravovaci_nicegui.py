@@ -857,13 +857,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
 
     def _build_category_panel(self) -> None:
         """Uživatel vybírá podmnožinu kategorií povolených správcem."""
-        with ui.row().classes("items-center gap-2 flex-wrap"):
-            w.field_label("Kategorie")
-            self.daily_category_button = ui.button(
-                self._daily_category_caption(),
-                icon="checklist",
-                on_click=self.open_daily_category_dialog,
-            ).props("outline no-caps").classes("ds-secondary-action")
+        self.daily_category_button = ui.button(
+            self._daily_category_caption(),
+            icon="checklist",
+            on_click=self.open_daily_category_dialog,
+        ).props("outline no-caps").classes("ds-report-filter")
 
     def _build_category_settings_panel(self) -> None:
         """Filtrovat kategorie smí pouze správce. Defaultně jsou všechny."""
@@ -2413,6 +2411,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "kategor_separ": bool(self.category_separation.value),
                 "dle_kategorii": bool(self.show_categories.value),
                 "dle_norem": bool(self.show_norms.value),
+                "typy_vydeje": list(self.delivery_type_select.value or []),
                 "vydej_souhrn": bool(self.show_delivery_summary.value),
                 "vydej_nazvy": bool(self.delivery_show_names.value),
                 "datum": selected_date.strftime("%d.%m.%Y"),
