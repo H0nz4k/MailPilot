@@ -34,7 +34,7 @@ jobs:
         run: bash scripts/test_windows.sh
       - name: Required checks for DataShip 1.2.4
         run: |
-          .venv-test/Scripts/python.exe -m pytest -q test_web_recipient_editor.py test_web_branding.py test_web_password_separation.py test_vydej_menu.py test_web_pdf_export_tasks.py test_web_daily_profiles.py test_daily_bulk_counts.py test_stravovaci_sestava.py test_web_saved_report_cli.py test_web_daily_flow.py test_web_report_wizard.py test_web_custom_palette.py test_web_release.py
+          .venv-test/Scripts/python.exe -m pytest -q test_web_report_output.py test_web_multi_meals.py test_web_recipient_editor.py test_web_branding.py test_web_password_separation.py test_vydej_menu.py test_web_pdf_export_tasks.py test_web_daily_profiles.py test_daily_bulk_counts.py test_stravovaci_sestava.py test_web_saved_report_cli.py test_web_daily_flow.py test_web_report_wizard.py test_web_custom_palette.py test_web_release.py
 
       - name: Build Windows EXEs (isolated web environment)
         run: bash scripts/build_web_windows.sh

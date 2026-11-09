@@ -24,6 +24,12 @@ class ManualReportFilenameTest(unittest.TestCase):
         self.assertEqual(first.parent, self.base.parent)
         self.assertTrue(first.name.endswith(".pdf"))
 
+    def test_many_categories_keep_filename_short(self):
+        allowed = tuple(f"kategorie-{i:03}" for i in range(60))
+        path = manual_pdf_path(self.base, allowed[:53], allowed, ("Oběd A", "Oběd B"))
+        self.assertLessEqual(len(path.name), 46)
+        self.assertIn("kat-53", path.name)
+
     def test_order_does_not_change_same_selection_path(self):
         self.assertEqual(
             manual_pdf_path(self.base, ("Z2", "Z1"), self.allowed),

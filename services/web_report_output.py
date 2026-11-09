@@ -41,14 +41,11 @@ def manual_pdf_path(
         return Path(configured_path)
 
     ordered = sorted(selected, key=lambda code: (code.casefold(), code))
-    readable = "-".join(_slug(code) for code in ordered)
-    readable = readable[:48].rstrip("-")
-    # The hash also distinguishes codes that normalize to the same ASCII.
+    # A short fingerprint distinguishes category and meal selections without
+    # placing every category name into the filename.
     signature = "\\0".join(ordered) + "\\0" + (meal_type or "")
-    digest = sha256(signature.encode("utf-8")).hexdigest()[:8]
-    suffix = f"kat-{len(ordered)}-{readable}-{digest}"
-    if meal_type:
-        suffix += f"_typ-{_slug(meal_type)[:24]}"
+    digest = sha256(signature.encode("utf-8")).hexdigest()[:12]
+    suffix = f"kat-{len(ordered)}_{digest}"
     path = Path(configured_path)
     return path.with_name(f"{path.stem}_{suffix}{path.suffix}")
 
