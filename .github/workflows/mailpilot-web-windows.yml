@@ -32,7 +32,7 @@ jobs:
         id: full_regression
         continue-on-error: true
         run: bash scripts/test_windows.sh
-      - name: Required checks for DataShip 1.2.4
+      - name: Required checks for DataShip 1.2.5
         run: |
           .venv-test/Scripts/python.exe -m pytest -q test_web_report_output.py test_web_multi_meals.py test_web_recipient_editor.py test_web_branding.py test_web_password_separation.py test_vydej_menu.py test_web_pdf_export_tasks.py test_web_daily_profiles.py test_daily_bulk_counts.py test_stravovaci_sestava.py test_web_saved_report_cli.py test_web_daily_flow.py test_web_report_wizard.py test_web_custom_palette.py test_web_release.py
 
@@ -49,12 +49,12 @@ jobs:
           path: release-dist/**/*
           if-no-files-found: error
           retention-days: 30
-      - name: Publish DataShip 1.2.4 test release
+      - name: Publish DataShip 1.2.5 test release
         if: github.ref == 'refs/heads/feat/dataship-ponytail'
         run: |
           set -Eeuo pipefail
           version="$(tr -d '\r\n' < VERSION)"
-          [[ "$version" == "1.2.4-rc.1" ]] || exit 0
+          [[ "$version" == "1.2.5-rc.1" ]] || exit 0
           tag="dataship-v$version"
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo 'Tag and VERSION disagree; refusing to prepare the release.' >&2

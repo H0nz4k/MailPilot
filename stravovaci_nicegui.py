@@ -1632,6 +1632,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "Názvy pokrmů u typu výdeje", bool(self.raw.get("vydej_nazvy", False)),
                 "Přidá název pokrmu z jídelníčku.",
             )
+            self.delivery_page_per_type = w.setting_switch(
+                "Každý typ výdeje na samostatnou stránku", bool(self.raw.get("vydej_samostatne_stranky", False)),
+                "Každý typ výdeje začne na nové stránce; delší seznam může pokračovat dále.",
+            )
             self.show_diner_list = w.setting_switch(
                 "Seznam strávníků",
                 bool(self.raw.get("seznam_stravniku", True)),
@@ -2414,6 +2418,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "typy_vydeje": list(self.delivery_type_select.value or []),
                 "vydej_souhrn": bool(self.show_delivery_summary.value),
                 "vydej_nazvy": bool(self.delivery_show_names.value),
+                "vydej_samostatne_stranky": bool(self.delivery_page_per_type.value),
                 "datum": selected_date.strftime("%d.%m.%Y"),
                 "jazyk_jidelnicku": language,
                 "cislo_jidelnicku": menu_number,

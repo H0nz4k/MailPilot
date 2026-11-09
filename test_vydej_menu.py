@@ -71,3 +71,65 @@ def test_saved_filter_is_applied_to_planned_configuration():
     config = AppConfig(database={}, report_date=date(2026, 11, 9), categories=('1',), language='česky', menu_list_number=1)
     result = apply_profile(config, profile, {'poctyemailem': {'vsechny_kategorie': True}})
     assert result.delivery_types == ('Rozvoz A',)
+
+
+def test_pdf_summary_precedes_delivery_and_stays_together(tmp_path):
+    from pypdf import PdfReader
+    from stravovaci_sestava import AppConfig, CategorySummary, NormMenuSummary, ReportData, create_pdf
+    config = AppConfig(database={}, report_date=date(2026, 11, 9), categories=('1',),
+                       language='česky', menu_list_number=1, show_diner_list=False,
+                       show_delivery_summary=True, pdf_output=tmp_path / 'souhrn.pdf')
+    report = ReportData(menus=(), categories=(CategorySummary('1', 'Děti', 'A', 3),),
+                        norms=(NormMenuSummary('Oběd', 'A', 1, 3),), diners=(),
+                        subject_name='Test', delivery_rows=(('Rozvoz', '1', 'Děti', 1, 3, None, 'Oběd'),))
+    pages = [page.extract_text() for page in PdfReader(create_pdf(config, report)).pages]
+    category = next(i for i, text in enumerate(pages) if 'Přihlášky podle kategorií' in text)
+    norms = next(i for i, text in enumerate(pages) if 'Objednaná menu podle norem' in text)
+    delivery = next(i for i, text in enumerate(pages) if 'Typ výdeje: Rozvoz' in text)
+    assert category == norms <= delivery
+    if category == delivery:
+        assert pages[category].index('Objednaná menu podle norem') < pages[delivery].index('Typ výdeje: Rozvoz')
+
+
+def test_pdf_delivery_types_never_share_a_page_when_selected(tmp_path):
+    from pypdf import PdfReader
+    from stravovaci_sestava import AppConfig, ReportData, create_pdf
+    config = AppConfig(database={}, report_date=date(2026, 11, 9), categories=('1',),
+                       language='česky', menu_list_number=1, show_diner_list=False,
+                       show_by_categories=False, show_by_norms=False, show_delivery_summary=True,
+                       delivery_page_per_type=True, pdf_output=tmp_path / 'vydeje.pdf')
+    first = [('Rozvoz A', 'A', 'ALFA', 1, 1, None, 'Oběd') for _ in range(75)]
+    second = [('Rozvoz B', 'B', 'BETA', 1, 1, None, 'Oběd')]
+    report = ReportData(menus=(), categories=(), norms=(), diners=(), subject_name='Test',
+                        delivery_rows=tuple(first + second))
+    pages = [page.extract_text() for page in PdfReader(create_pdf(config, report)).pages]
+    assert sum('ALFA' in page for page in pages) > 1
+    assert any('BETA' in page for page in pages)
+    assert all(not ('ALFA' in page and 'BETA' in page) for page in pages)
+
+
+def test_delivery_page_option_roundtrips_into_scheduled_report():
+    from stravovaci_sestava import AppConfig
+    profile = DailyProfile.from_dict({'name': 'Rozvoz', 'categories': ['1'], 'delivery_page_per_type': True})
+    assert DailyProfile.from_dict(profile.to_dict()).delivery_page_per_type
+    config = AppConfig(database={}, report_date=date(2026, 11, 9), categories=('1',),
+                       language='česky', menu_list_number=1)
+    assert apply_profile(config, profile, {'poctyemailem': {'vsechny_kategorie': True}}).delivery_page_per_type
+    assert not DailyProfile.from_dict({'name': 'Starý', 'categories': ['1']}).delivery_page_per_type
+
+
+def test_large_summary_can_continue_across_pages(tmp_path):
+    from pypdf import PdfReader
+    from stravovaci_sestava import AppConfig, CategorySummary, NormMenuSummary, ReportData, create_pdf
+    config = AppConfig(database={}, report_date=date(2026, 11, 9), categories=('1',),
+                       language='česky', menu_list_number=1, show_diner_list=False,
+                       show_delivery_summary=True, pdf_output=tmp_path / 'velky.pdf')
+    categories = tuple(CategorySummary(str(i), f'Kategorie {i}', 'A', 1) for i in range(80))
+    report = ReportData(menus=(), categories=categories,
+                        norms=(NormMenuSummary('Oběd', 'A', 1, 80),), diners=(),
+                        subject_name='Test', delivery_rows=(('Rozvoz', '1', 'Děti', 1, 1, None, 'Oběd'),))
+    pages = [page.extract_text() for page in PdfReader(create_pdf(config, report)).pages]
+    assert len(pages) > 1
+    assert all(page.strip() for page in pages)
+    assert 'Objednaná menu podle norem' in ''.join(pages)
+    assert ''.join(pages).index('Objednaná menu podle norem') < ''.join(pages).index('Typ výdeje: Rozvoz')
