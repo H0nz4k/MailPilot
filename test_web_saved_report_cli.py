@@ -18,7 +18,7 @@ import stravovaci_nicegui as web
 def setup(tmp_path):
     config = tmp_path / 'config.json'
     shutil.copyfile(Path(__file__).with_name('config.example.json'), config)
-    raw = json.loads(config.read_text())
+    raw = json.loads(config.read_text(encoding='utf-8'))
     raw.update(poctyemailem={'vsechny_kategorie': False, 'povolene_kategorie': ['1', '2']}, povolene_kategorie=['1', '2'])
     config.write_text(json.dumps(raw), encoding='utf-8')
     profile = DailyProfile.from_dict({
@@ -107,9 +107,9 @@ def test_failed_export_preserves_previous_pdf_and_cleans_temporary_file(tmp_path
 
 def test_current_admin_permissions_cannot_be_bypassed_by_saved_profile(tmp_path):
     config, profile = setup(tmp_path)
-    raw = json.loads(config.read_text())
+    raw = json.loads(config.read_text(encoding='utf-8'))
     raw['poctyemailem']['povolene_kategorie'] = ['1']
-    config.write_text(json.dumps(raw))
+    config.write_text(json.dumps(raw), encoding='utf-8')
     with patch('stravovaci_sestava.get_password', return_value='dummy-db'), patch.object(export, 'fetch_report') as fetch:
         with pytest.raises(ValueError, match='povolena správcem'):
             export.export_saved_report(config, name=profile.name)
@@ -171,4 +171,4 @@ def test_exe_entry_returns_error_and_logs_it_without_opening_gui(tmp_path, monke
          patch.object(web, 'NiceGuiApp') as gui:
         assert web.main(['--export-report', 'not found']) == 2
     gui.assert_not_called()
-    assert 'nebyl nalezen' in (tmp_path / 'logy/automaticky_export.log').read_text()
+    assert 'nebyl nalezen' in (tmp_path / 'logy/automaticky_export.log').read_text(encoding='utf-8')
