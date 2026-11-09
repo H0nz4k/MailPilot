@@ -70,7 +70,7 @@ def test_build_checks_windowed_gui_file_and_console_worker(tmp_path, gui_version
         if Path(command[0]).name == 'DataShip.exe':
             assert command[1] == '--version-file'
             if not missing:
-                Path(command[2]).write_text(f'MailShip rc.10 build {gui_version}\n')
+                Path(command[2]).write_text(f'DataShip rc.10 build {gui_version}\n')
             return SimpleNamespace(returncode=0)
         assert command[1] == '--version'
         return SimpleNamespace(stdout=f'DataShip Worker rc.10 build {worker_version}\r\n')

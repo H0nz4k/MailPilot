@@ -136,7 +136,7 @@ def main():
                         raise RuntimeError('Frozen GUI exited; see frozen-smoke.log')
                     try:
                         with urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=3) as r:
-                            if r.status == 200 and b'MailShip' in r.read():
+                            if r.status == 200 and b'DataShip' in r.read():
                                 break
                     except (OSError, TimeoutError):
                         pass

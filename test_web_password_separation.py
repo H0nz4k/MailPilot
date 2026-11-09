@@ -66,3 +66,15 @@ async def test_database_password_does_not_unlock_admin_or_get_overwritten_by_log
                 assert page.admin_password_input.value == ''
             write_admin.assert_not_called()
             write_database.assert_not_called()
+
+
+def test_legacy_admin_password_remains_available_after_rename(tmp_path):
+    old_path = tmp_path / 'MailShip' / 'admin.dpapi'
+    old_path.parent.mkdir()
+    old_path.write_text('old-token', encoding='ascii')
+    new_path = tmp_path / 'DataShip' / 'admin.dpapi'
+    with patch.object(vault, '_is_windows', return_value=True), \
+         patch.object(vault, '_user_admin_path', return_value=new_path), \
+         patch.object(vault, '_dpapi_decrypt_machine', return_value='heslo') as decrypt:
+        assert vault._read_user_admin_password() == 'heslo'
+        decrypt.assert_called_once_with('old-token', flags=0)

@@ -201,7 +201,7 @@ def _build_error_block(message: str, when_text: str) -> str:
         <span style="color:#ff3030; font-weight:normal;">{message}</span>
     </p>
     <p style="margin:0; padding:0;">
-        <span style="color:#ff3030; font-weight:normal;">Zkontrolujte MailShip.</span>
+        <span style="color:#ff3030; font-weight:normal;">Zkontrolujte DataShip.</span>
     </p>
     <p style="margin:0; padding:0;">
         <span style="color:#ff3030; font-weight:normal;">{when_text}</span>

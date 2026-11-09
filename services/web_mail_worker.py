@@ -176,7 +176,7 @@ def tick(config_path: Path, now: datetime | None = None) -> None:
                     template_path=Path(web_settings["dashboard_path"]),
                 )
                 warning_error = show_jidelnasql_mail_warning(
-                    settings, message=f"MailShip: úloha {task.name} selhala. {summary}"
+                    settings, message=f"DataShip: úloha {task.name} selhala. {summary}"
                 )
                 if warning_error:
                     LOG.error("Dashboard warning: %s", warning_error)

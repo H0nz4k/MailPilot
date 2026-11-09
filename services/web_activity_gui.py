@@ -4,7 +4,7 @@ from services.web_activity import read_events
 
 
 def build_activity_panel(directory, require_admin, before_lock):
-    ui.label('Logy MailShip').classes('ds-page-title')
+    ui.label('Logy DataShip').classes('ds-page-title')
     ui.label('Posledních 200 akcí workeru. Historie se ukládá od aktualizace workeru; starší technický log zůstává ve složce logy.').classes('ui-help')
     content = ui.column().classes('w-full')
 

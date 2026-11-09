@@ -281,7 +281,7 @@ def set_password(database: dict[str, Any], password: str) -> None:
 
 def _user_admin_path() -> Path:
     root = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
-    return root / "MailShip" / "admin.dpapi"
+    return root / "DataShip" / "admin.dpapi"
 
 
 def _read_user_admin_password() -> str | None:
@@ -291,7 +291,12 @@ def _read_user_admin_password() -> str | None:
     try:
         token = path.read_text(encoding="ascii")
     except FileNotFoundError:
-        return None
+        # Keep administrator access for existing MailShip installations.
+        legacy_path = path.parent.parent / "MailShip" / path.name
+        try:
+            token = legacy_path.read_text(encoding="ascii")
+        except FileNotFoundError:
+            return None
     password = _dpapi_decrypt_machine(token, flags=0)
     if not password:
         raise CredentialStoreError("Heslo nastavení nelze odemknout v tomto účtu Windows.")
