@@ -20,3 +20,5 @@ daily_reports.json
 .venv-test/
 release-dist/
 core
+
+recipient_history.json

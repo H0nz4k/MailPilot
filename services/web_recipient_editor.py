@@ -3,22 +3,27 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from pathlib import Path
 
 from nicegui import ui
 
 from mail_service import normalize_recipients
+from services.web_recipient_history import load_recipient_history, save_recipient_history
 
 
 class RecipientEditor:
-    def __init__(self, addresses: Sequence[str] = ()) -> None:
+    def __init__(self, addresses: Sequence[str] = (), *, directory: Path | None = None) -> None:
         self.addresses = list(addresses)
+        self.directory = directory
+        self.history = load_recipient_history(directory) if directory is not None else []
         with ui.column().classes("ds-recipient-editor w-full gap-2"):
             ui.label("Komu posílat?").classes("app-label")
             self.chips = ui.row().classes("ds-recipient-chips w-full gap-2").props('role="list" aria-label="Přidaní příjemci"')
             with ui.row().classes("ds-recipient-entry w-full items-start gap-2 no-wrap"):
-                self.input = ui.input(placeholder="např. vedouci@jidelna.cz").props('outlined dense type=email aria-label="E-mail příjemce"').classes("flex-grow min-w-0")
+                self.input = ui.input(placeholder="např. vedouci@jidelna.cz", autocomplete=self.history).props('outlined dense type=email aria-label="E-mail příjemce"').classes("flex-grow min-w-0")
                 self.input.on("keydown.enter", self.commit_pending)
                 ui.button("Přidat", icon="add", on_click=self.commit_pending).props("outline no-caps")
+            ui.label("Dříve použité adresy se nabídnou při psaní. Nabídku doplníte klávesou Tab.").classes("ui-help")
             self.status = ui.label("").classes("ui-help").props('role="status" aria-live="polite"')
         self.render()
 
@@ -37,10 +42,20 @@ class RecipientEditor:
         existing = {a.casefold() for a in self.addresses}
         added = [a for a in addresses if a.casefold() not in existing]
         self.addresses.extend(added)
+        history_keys = {address.casefold() for address in self.history}
+        new_history = [address for address in addresses if address.casefold() not in history_keys]
+        self.history = (new_history + self.history)[:200]
+        history_error = False
+        if new_history and self.directory is not None:
+            try:
+                save_recipient_history(self.directory, self.history)
+            except OSError:
+                history_error = True
+        self.input.props['_autocomplete'] = self.history
         self.input.value = ""
         self.input.props(remove="error error-message")
         self.input.update()
-        self.status.set_text("Příjemce přidán." if added else "Tento příjemce už je přidaný.")
+        self.status.set_text("Příjemce přidán, ale historii adres se nepodařilo uložit." if history_error else ("Příjemce přidán." if added else "Tento příjemce už je přidaný."))
         self.render()
         return True
 

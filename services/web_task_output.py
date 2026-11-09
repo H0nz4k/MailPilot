@@ -13,7 +13,7 @@ class TaskOutputEditor:
             "Pouze exportovat a uložit PDF", value=bool(task and task.output_mode == "pdf"),
         ).classes("ds-output-choice").mark("task-pdf-only")
         with ui.column().classes("w-full gap-3") as self.mail_fields:
-            self.recipients = RecipientEditor(task.recipients if task else ())
+            self.recipients = RecipientEditor(task.recipients if task else (), directory=Path(directory))
         with ui.column().classes("w-full gap-3 ds-output-fields") as self.pdf_fields:
             with ui.row().classes("w-full ds-output-path items-center no-wrap"):
                 self.directory = ui.input(
