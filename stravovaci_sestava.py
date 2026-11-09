@@ -673,12 +673,22 @@ def normalize_delivery_filter(value):
     return tuple(dict.fromkeys(x.strip() for x in value))
 
 
+def _delivery_rate_labels(rate_rows, *, for_filter=False):
+    mappings = {}
+    for category, meal, delivery, known in rate_rows:
+        if for_filter:
+            if not delivery:
+                continue
+            label = delivery.strip()
+        else:
+            label = delivery if delivery and known else (f"{delivery} [není v typech výdeje]" if delivery else "[bez typu výdeje]")
+        mappings.setdefault((category, meal), set()).add(label)
+    return mappings
+
+
 def filter_delivery_orders(report, diners, bulk_rows, rate_rows, selection):
     selected = {x.strip().casefold() for x in normalize_delivery_filter(selection)}
-    mapping = {}
-    for category, meal, delivery, _known in rate_rows:
-        if delivery:
-            mapping.setdefault((category, meal), set()).add(delivery.strip())
+    mapping = _delivery_rate_labels(rate_rows, for_filter=True)
     def allowed(code, meal):
         values = mapping.get((code, meal.strip().lower()), set())
         if len({value.casefold() for value in values}) > 1:
@@ -701,10 +711,7 @@ def filter_delivery_orders(report, diners, bulk_rows, rate_rows, selection):
 
 
 def build_delivery_rows(diners, bulk_rows, rate_rows):
-    mappings = {}
-    for category, meal, delivery, known in rate_rows:
-        label = delivery if delivery and known else (f"{delivery} [není v typech výdeje]" if delivery else "[bez typu výdeje]")
-        mappings.setdefault((category, meal), set()).add(label)
+    mappings = _delivery_rate_labels(rate_rows)
     totals = {}
     orders = [(r.category_code, r.category_name, r.meal_type, r.menu, r.meal_name, 1) for r in diners]
     for _name, code, category_name, meal, variant, _norm, meal_name, portions in bulk_rows:
