@@ -1626,6 +1626,14 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 bool(self.raw.get("dle_norem", True)),
                 "Zobrazí rozpad Menu 1–9 podle norem A–D.",
             )
+            self.show_delivery_summary = w.setting_switch(
+                "Počty podle typu výdeje", bool(self.raw.get("vydej_souhrn", False)),
+                "Kategorie, menu a počty pro každý typ výdeje.",
+            )
+            self.delivery_show_names = w.setting_switch(
+                "Názvy pokrmů u typu výdeje", bool(self.raw.get("vydej_nazvy", False)),
+                "Přidá název pokrmu z jídelníčku.",
+            )
             self.show_diner_list = w.setting_switch(
                 "Seznam strávníků",
                 bool(self.raw.get("seznam_stravniku", True)),
@@ -2405,6 +2413,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "kategor_separ": bool(self.category_separation.value),
                 "dle_kategorii": bool(self.show_categories.value),
                 "dle_norem": bool(self.show_norms.value),
+                "vydej_souhrn": bool(self.show_delivery_summary.value),
+                "vydej_nazvy": bool(self.delivery_show_names.value),
                 "datum": selected_date.strftime("%d.%m.%Y"),
                 "jazyk_jidelnicku": language,
                 "cislo_jidelnicku": menu_number,

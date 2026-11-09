@@ -21,6 +21,8 @@ class DailyProfile:
     show_by_categories: bool = True
     show_by_norms: bool = True
     show_diner_list: bool = True
+    show_delivery_summary: bool = False
+    delivery_show_names: bool = False
     # None preserves the global setting for reports saved by older versions.
     pdf_orientation: str | None = None
     pdf_data_font_size: float | None = None
@@ -46,6 +48,10 @@ class DailyProfile:
         flags = {}
         for key in ("category_separation", "show_by_categories", "show_by_norms", "show_diner_list"):
             flags[key] = raw.get(key, True)
+            if not isinstance(flags[key], bool):
+                raise ValueError(f"{key} musí být true nebo false.")
+        for key in ("show_delivery_summary", "delivery_show_names"):
+            flags[key] = raw.get(key, False)
             if not isinstance(flags[key], bool):
                 raise ValueError(f"{key} musí být true nebo false.")
         pdf = {key: raw.get(key) for key in (
@@ -139,7 +145,9 @@ def apply_profile(config, profile: DailyProfile, raw: dict):
                    category_separation=profile.category_separation,
                    show_by_categories=profile.show_by_categories,
                    show_by_norms=profile.show_by_norms,
-                   show_diner_list=profile.show_diner_list, **pdf)
+                   show_diner_list=profile.show_diner_list,
+                   show_delivery_summary=profile.show_delivery_summary,
+                   delivery_show_names=profile.delivery_show_names, **pdf)
 
 
 def task_report_config(config, raw: dict, task, directory: Path):

@@ -161,7 +161,7 @@ class DailyDesignMixin(ReportWizardMixin):
             ui.label("Nastavení PDF").classes("ds-dialog-title")
             with ui.column().classes("ds-dialog-body w-full"):
                 self._build_pdf_settings_section()
-                for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list,
+                for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list, self.show_delivery_summary, self.delivery_show_names,
                               self.pdf_orientation, self.pdf_data_size, self.pdf_label_size, self.pdf_bold,
                               self.language_input, self.menu_number):
                     field.on_value_change(lambda _e: self._mark_daily_dirty())
@@ -254,6 +254,8 @@ class DailyDesignMixin(ReportWizardMixin):
             "show_by_categories": bool(self.show_categories.value),
             "show_by_norms": bool(self.show_norms.value),
             "show_diner_list": bool(self.show_diner_list.value),
+            "show_delivery_summary": bool(self.show_delivery_summary.value),
+            "delivery_show_names": bool(self.delivery_show_names.value),
             "pdf_orientation": self.pdf_orientation.value,
             "pdf_data_font_size": self.pdf_data_size.value,
             "pdf_label_font_size": self.pdf_label_size.value,
@@ -319,7 +321,9 @@ class DailyDesignMixin(ReportWizardMixin):
             for field, value in ((self.category_separation, profile.category_separation),
                                  (self.show_categories, profile.show_by_categories),
                                  (self.show_norms, profile.show_by_norms),
-                                 (self.show_diner_list, profile.show_diner_list)):
+                                 (self.show_diner_list, profile.show_diner_list),
+                                 (self.show_delivery_summary, profile.show_delivery_summary),
+                                 (self.delivery_show_names, profile.delivery_show_names)):
                 field.value = value
             for field, key, raw_key, default in (
                 (self.pdf_orientation, "pdf_orientation", "pdf_orientace", "na_vysku"),

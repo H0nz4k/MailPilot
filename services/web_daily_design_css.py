@@ -367,4 +367,17 @@ body, .dataship-ui, .q-dialog, .q-menu {
     .ds-output-path > .q-field { flex-basis: 100%; }
 }
 
+
+/* Theme selection and editor: compact, readable and keyboard-friendly. */
+.ds-palette-editor { border-radius: 10px; gap: 16px; }
+.ds-palette-preview { border-width: 1px; padding: 12px; }
+.ds-palette-sample { border-radius: 8px; }
+.dataship-ui .app-nav .q-tab:focus-visible,
+.dataship-ui .q-btn:focus-visible { outline: 3px solid var(--app-primary); outline-offset: 2px; }
+.dataship-ui .app-nav .q-tab--active { font-weight: 700; }
+@media (max-width: 600px) {
+  .ds-palette-editor { padding: 12px; }
+  .ds-palette-editor .q-field { min-width: 0; }
+}
+
 """

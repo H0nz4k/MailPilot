@@ -257,6 +257,8 @@ class AppConfig:
     pdf_bold: bool = False
     meal_type: str | tuple[str, ...] | None = None  # None = všechny
     show_diner_list: bool = True
+    show_delivery_summary: bool = False
+    delivery_show_names: bool = False
 
 
 @dataclass(frozen=True)
@@ -307,6 +309,7 @@ class ReportData:
     diners: tuple[DinerOrder, ...]
     subject_name: str | None
     active_categories: tuple[str, ...] = ()
+    delivery_rows: tuple[tuple[str, str, str, int, int, str | None, str], ...] = ()
 
 
 def existing_categories(
@@ -579,6 +582,11 @@ def load_config(
     if pdf_output.suffix.lower() != ".pdf":
         raise ConfigError("Výstupní soubor 'pdf_vystup' musí mít příponu .pdf.")
 
+    delivery_summary = raw.get("vydej_souhrn", False)
+    delivery_names = raw.get("vydej_nazvy", False)
+    if not isinstance(delivery_summary, bool) or not isinstance(delivery_names, bool):
+        raise ConfigError("Volby typu výdeje musí být true nebo false.")
+
     return AppConfig(
         database=db_config,
         report_date=report_date,
@@ -595,6 +603,8 @@ def load_config(
         pdf_bold=pdf_bold,
         meal_type=meal_type,
         show_diner_list=show_diner_list,
+        show_delivery_summary=delivery_summary,
+        delivery_show_names=delivery_names,
     )
 
 
@@ -650,6 +660,30 @@ def _include_bulk_orders(
         norms=tuple(sorted(norm_totals.values(),
                            key=lambda r: (r.meal_type, r.norm or "", r.menu))),
         diners=tuple(diners),
+    )
+
+
+def build_delivery_rows(diners, bulk_rows, rate_rows):
+    mappings = {}
+    for category, meal, delivery, known in rate_rows:
+        label = delivery if delivery and known else (f"{delivery} [není v typech výdeje]" if delivery else "[bez typu výdeje]")
+        mappings.setdefault((category, meal), set()).add(label)
+    totals = {}
+    orders = [(r.category_code, r.category_name, r.meal_type, r.menu, r.meal_name, 1) for r in diners]
+    for _name, code, category_name, meal, variant, _norm, meal_name, portions in bulk_rows:
+        if str(variant or '').strip() not in '123456789' or len(str(variant or '').strip()) != 1:
+            raise ConfigError("Hromadná přihláška nemá platné menu 1–9.")
+        orders.append((code, category_name, meal, int(variant), meal_name, int(portions)))
+    for code, category_name, meal, menu, meal_name, portions in orders:
+        labels = mappings.get((code, meal.strip().lower()), {"[bez platné sazby]"})
+        if len(labels) > 1:
+            raise ConfigError(f"Kategorie {code}, {meal}: více typů výdeje v platných sazbách; opravte sazby.")
+        label = next(iter(labels))
+        key = (label, code, category_name or code, meal, menu, meal_name)
+        totals[key] = totals.get(key, 0) + portions
+    return tuple(
+        (label, code, name, menu, count, meal_name, meal)
+        for (label, code, name, meal, menu, meal_name), count in sorted(totals.items(), key=lambda pair: tuple(str(v or '') for v in pair[0]))
     )
 
 
@@ -780,7 +814,7 @@ def fetch_report(config: AppConfig) -> ReportData:
 
             # Summary-only PDF does not need to query/hold diners' names.
             diners: tuple[DinerOrder, ...] = ()
-            if config.show_diner_list:
+            if config.show_diner_list or config.show_delivery_summary:
                 cursor.execute(
                     diner_query,
                     (
@@ -824,8 +858,23 @@ def fetch_report(config: AppConfig) -> ReportData:
                     list(active_categories), meal_parameter, meal_parameter,
                 ),
             )
+            bulk_rows = cursor.fetchall()
+            if config.show_delivery_summary:
+                cursor.execute("""
+                    SELECT DISTINCT BTRIM(s.kategorie), LOWER(BTRIM(s.typstravy)),
+                           NULLIF(BTRIM(s.typvydej), ''),
+                           EXISTS (SELECT 1 FROM public.typvydej t
+                                   WHERE BTRIM(t.typvydeje) = BTRIM(s.typvydej))
+                    FROM public.sazby s
+                    WHERE BTRIM(s.kategorie) = ANY(%s::varchar[])
+                      AND (s.platnostod IS NULL OR s.platnostod <= %s)
+                      AND (s.platnostdo IS NULL OR s.platnostdo >= %s)
+                """, (list(active_categories), config.report_date, config.report_date))
+                report = replace(report, delivery_rows=build_delivery_rows(diners, bulk_rows, cursor.fetchall()))
+                if not config.show_diner_list:
+                    report = replace(report, diners=())
             return _include_bulk_orders(
-                report, cursor.fetchall(), show_diner_list=config.show_diner_list,
+                report, bulk_rows, show_diner_list=config.show_diner_list,
             )
 
 
@@ -1387,6 +1436,22 @@ def create_pdf(
         )
     else:
         story.append(Paragraph("Nenalezeny žádné objednávky.", body_style))
+
+    if config.show_delivery_summary and report.delivery_rows:
+        for delivery in dict.fromkeys(row[0] for row in report.delivery_rows):
+            items = [row for row in report.delivery_rows if row[0] == delivery]
+            story.append(Paragraph("Typ výdeje: " + escape(delivery), section_style))
+            rows = [(code + " – " + name, meal, f"Menu {menu}", count, dish or "[název nenalezen]")
+                    for _, code, name, menu, count, dish, meal in items]
+            rows.append(("Celkem", "", "", sum(item[4] for item in items), ""))
+            if config.delivery_show_names:
+                columns = ("Kategorie", "Typ stravy", "Menu", "Počet", "Název pokrmu")
+                widths = (usable_width * .24, usable_width * .15, usable_width * .11, usable_width * .1, usable_width * .4)
+            else:
+                columns = ("Kategorie", "Typ stravy", "Menu", "Počet")
+                widths = (usable_width * .45, usable_width * .25, usable_width * .15, usable_width * .15)
+                rows = [row[:4] for row in rows]
+            story.append(make_table(columns, rows, widths, centered_columns={2, 3}, total_row=True))
 
     if config.show_by_categories and report.categories:
         story.append(Paragraph("Přihlášky podle kategorií", section_style))
