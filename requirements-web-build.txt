@@ -2,6 +2,7 @@
 psycopg[binary]>=3.2,<4
 reportlab>=4.2,<5
 pypdf>=5.0,<7
+pypdfium2>=4.30,<6
 keyring>=25.0,<27
 resend==2.1.0
 python-dotenv>=1.2,<2

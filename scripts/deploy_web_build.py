@@ -11,7 +11,7 @@ import sys
 from uuid import uuid4
 
 SETTINGS = (
-    'config.json', 'daily_reports.json', 'web_mail_settings.json',
+    'config.json', 'daily_reports.json', 'pdf_templates.json', 'web_mail_settings.json',
     'web_mail_tasks.json', 'web_mail_worker_state.json', '.env', 'planovac.json',
 )
 PACKAGED = {

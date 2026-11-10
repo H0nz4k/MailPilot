@@ -16,6 +16,7 @@ from xml.sax.saxutils import escape
 from credential_store import CredentialStoreError, get_password
 from services.web_meal_types import normalize_meal_filter
 from services.collection_status import normalize_collection_status, COLLECTION_TITLES
+from services.pdf_layout import normalize_layout, normalize_page_breaks, layout_story, ellipsize
 from runtime_paths import application_directory, bundled_path
 
 
@@ -263,6 +264,9 @@ class AppConfig:
     delivery_show_names: bool = False
     delivery_page_per_type: bool = False
     collection_status: str | None = None
+    pdf_compact_rows: bool = False
+    pdf_layout: tuple[tuple[str, ...], ...] = ()
+    pdf_page_breaks: tuple[str, ...] = ("diners",)
 
 
 @dataclass(frozen=True)
@@ -494,8 +498,13 @@ def load_config(
         raise ConfigError("'seznam_stravniku' musí být true nebo false.")
     try:
         collection_status = normalize_collection_status(raw.get("odber_stravy"))
+        pdf_layout = normalize_layout(raw.get("pdf_rozlozeni"))
+        pdf_page_breaks = normalize_page_breaks(raw.get("pdf_nove_stranky"))
     except ValueError as exc:
         raise ConfigError(str(exc)) from exc
+    pdf_compact_rows = raw.get("pdf_zkracovat_jidla", False)
+    if not isinstance(pdf_compact_rows, bool):
+        raise ConfigError("Volba zkracování názvů jídel musí být true nebo false.")
 
     language = raw.get("jazyk_jidelnicku", "česky")
     if not isinstance(language, str) or not language.strip():
@@ -620,6 +629,9 @@ def load_config(
         delivery_show_names=delivery_names,
         delivery_page_per_type=delivery_pages,
         collection_status=collection_status,
+        pdf_compact_rows=pdf_compact_rows,
+        pdf_layout=pdf_layout,
+        pdf_page_breaks=pdf_page_breaks,
     )
 
 
@@ -1212,6 +1224,7 @@ def create_pdf(
             CondPageBreak,
             LongTable,
             KeepTogether,
+            KeepInFrame,
             PageBreak,
             Paragraph,
             SimpleDocTemplate,
@@ -1345,16 +1358,29 @@ def create_pdf(
         centered_columns: set[int] | None = None,
         total_row: bool = False,
         repeat_header: bool = True,
+        compact_columns: set[int] | None = None,
     ) -> Table:
+        if config.pdf_layout and sum(widths) < usable_width * .8:
+            for header, column_width in zip(headers, widths):
+                if any(pdfmetrics.stringWidth(char, label_font, label_size) > column_width - 4.4 * mm for char in header):
+                    raise ConfigError("Blok je pro zvolené písmo příliš úzký. Umístěte jej na samostatný řádek nebo zmenšete písmo PDF.")
         centered_columns = centered_columns or set()
         data: list[list[object]] = [
             [para(header, header_cell_style) for header in headers]
         ]
+        compact = config.pdf_compact_rows and bool(compact_columns)
         for row in rows:
             rendered_row = []
             for index, value in enumerate(row):
                 style = cell_center_style if index in centered_columns else cell_style
-                rendered_row.append(para(value, style))
+                if compact:
+                    available = widths[index] - 4.4 * mm
+                    if index in compact_columns:
+                        value = ellipsize(value, available, data_font, data_size)
+                    cell = para(" ".join(str(value).split()), style)
+                    rendered_row.append(KeepInFrame(available, cell_style.leading, [cell], mode="shrink", hAlign="CENTER" if index in centered_columns else "LEFT"))
+                else:
+                    rendered_row.append(para(value, style))
             data.append(rendered_row)
 
         style_commands: list[tuple[Any, ...]] = [
@@ -1388,6 +1414,7 @@ def create_pdf(
             repeatRows=1 if repeat_header else 0,
             hAlign="LEFT",
             splitByRow=1,
+            rowHeights=[None, *([cell_style.leading + 2.6 * mm] * len(rows))] if compact else None,
             style=TableStyle(style_commands),
         )
 
@@ -1512,250 +1539,284 @@ def create_pdf(
 
     if config.collection_status is not None:
         from services.collection_report import collection_pdf_story
-        story.extend(collection_pdf_story(
-            config, report, table=make_table,
-            body_style=body_style, section_style=section_style, width=usable_width,
-        ))
+        def collection_section(width):
+            return collection_pdf_story(config, report, table=make_table,
+                                        body_style=body_style, section_style=section_style, width=width)
+        if config.pdf_layout:
+            story.extend(layout_story(config.pdf_layout, config.pdf_page_breaks, {"collection": collection_section}, usable_width))
+        else:
+            story.extend(collection_section(usable_width))
         return save_document()
 
-    story.append(Paragraph("Jídelníček a počty porcí", section_style))
-    if report.menus:
-        menu_rows: list[tuple[object, ...]] = [
-            (
-                item.meal_type,
-                f"Menu {item.menu}",
-                item.portions,
-                item.meal_name or "[název v jídelníčku nenalezen]",
-            )
-            for item in report.menus
-        ]
-        menu_rows.append(("Celkem", "", total_portions, ""))
-        story.append(
-            make_table(
-                ("Typ stravy", "Přihláška", "Počet", "Název jídla"),
-                menu_rows,
-                (36 * mm, 24 * mm, 20 * mm, usable_width - 80 * mm),
-                centered_columns={1, 2},
-                total_row=True,
-            )
-        )
-    else:
-        story.append(Paragraph("Nenalezeny žádné objednávky.", body_style))
-
-    summary_story: list[Any] = []
-    if config.show_by_categories and report.categories:
-        summary_story.append(Paragraph("Přihlášky podle kategorií", section_style))
-        category_rows: list[tuple[object, ...]] = [
-            (
-                item.code,
-                item.name or "[bez názvu]",
-                item.norm or "[bez normy]",
-                item.applications,
-            )
-            for item in report.categories
-        ]
-        category_rows.append(
-            (
-                "",
-                "Celkem",
-                "",
-                sum(item.applications for item in report.categories),
-            )
-        )
-        summary_story.append(
-            make_table(
-                ("Označení", "Název kategorie", "Norma", "Přihlášek"),
-                category_rows,
+    def menus_section(usable_width):
+        story = []
+        story.append(Paragraph("Jídelníček a počty porcí", section_style))
+        if report.menus:
+            menu_rows: list[tuple[object, ...]] = [
                 (
-                    usable_width * 0.16,
-                    usable_width * 0.55,
-                    usable_width * 0.13,
-                    usable_width * 0.16,
-                ),
-                centered_columns={0, 2, 3},
-                total_row=True,
-            )
-        )
-
-    if config.show_by_norms and report.norms:
-        summary_story.append(Paragraph("Objednaná menu podle norem", section_style))
-        norm_meal_types = sorted(
-            {row.meal_type for row in report.norms}, key=str.casefold
-        )
-        for meal_index, meal_type in enumerate(norm_meal_types):
-            meal_rows = [row for row in report.norms if row.meal_type == meal_type]
-            menus = sorted({row.menu for row in meal_rows})
-            extra_norms = sorted(
-                {
-                    row.norm or "[bez normy]"
-                    for row in meal_rows
-                    if (row.norm or "[bez normy]") not in DEFAULT_NORMS
-                },
-                key=str.casefold,
-            )
-            norms = [*DEFAULT_NORMS, *extra_norms]
-            counts = {
-                (row.norm or "[bez normy]", row.menu): row.portions
-                for row in meal_rows
-            }
-            norm_rows: list[tuple[object, ...]] = []
-            for norm in norms:
-                values = [counts.get((norm, menu), 0) for menu in menus]
-                norm_rows.append((norm, *values, sum(values)))
-
-            if meal_index:
-                summary_story.append(Spacer(1, 1.5 * mm))
-            summary_story.append(Paragraph(f"Typ stravy: {escape(meal_type)}", small_style))
-            norm_width = 28 * mm
-            total_width = 24 * mm
-            menu_width = min(
-                26 * mm,
-                (usable_width - norm_width - total_width) / max(1, len(menus)),
-            )
-            widths = [norm_width, *([menu_width] * len(menus)), total_width]
-            summary_story.append(
-                make_table(
-                    ("Norma", *(f"Menu {menu}" for menu in menus), "Celkem"),
-                    norm_rows,
-                    widths,
-                    centered_columns=set(range(len(widths))),
+                    item.meal_type,
+                    f"Menu {item.menu}",
+                    item.portions,
+                    item.meal_name or "[název v jídelníčku nenalezen]",
                 )
-            )
-
-    if summary_story:
-        story.append(KeepTogether(summary_story))
-
-    if config.show_delivery_summary and report.delivery_rows:
-        for delivery in dict.fromkeys(row[0] for row in report.delivery_rows):
-            items = [row for row in report.delivery_rows if row[0] == delivery]
-            if config.delivery_page_per_type:
-                story.append(PageBreak())
-            story.append(Paragraph("Typ výdeje: " + escape(delivery), section_style))
-            rows = [(code + " – " + name, meal, f"Menu {menu}", count, dish or "[název nenalezen]")
-                    for _, code, name, menu, count, dish, meal in items]
-            rows.append(("Celkem", "", "", sum(item[4] for item in items), ""))
-            if config.delivery_show_names:
-                columns = ("Kategorie", "Typ stravy", "Menu", "Počet", "Název pokrmu")
-                widths = (usable_width * .24, usable_width * .15, usable_width * .11, usable_width * .1, usable_width * .4)
-            else:
-                columns = ("Kategorie", "Typ stravy", "Menu", "Počet")
-                widths = (usable_width * .45, usable_width * .25, usable_width * .15, usable_width * .15)
-                rows = [row[:4] for row in rows]
-            story.append(make_table(columns, rows, widths, centered_columns={2, 3}, total_row=True))
-
-    if config.show_diner_list:
-        story.extend(
-            [
-                PageBreak(),
-                Paragraph("Seznam strávníků", section_style),
+                for item in report.menus
             ]
-        )
-
-        diner_headers = (
-            "Jméno",
-            "Kategorie",
-            "Přihláška",
-            "Norma",
-            "Objednané jídlo",
-        )
-        diner_widths = (
-            usable_width * 0.19,
-            usable_width * 0.18,
-            usable_width * 0.11,
-            usable_width * 0.08,
-            usable_width * 0.44,
-        )
-
-        def diner_sort_key(row: DinerOrder) -> tuple[str, str, int]:
-            return (
-                (row.name or "").casefold(),
-                row.meal_type.casefold(),
-                row.menu,
-            )
-
-        def diner_pdf_rows(rows: Sequence[DinerOrder]) -> list[tuple[object, ...]]:
-            return [
-                (
-                    row.name or "[bez jména]",
-                    row.category_name or row.category_code,
-                    row.application_label,
-                    row.norm or "[bez normy]",
-                    row.meal_name or "[název v jídelníčku nenalezen]",
-                )
-                for row in rows
-            ]
-
-        if not report.diners:
-            story.append(Paragraph("Nenalezeni žádní strávníci s objednávkou.", body_style))
-        elif config.category_separation:
-            grouped: dict[str, list[DinerOrder]] = defaultdict(list)
-            for diner in report.diners:
-                grouped[diner.category_code].append(diner)
-
-            for category_code in active_categories:
-                category_diners = sorted(grouped.get(category_code, []), key=diner_sort_key)
-                if not category_diners:
-                    continue
-                category_name = next(
-                    (row.category_name for row in category_diners if row.category_name),
-                    category_code,
-                )
-                story.append(CondPageBreak(35 * mm))
-                category_heading = Table(
-                    [[para(category_name, ParagraphStyle(
-                        f"Category-{category_code}",
-                        parent=body_style,
-                        fontName=label_font,
-                        fontSize=max(8, min(18, label_size * 1.38)),
-                        leading=max(10.5, min(22, label_size * 1.7)),
-                        textColor=navy,
-                    ))]],
-                    colWidths=[usable_width],
-                    hAlign="LEFT",
-                    style=TableStyle(
-                        [
-                            ("BACKGROUND", (0, 0), (-1, -1), pale_blue),
-                            ("BOX", (0, 0), (-1, -1), 0.45, blue),
-                            ("LEFTPADDING", (0, 0), (-1, -1), 2.5 * mm),
-                            ("RIGHTPADDING", (0, 0), (-1, -1), 2.5 * mm),
-                            ("TOPPADDING", (0, 0), (-1, -1), 1.7 * mm),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.7 * mm),
-                        ]
-                    ),
-                )
-                story.extend(
-                    [
-                        category_heading,
-                        Spacer(1, 1.2 * mm),
-                        make_table(
-                            diner_headers,
-                            diner_pdf_rows(category_diners),
-                            diner_widths,
-                            centered_columns={2, 3},
-                        ),
-                        Spacer(1, 2.5 * mm),
-                    ]
-                )
-        else:
-            sorted_diners = sorted(report.diners, key=diner_sort_key)
+            menu_rows.append(("Celkem", "", total_portions, ""))
             story.append(
                 make_table(
-                    diner_headers,
-                    diner_pdf_rows(sorted_diners),
-                    diner_widths,
-                    centered_columns={2, 3},
+                    ("Typ stravy", "Přihláška", "Počet", "Název jídla"),
+                    menu_rows,
+                    (usable_width * .20, usable_width * .13, usable_width * .11, usable_width * .56) if usable_width < 120 * mm else (36 * mm, 24 * mm, 20 * mm, usable_width - 80 * mm),
+                    centered_columns={1, 2},
+                    compact_columns={3},
+                    total_row=True,
+                )
+            )
+        else:
+            story.append(Paragraph("Nenalezeny žádné objednávky.", body_style))
+
+        return story
+
+    def categories_section(usable_width):
+        story = []
+        if config.show_by_categories and report.categories:
+            story.append(Paragraph("Přihlášky podle kategorií", section_style))
+            category_rows: list[tuple[object, ...]] = [
+                (
+                    item.code,
+                    item.name or "[bez názvu]",
+                    item.norm or "[bez normy]",
+                    item.applications,
+                )
+                for item in report.categories
+            ]
+            category_rows.append(
+                (
+                    "",
+                    "Celkem",
+                    "",
+                    sum(item.applications for item in report.categories),
+                )
+            )
+            story.append(
+                make_table(
+                    ("Kód", "Kategorie", "Norma", "Počet") if usable_width < 120 * mm else ("Označení", "Název kategorie", "Norma", "Přihlášek"),
+                    category_rows,
+                    tuple(usable_width * ratio for ratio in ((.13, .49, .18, .20) if usable_width < 120 * mm else (.16, .55, .13, .16))),
+                    centered_columns={0, 2, 3},
+                    total_row=True,
                 )
             )
 
-        story.extend(
-            [
-                Spacer(1, 2 * mm),
-                Paragraph(
-                    f"Celkem strávníků / objednávek: {len(report.diners)}",
-                    small_style,
-                ),
-            ]
-        )
+        return story
+
+    def norms_section(usable_width):
+        story = []
+        if config.show_by_norms and report.norms:
+            story.append(Paragraph("Objednaná menu podle norem", section_style))
+            norm_meal_types = sorted(
+                {row.meal_type for row in report.norms}, key=str.casefold
+            )
+            for meal_index, meal_type in enumerate(norm_meal_types):
+                meal_rows = [row for row in report.norms if row.meal_type == meal_type]
+                menus = sorted({row.menu for row in meal_rows})
+                extra_norms = sorted(
+                    {
+                        row.norm or "[bez normy]"
+                        for row in meal_rows
+                        if (row.norm or "[bez normy]") not in DEFAULT_NORMS
+                    },
+                    key=str.casefold,
+                )
+                norms = [*DEFAULT_NORMS, *extra_norms]
+                counts = {
+                    (row.norm or "[bez normy]", row.menu): row.portions
+                    for row in meal_rows
+                }
+                norm_rows: list[tuple[object, ...]] = []
+                for norm in norms:
+                    values = [counts.get((norm, menu), 0) for menu in menus]
+                    norm_rows.append((norm, *values, sum(values)))
+
+                if meal_index:
+                    story.append(Spacer(1, 1.5 * mm))
+                story.append(Paragraph(f"Typ stravy: {escape(meal_type)}", small_style))
+                norm_width = min(28 * mm, usable_width * .22) if usable_width < 120 * mm else 28 * mm
+                total_width = min(24 * mm, usable_width * .22) if usable_width < 120 * mm else 24 * mm
+                menu_width = min(
+                    26 * mm,
+                    (usable_width - norm_width - total_width) / max(1, len(menus)),
+                )
+                widths = [norm_width, *([menu_width] * len(menus)), total_width]
+                story.append(
+                    make_table(
+                        ("Norma", *(f"Menu {menu}" for menu in menus), "Celkem"),
+                        norm_rows,
+                        widths,
+                        centered_columns=set(range(len(widths))),
+                    )
+                )
+
+        return story
+
+    def delivery_section(usable_width):
+        story = []
+        if config.show_delivery_summary and report.delivery_rows:
+            for delivery in dict.fromkeys(row[0] for row in report.delivery_rows):
+                items = [row for row in report.delivery_rows if row[0] == delivery]
+                if config.delivery_page_per_type:
+                    story.append(PageBreak())
+                story.append(Paragraph("Typ výdeje: " + escape(delivery), section_style))
+                rows = [(code + " – " + name, meal, f"Menu {menu}", count, dish or "[název nenalezen]")
+                        for _, code, name, menu, count, dish, meal in items]
+                rows.append(("Celkem", "", "", sum(item[4] for item in items), ""))
+                if config.delivery_show_names:
+                    columns = ("Kategorie", "Typ stravy", "Menu", "Počet", "Název pokrmu")
+                    widths = (usable_width * .24, usable_width * .15, usable_width * .11, usable_width * .1, usable_width * .4)
+                else:
+                    columns = ("Kategorie", "Typ stravy", "Menu", "Počet")
+                    widths = (usable_width * .45, usable_width * .25, usable_width * .15, usable_width * .15)
+                    rows = [row[:4] for row in rows]
+                story.append(make_table(columns, rows, widths, centered_columns={2, 3}, total_row=True, compact_columns={4} if config.delivery_show_names else None))
+
+        return story
+
+    def diners_section(usable_width):
+        story = []
+        if config.show_diner_list:
+            story.extend(
+                [
+                    Paragraph("Seznam strávníků", section_style),
+                ]
+            )
+
+            diner_headers = (
+                "Jméno",
+                "Kategorie",
+                "Menu" if usable_width < 120 * mm else "Přihláška",
+                "Norma",
+                "Objednané jídlo",
+            )
+            diner_widths = tuple(usable_width * ratio for ratio in (
+                (.24, .20, .16, .12, .28) if usable_width < 120 * mm else (.19, .18, .11, .08, .44)))
+
+            def diner_sort_key(row: DinerOrder) -> tuple[str, str, int]:
+                return (
+                    (row.name or "").casefold(),
+                    row.meal_type.casefold(),
+                    row.menu,
+                )
+
+            def diner_pdf_rows(rows: Sequence[DinerOrder]) -> list[tuple[object, ...]]:
+                return [
+                    (
+                        row.name or "[bez jména]",
+                        row.category_name or row.category_code,
+                        row.application_label,
+                        row.norm or "[bez normy]",
+                        row.meal_name or "[název v jídelníčku nenalezen]",
+                    )
+                    for row in rows
+                ]
+
+            if not report.diners:
+                story.append(Paragraph("Nenalezeni žádní strávníci s objednávkou.", body_style))
+            elif config.category_separation:
+                grouped: dict[str, list[DinerOrder]] = defaultdict(list)
+                for diner in report.diners:
+                    grouped[diner.category_code].append(diner)
+
+                for category_code in active_categories:
+                    category_diners = sorted(grouped.get(category_code, []), key=diner_sort_key)
+                    if not category_diners:
+                        continue
+                    category_name = next(
+                        (row.category_name for row in category_diners if row.category_name),
+                        category_code,
+                    )
+                    story.append(CondPageBreak(35 * mm))
+                    category_heading = Table(
+                        [[para(category_name, ParagraphStyle(
+                            f"Category-{category_code}",
+                            parent=body_style,
+                            fontName=label_font,
+                            fontSize=max(8, min(18, label_size * 1.38)),
+                            leading=max(10.5, min(22, label_size * 1.7)),
+                            textColor=navy,
+                        ))]],
+                        colWidths=[usable_width],
+                        hAlign="LEFT",
+                        style=TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, -1), pale_blue),
+                                ("BOX", (0, 0), (-1, -1), 0.45, blue),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 2.5 * mm),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 2.5 * mm),
+                                ("TOPPADDING", (0, 0), (-1, -1), 1.7 * mm),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.7 * mm),
+                            ]
+                        ),
+                    )
+                    story.extend(
+                        [
+                            category_heading,
+                            Spacer(1, 1.2 * mm),
+                            make_table(
+                                diner_headers,
+                                diner_pdf_rows(category_diners),
+                                diner_widths,
+                                centered_columns={2, 3},
+                                compact_columns={4},
+                            ),
+                            Spacer(1, 2.5 * mm),
+                        ]
+                    )
+            else:
+                sorted_diners = sorted(report.diners, key=diner_sort_key)
+                story.append(
+                    make_table(
+                        diner_headers,
+                        diner_pdf_rows(sorted_diners),
+                        diner_widths,
+                        centered_columns={2, 3},
+                        compact_columns={4},
+                    )
+                )
+
+            story.extend(
+                [
+                    Spacer(1, 2 * mm),
+                    Paragraph(
+                        f"Celkem strávníků / objednávek: {len(report.diners)}",
+                        small_style,
+                    ),
+                ]
+            )
+
+        return story
+
+    builders = {"menus": menus_section}
+    if config.show_by_categories and report.categories:
+        builders["categories"] = categories_section
+    if config.show_by_norms and report.norms:
+        builders["norms"] = norms_section
+    if config.show_delivery_summary and report.delivery_rows:
+        builders["delivery"] = delivery_section
+    if config.show_diner_list:
+        builders["diners"] = diners_section
+    if config.pdf_layout:
+        if config.delivery_page_per_type and any("delivery" in row and len(row) > 1 for row in config.pdf_layout):
+            raise ConfigError("Pro samostatné stránky typů výdeje umístěte tento blok na vlastní řádek.")
+        story.extend(layout_story(config.pdf_layout, config.pdf_page_breaks, builders, usable_width))
+    else:
+        story.extend(menus_section(usable_width))
+        summaries = categories_section(usable_width) + norms_section(usable_width)
+        if summaries:
+            story.append(KeepTogether(summaries))
+        story.extend(delivery_section(usable_width))
+        if config.show_diner_list:
+            story.append(PageBreak())
+            story.extend(diners_section(usable_width))
 
     return save_document()
 

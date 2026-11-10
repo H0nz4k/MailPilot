@@ -1004,6 +1004,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.date_input.on("change", self._on_date_changed)
 
     async def _on_date_changed(self) -> None:
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer.changed()
         self.update_mail_subject()
         self._queue_daily_summary()
         await self._reload_meal_types()
@@ -1647,6 +1649,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 bool(self.raw.get("pdf_tucne", False)),
                 "Vytiskne tučně obsah tabulek; nadpisy jsou tučné vždy.",
             )
+            self.pdf_compact_rows = ui.checkbox("Zkracovat názvy jídel – stejně vysoké řádky", value=bool(self.raw.get("pdf_zkracovat_jidla", False))).classes("w-full").mark("pdf-compact-rows")
+            ui.label("Dlouhé názvy jídel skončí výpustkou (…). Ostatní údaje se přizpůsobí do jednoho řádku; celý název jídla zobrazíte vypnutím této volby.").classes("ui-help")
         with w.form_grid(4):
             self.language_input = w.setting_input(
                 "Jazyk jídelníčku",
@@ -2363,12 +2367,15 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         except ValueError:
             return
         self.date_input.value = selected.strftime(CZECH_DATE_FORMAT)
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer.changed()
         self.date_menu.close()
         self.update_mail_subject()
         self._queue_daily_summary()
         asyncio.create_task(self._reload_meal_types())
 
     def _collect_config(self) -> dict[str, Any]:
+        self.pdf_designer.settings()
         allowed = self._allowed_category_order()
         if not self.all_categories and not allowed:
             raise ConfigError("Správce musí povolit alespoň jednu kategorii.")
@@ -2428,6 +2435,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "pdf_velikost_dat": data_size,
                 "pdf_velikost_popisku": label_size,
                 "pdf_tucne": bool(self.pdf_bold.value),
+                "pdf_zkracovat_jidla": bool(self.pdf_compact_rows.value),
+                "pdf_rozlozeni": self.pdf_designer.layout_values()["pdf_layout"],
+                "pdf_nove_stranky": self.pdf_designer.layout_values()["pdf_page_breaks"],
                 "seznam_stravniku": bool(self.show_diner_list.value),
                 "odber_stravy": self._selected_collection_status(),
                 # Typ stravy je volba pro jeden ruční export, ne pro worker.

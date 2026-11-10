@@ -14,6 +14,7 @@ from services.collection_status import COLLECTION_OPTIONS, validate_report_histo
 
 
 from services.web_report_wizard import ReportWizardMixin, RULES, HISTORY_RULES
+from services.web_pdf_designer import PdfDesigner
 
 
 class DailyDesignMixin(ReportWizardMixin):
@@ -129,6 +130,8 @@ class DailyDesignMixin(ReportWizardMixin):
             self.wizard_mode.value = "today"
         self._daily_filters_changed()
         self._wizard_queue_preview()
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer._render_layout()
 
     async def _open_delivery_types_dialog(self):
         if not self.connection_ok or not self._connection_password:
@@ -230,16 +233,33 @@ class DailyDesignMixin(ReportWizardMixin):
         """Výběr je na hlavní stránce zastoupen počtem; položky jsou v dialogu."""
 
     def _build_daily_pdf_settings_dialog(self) -> None:
-        with ui.dialog() as self.daily_pdf_settings_dialog, ui.card().classes("ds-mail-dialog"):
+        with ui.dialog() as self.daily_pdf_settings_dialog, ui.card().classes("ds-mail-dialog ds-pdf-dialog"):
             ui.label("Nastavení PDF").classes("ds-dialog-title")
             with ui.column().classes("ds-dialog-body w-full"):
-                self._build_pdf_settings_section()
+                with ui.tabs().props("no-caps").classes("w-full") as tabs:
+                    appearance = ui.tab("Vzhled a obsah", icon="tune")
+                    layout = ui.tab("Rozložení, náhled a šablony", icon="dashboard_customize")
+                with ui.tab_panels(tabs, value=appearance).classes("w-full"):
+                    with ui.tab_panel(appearance).classes("p-0"):
+                        self._build_pdf_settings_section()
+                    with ui.tab_panel(layout).classes("p-0"):
+                        self.pdf_designer = PdfDesigner(self)
                 for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list, self.show_delivery_summary, self.delivery_show_names, self.delivery_page_per_type,
-                              self.pdf_orientation, self.pdf_data_size, self.pdf_label_size, self.pdf_bold,
+                              self.pdf_orientation, self.pdf_data_size, self.pdf_label_size, self.pdf_bold, self.pdf_compact_rows,
                               self.language_input, self.menu_number):
-                    field.on_value_change(lambda _e: self._mark_daily_dirty())
+                    field.on_value_change(lambda _e: self.pdf_designer.changed())
             with ui.row().classes("ds-dialog-footer w-full justify-end"):
                 ui.button("Hotovo", on_click=self.daily_pdf_settings_dialog.close).props("no-caps unelevated")
+
+    def _apply_pdf_appearance(self, settings):
+        fields = {"pdf_orientation": self.pdf_orientation, "pdf_data_font_size": self.pdf_data_size,
+                  "pdf_label_font_size": self.pdf_label_size, "pdf_bold": self.pdf_bold,
+                  "pdf_compact_rows": self.pdf_compact_rows, "category_separation": self.category_separation,
+                  "show_by_categories": self.show_categories, "show_by_norms": self.show_norms,
+                  "show_diner_list": self.show_diner_list, "show_delivery_summary": self.show_delivery_summary,
+                  "delivery_show_names": self.delivery_show_names, "delivery_page_per_type": self.delivery_page_per_type}
+        for key, field in fields.items():
+            field.value = settings[key]
 
     def _build_daily_summary_dialog(self) -> None:
         with ui.dialog() as self.daily_summary_dialog, ui.card().classes("ds-mail-dialog ds-summary-dialog"):
@@ -316,10 +336,13 @@ class DailyDesignMixin(ReportWizardMixin):
         self._mark_daily_dirty()
         self._wizard_update_caption()
         self._queue_daily_summary()
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer.changed()
 
     def _current_daily_profile(self) -> DailyProfile:
         if not self.categories:
             raise ValueError("Jídelna ještě není připojena. Požádejte správce o nastavení připojení.")
+        self.pdf_designer.settings()
         return DailyProfile.from_dict({
             "id": self.daily_profile_id or str(uuid4()), "name": self.daily_profile_name.value,
             "categories": self._selected_category_order(),
@@ -337,6 +360,8 @@ class DailyDesignMixin(ReportWizardMixin):
             "pdf_data_font_size": self.pdf_data_size.value,
             "pdf_label_font_size": self.pdf_label_size.value,
             "pdf_bold": bool(self.pdf_bold.value),
+            "pdf_compact_rows": bool(self.pdf_compact_rows.value),
+            **self.pdf_designer.layout_values(),
             "language": self.language_input.value,
             "menu_list_number": self.menu_number.value,
         })
@@ -411,6 +436,8 @@ class DailyDesignMixin(ReportWizardMixin):
                                  (self.delivery_show_names, profile.delivery_show_names),
                                  (self.delivery_page_per_type, profile.delivery_page_per_type)):
                 field.value = value
+            self.pdf_compact_rows.value = profile.pdf_compact_rows
+            self.pdf_designer.set_layout(profile.pdf_layout, profile.pdf_page_breaks)
             for field, key, raw_key, default in (
                 (self.pdf_orientation, "pdf_orientation", "pdf_orientace", "na_vysku"),
                 (self.pdf_data_size, "pdf_data_font_size", "pdf_velikost_dat", 8.5),

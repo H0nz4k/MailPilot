@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 from services.web_meal_types import normalize_meal_filter
 from services.collection_status import normalize_collection_status
+from services.pdf_layout import normalize_layout, normalize_page_breaks
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,9 @@ class DailyProfile:
     language: str | None = None
     menu_list_number: int | None = None
     collection_status: str | None = None
+    pdf_compact_rows: bool = False
+    pdf_layout: tuple[tuple[str, ...], ...] = ()
+    pdf_page_breaks: tuple[str, ...] = ("diners",)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "DailyProfile":
@@ -52,12 +56,14 @@ class DailyProfile:
         from stravovaci_sestava import normalize_delivery_filter
         delivery_types = normalize_delivery_filter(raw.get("delivery_types"))
         collection_status = normalize_collection_status(raw.get("collection_status"))
+        layout = normalize_layout(raw.get("pdf_layout"))
+        breaks = normalize_page_breaks(raw.get("pdf_page_breaks"))
         flags = {}
         for key in ("category_separation", "show_by_categories", "show_by_norms", "show_diner_list"):
             flags[key] = raw.get(key, True)
             if not isinstance(flags[key], bool):
                 raise ValueError(f"{key} musí být true nebo false.")
-        for key in ("show_delivery_summary", "delivery_show_names", "delivery_page_per_type"):
+        for key in ("show_delivery_summary", "delivery_show_names", "delivery_page_per_type", "pdf_compact_rows"):
             flags[key] = raw.get(key, False)
             if not isinstance(flags[key], bool):
                 raise ValueError(f"{key} musí být true nebo false.")
@@ -82,7 +88,8 @@ class DailyProfile:
         if number is not None:
             pdf["menu_list_number"] = int(number)
         return cls(str(raw.get("id") or uuid4()), name, categories,
-                   meal, delivery_types, collection_status=collection_status, **flags, **pdf)
+                   meal, delivery_types, collection_status=collection_status,
+                   pdf_layout=layout, pdf_page_breaks=breaks, **flags, **pdf)
 
     def to_dict(self) -> dict:
         raw = asdict(self)
@@ -155,6 +162,9 @@ def apply_profile(config, profile: DailyProfile, raw: dict):
                    show_by_norms=profile.show_by_norms,
                    show_diner_list=profile.show_diner_list,
                    collection_status=profile.collection_status,
+                   pdf_compact_rows=profile.pdf_compact_rows,
+                   pdf_layout=profile.pdf_layout,
+                   pdf_page_breaks=profile.pdf_page_breaks,
                    show_delivery_summary=profile.show_delivery_summary,
                    delivery_show_names=profile.delivery_show_names,
                    delivery_page_per_type=profile.delivery_page_per_type, **pdf)
