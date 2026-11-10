@@ -200,7 +200,7 @@ async def test_editor_template_preview_and_profile_configuration(tmp_path):
                 profile = app._current_daily_profile()
                 assert profile.pdf_compact_rows and profile.pdf_layout[0] == ("norms", "categories")
                 raw = app._collect_config()
-                path.write_text(json.dumps(raw, ensure_ascii=False))
+                path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
                 with patch("stravovaci_sestava.get_password", return_value="dummy"):
                     loaded = load_config(path)
                 assert loaded.pdf_compact_rows and loaded.pdf_layout[0] == ("norms", "categories")
