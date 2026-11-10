@@ -56,6 +56,17 @@ def test_unwritable_version_file_fails_without_launching_gui(tmp_path, monkeypat
     gui.assert_not_called()
 
 
+def test_pdf_self_check_uses_bundled_fonts_and_renderer_without_gui_or_credentials(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with patch.object(web, 'application_directory', return_value=tmp_path), \
+         patch.object(web, 'NiceGuiApp') as gui, \
+         patch('stravovaci_sestava.get_password', side_effect=AssertionError('No database required')):
+        assert web.main(['--pdf-self-check', str(tmp_path / 'preview')]) == 0
+    assert (tmp_path / 'preview/preview.pdf').read_bytes().startswith(b'%PDF')
+    assert (tmp_path / 'preview/preview.png').read_bytes().startswith(b'\x89PNG')
+    gui.assert_not_called()
+
+
 @pytest.mark.parametrize('gui_version, worker_version, missing, accepted', [
     (WEB_BUILD, WEB_BUILD, False, True),
     ('old', WEB_BUILD, False, False),

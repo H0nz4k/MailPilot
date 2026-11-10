@@ -2939,6 +2939,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", dest="export_output", type=Path, metavar="SOUBOR.pdf", help="cílové PDF; relativní cesta platí vůči složce konfigurace")
     parser.add_argument("--open-pdf", action="store_true", help="po exportu otevřít PDF ve výchozím prohlížeči PDF")
     parser.add_argument("--version-file", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--pdf-self-check", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(remaining)
     args.uzaverka_current = period == CURRENT_CLOSING_PERIOD
     args.uzaverka_period = period if isinstance(period, tuple) else None
@@ -2967,6 +2968,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.version_file.write_text(f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}\n", encoding="utf-8")
         except OSError as exc:
             print(f"Verzi nelze zapsat: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.pdf_self_check is not None:
+        try:
+            from services.pdf_preview import self_check
+            self_check(args.pdf_self_check)
+        except Exception as exc:
+            print(f"Kontrola PDF selhala: {exc}", file=sys.stderr)
             return 2
         return 0
     if args.export_report is not None or args.export_report_id is not None:

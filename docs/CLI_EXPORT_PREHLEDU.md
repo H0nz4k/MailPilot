@@ -1,4 +1,4 @@
-# Uložený přehled jedním kliknutím (rc.11)
+# Export uloženého přehledu – DataShip {{VERSION}}
 
 Přehled si nejprve uložte v aplikaci, například jako **mujprehled**. V místní instalaci musí zůstat jeho `daily_reports.json`, nastavení databáze a uložené heslo k databázi. Pro tento export není potřeba heslo administrace, e-mail, API klíč ani služba NSSM.
 
@@ -23,14 +23,16 @@ Zástupce pojmenujte **Můj přehled**. Dvojklik vytvoří dnešní PDF a otevř
 ## Datum a cílový soubor
 
 ```bash
-./DataShip.exe --export-report "mujprehled" --date 2026-11-02 --open-pdf
+./DataShip.exe --export-report "mujprehled" --date 2027-01-15 --open-pdf
 ./DataShip.exe --export-report "mujprehled" --days-ahead 1 --open-pdf
 ./DataShip.exe --export-report "mujprehled" --output 'C:\Prehledy\mujprehled.pdf'
 ```
 
+Datum v minulosti je dostupné pouze pro uložený přehled **Odebraná / neodebraná strava**. Ostatní přehledy dovolují dnešek a budoucí dny.
+
 Datum lze zapsat jako `RRRR-MM-DD` nebo `DD.MM.RRRR`. `--days-ahead` znamená 0–370 kalendářních dní dopředu, nikoli posun podle varných dnů. Nelze ho kombinovat s `--date`.
 
-Výchozí cíl je podsložka `exporty` vedle používaného `config.json`. Název obsahuje název přehledu, datum a krátký identifikátor, například `mujprehled_2026-11-02_a1b2c3d4.pdf`. Krátký identifikátor odlišuje přehledy, jejichž názvy by po převodu na název souboru splývaly. Při opakovaném exportu stejného přehledu za stejné datum se úspěšně vytvořené PDF nahradí. Při selhání tvorby zůstává původní soubor zachovaný.
+Výchozí cíl je podsložka `exporty` vedle používaného `config.json`. Název obsahuje název přehledu, datum a krátký identifikátor, například `mujprehled_2027-01-15_a1b2c3d4.pdf`. Krátký identifikátor odlišuje přehledy, jejichž názvy by po převodu na název souboru splývaly. Při opakovaném exportu stejného přehledu za stejné datum se úspěšně vytvořené PDF nahradí. Při selhání tvorby zůstává původní soubor zachovaný.
 
 `--output` určuje konkrétní soubor s příponou `.pdf`; relativní cesta se vztahuje ke složce konfigurace. Případné složky se vytvoří. Názvy i cesty s mezerami uzavřete do uvozovek.
 

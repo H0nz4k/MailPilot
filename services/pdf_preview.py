@@ -61,3 +61,18 @@ def render_preview_page(data, page_index=0):
             if bitmap:
                 bitmap.close()
             page.close()
+
+
+def self_check(directory):
+    """Frozen-build check with fictional data, no database, mail or GUI."""
+    from datetime import date
+    from stravovaci_sestava import AppConfig
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    config = AppConfig(database={}, report_date=date.today(), categories=("UK",),
+                       language="česky", menu_list_number=1, pdf_compact_rows=True,
+                       pdf_layout=(("categories", "norms"), ("menus",), ("diners",)))
+    data = generate_preview(config, example=True)
+    png, _count = render_preview_page(data)
+    (directory / "preview.pdf").write_bytes(data)
+    (directory / "preview.png").write_bytes(png)

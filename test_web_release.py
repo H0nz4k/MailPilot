@@ -16,6 +16,7 @@ def test_release_packages_only_program_and_clean_sample(tmp_path, monkeypatch):
         (app / name).write_bytes(b'MZ-test-fixture')
     (app / '_internal').mkdir()
     (app / '_internal/runtime.dll').write_bytes(b'test-runtime')
+    (app / '_internal/BUILD_INFO.json').write_text('must not ship')
     for name in ['config.json', '.env', 'web_mail_tasks.json', 'daily_reports.json', 'web_mail_settings.json']:
         (app / name).write_text('PRIVATE-DO-NOT-SHIP')
     archive = tmp_path / 'nssm.zip'
@@ -27,12 +28,15 @@ def test_release_packages_only_program_and_clean_sample(tmp_path, monkeypatch):
     for path in paths[:2]:
         with ZipFile(path) as z:
             assert 'DataShip/_internal/runtime.dll' in z.namelist()
-            assert b'--export-report' in z.read('DataShip/EXPORT_PREHLEDU.md')
-            assert 'DataShip/NOVINKY.md' in z.namelist()
-            assert json.loads(z.read('DataShip/BUILD_INFO.json'))['build'] == release.WEB_BUILD
+            readme = z.read('DataShip/README.md').decode('utf-8')
+            assert '--export-report' in readme and '--export-report-id' in readme
+            assert f'Novinky verze {release.WEB_VERSION}' in readme
+            assert release.WEB_BUILD in readme
+            assert '{{VERSION}}' not in readme and '{{BUILD}}' not in readme
+            assert not any(Path(name).name.casefold() in release.EXCLUDED_DOCUMENTS for name in z.namelist())
             assert not any(name.lower().endswith('.vbs') for name in z.namelist())
             assert json.loads(z.read('DataShip/config.json')) == json.loads((release.ROOT / 'config.example.json').read_text(encoding="utf-8"))
-            assert json.loads(z.read('DataShip/BUILD_INFO.json'))['commit'] == '0123456789abcdef'
+            assert '0123456789abcdef' in readme
             assert all(b'PRIVATE-DO-NOT-SHIP' not in z.read(name) for name in z.namelist())
     with ZipFile(paths[0]) as z:
         assert 'DataShip/nssm/win64/nssm.exe' not in z.namelist()
