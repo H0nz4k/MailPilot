@@ -15,6 +15,7 @@ from services.web_activity import record_event
 from services.web_daily_profiles import DailyProfile, apply_profile, load_profiles, profile_file
 from services.web_report_output import _slug
 from stravovaci_sestava import load_config, fetch_report, create_pdf
+from services.collection_status import validate_report_history
 
 
 def select_saved_report(directory: Path, *, name: str | None = None,
@@ -58,6 +59,7 @@ def export_saved_report(config_path: Path, *, name: str | None = None,
     config_path = Path(config_path).resolve()
     profile = select_saved_report(config_path.parent, name=name, profile_id=profile_id)
     day = report_date or date.today()
+    validate_report_history(day, profile.collection_status)
     # Ignore the preview date left in config.json. Apply current admin category
     # permissions and the saved PDF options exactly as the scheduler does.
     raw = read_saved_settings(config_path)

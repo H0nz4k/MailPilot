@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 from services.web_meal_types import normalize_meal_filter
+from services.collection_status import normalize_collection_status
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class DailyProfile:
     pdf_bold: bool | None = None
     language: str | None = None
     menu_list_number: int | None = None
+    collection_status: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "DailyProfile":
@@ -49,6 +51,7 @@ class DailyProfile:
         meal = normalize_meal_filter(raw.get("meal_type"))
         from stravovaci_sestava import normalize_delivery_filter
         delivery_types = normalize_delivery_filter(raw.get("delivery_types"))
+        collection_status = normalize_collection_status(raw.get("collection_status"))
         flags = {}
         for key in ("category_separation", "show_by_categories", "show_by_norms", "show_diner_list"):
             flags[key] = raw.get(key, True)
@@ -79,7 +82,7 @@ class DailyProfile:
         if number is not None:
             pdf["menu_list_number"] = int(number)
         return cls(str(raw.get("id") or uuid4()), name, categories,
-                   meal, delivery_types, **flags, **pdf)
+                   meal, delivery_types, collection_status=collection_status, **flags, **pdf)
 
     def to_dict(self) -> dict:
         raw = asdict(self)
@@ -151,6 +154,7 @@ def apply_profile(config, profile: DailyProfile, raw: dict):
                    show_by_categories=profile.show_by_categories,
                    show_by_norms=profile.show_by_norms,
                    show_diner_list=profile.show_diner_list,
+                   collection_status=profile.collection_status,
                    show_delivery_summary=profile.show_delivery_summary,
                    delivery_show_names=profile.delivery_show_names,
                    delivery_page_per_type=profile.delivery_page_per_type, **pdf)
@@ -160,10 +164,20 @@ def task_report_config(config, raw: dict, task, directory: Path):
     """Existing tasks retain their global settings; missing profiles fail closed."""
     profile_id = getattr(task, "profile_id", None)
     if not profile_id:
-        return config
+        return replace(config, collection_status=None) if config.collection_status else config
     profile = next((p for p in load_profiles(profile_file(directory)) if p.id == profile_id), None)
     if profile is None:
         raise ValueError("Uložený přehled této úlohy neexistuje; zvolte jej znovu.")
     return apply_profile(config, profile, raw)
+
+
+def task_collection_status(directory: Path, task):
+    profile_id = getattr(task, "profile_id", None)
+    if not profile_id:
+        return None
+    profile = next((p for p in load_profiles(profile_file(directory)) if p.id == profile_id), None)
+    if profile is None:
+        raise ValueError("Uložený přehled této úlohy neexistuje; zvolte jej znovu.")
+    return profile.collection_status
 
 

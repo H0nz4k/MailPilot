@@ -100,6 +100,7 @@ from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
+from services.collection_status import COLLECTION_TITLES, validate_report_history
 from services.web_meal_types import normalize_meal_filter, meal_filter_values, meal_filter_caption
 from services.web_daily_design import DailyDesignMixin
 from services.web_daily_design_css import DATASHIP_CSS
@@ -2428,6 +2429,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "pdf_velikost_popisku": label_size,
                 "pdf_tucne": bool(self.pdf_bold.value),
                 "seznam_stravniku": bool(self.show_diner_list.value),
+                "odber_stravy": self._selected_collection_status(),
                 # Typ stravy je volba pro jeden ruční export, ne pro worker.
                 "typ_stravy_denne": None,
             }
@@ -2630,10 +2632,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
             return
         try:
+            validate_report_history(self._selected_date(), self._selected_collection_status())
             categories = self._manual_daily_categories()
             allowed = tuple(self._allowed_category_order())
             await self._persist_settings()
-        except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
+        except (ValueError, CredentialStoreError, EnvStoreError) as exc:
             ui.notify(str(exc), type="negative", position="top")
             return
 
@@ -2677,9 +2680,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             meal_type=meal_type,
             categories=categories if categories is not None else config.categories,
         )
+        validate_report_history(config.report_date, config.collection_status)
         report = fetch_report(config)
         output_path = (
-            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type)
+            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type, collection_status=config.collection_status, delivery_types=config.delivery_types)
             if categories is not None and allowed_categories is not None else None
         )
         return create_pdf(config, report, output_path=output_path)
@@ -2763,6 +2767,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
             return
         try:
+            validate_report_history(self._selected_date(), self._selected_collection_status())
             categories = self._manual_daily_categories()
             allowed = tuple(self._allowed_category_order())
             if not self.wizard_recipients.commit_pending():
@@ -2771,10 +2776,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             outgoing = self._outgoing_mail_settings()
             api_key = await self._persist_settings(require_api_key=outgoing["transport"] == "resend")
             sender = normalize_recipient(self._outgoing_sender())
-            template_data = {"report": "Denní stav", "date": self._selected_date().strftime("%d.%m.%Y")}
+            template_data = {"report": COLLECTION_TITLES.get(self._selected_collection_status(), "Denní stav"), "date": self._selected_date().strftime("%d.%m.%Y")}
             subject = outgoing["subject_template"].format(**template_data)
             body = outgoing["body_template"].format(**template_data)
-        except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
+        except (ValueError, CredentialStoreError, EnvStoreError) as exc:
             ui.notify(str(exc), type="negative", position="top")
             return
 
@@ -2849,9 +2854,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         if only_cooking_days and not should_send_on_cooking_day(statuses):
             return {"skipped": True, "message": cooking_status_message(statuses)}
 
+        validate_report_history(config.report_date, config.collection_status)
         report = fetch_report(config)
         output_path = (
-            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type)
+            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type, collection_status=config.collection_status, delivery_types=config.delivery_types)
             if categories is not None and allowed_categories is not None else None
         )
         path = create_pdf(config, report, output_path=output_path)

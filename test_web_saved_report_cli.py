@@ -57,13 +57,29 @@ def test_named_export_uses_saved_content_current_date_and_preserves_settings(tmp
 
 def test_date_and_custom_output_and_id_selection(tmp_path):
     config, profile = setup(tmp_path)
+    selected_date = date.today() + timedelta(days=2)
     with patch('stravovaci_sestava.get_password', return_value='dummy-db'), \
          patch.object(export, 'fetch_report', return_value=object()) as fetch, \
          patch.object(export, 'create_pdf', side_effect=render):
         output = export.export_saved_report(config, profile_id=profile.id,
-                                           report_date=date(2026, 11, 2), output=Path('PDF složka/muj.pdf'))
+                                           report_date=selected_date, output=Path('PDF složka/muj.pdf'))
     assert output == tmp_path / 'PDF složka/muj.pdf'
-    assert fetch.call_args.args[0].report_date == date(2026, 11, 2)
+    assert fetch.call_args.args[0].report_date == selected_date
+
+
+def test_history_export_is_only_available_for_collection_report(tmp_path):
+    config, profile = setup(tmp_path)
+    selected_date = date.today() - timedelta(days=1)
+    with patch('stravovaci_sestava.get_password', return_value='dummy-db'), \
+         patch.object(export, 'fetch_report', return_value=object()) as fetch, \
+         patch.object(export, 'create_pdf', side_effect=render):
+        with pytest.raises(ValueError, match='minulosti'):
+            export.export_saved_report(config, profile_id=profile.id, report_date=selected_date)
+        fetch.assert_not_called()
+        save_profile(profile_file(tmp_path), replace(profile, collection_status='both'))
+        export.export_saved_report(config, profile_id=profile.id, report_date=selected_date)
+        assert fetch.call_args.args[0].report_date == selected_date
+        assert fetch.call_args.args[0].collection_status == 'both'
 
 
 @pytest.mark.parametrize('name', ['missing', ''])

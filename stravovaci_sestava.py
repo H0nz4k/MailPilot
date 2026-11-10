@@ -15,6 +15,7 @@ from xml.sax.saxutils import escape
 
 from credential_store import CredentialStoreError, get_password
 from services.web_meal_types import normalize_meal_filter
+from services.collection_status import normalize_collection_status, COLLECTION_TITLES
 from runtime_paths import application_directory, bundled_path
 
 
@@ -261,6 +262,7 @@ class AppConfig:
     show_delivery_summary: bool = False
     delivery_show_names: bool = False
     delivery_page_per_type: bool = False
+    collection_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -297,6 +299,9 @@ class DinerOrder:
     norm: str | None
     meal_name: str | None
     portions: int = 1
+    diner_number: int | None = None
+    classroom: str | None = None
+    collected: bool | None = None
 
     @property
     def application_label(self) -> str:
@@ -487,6 +492,10 @@ def load_config(
     show_diner_list = raw.get("seznam_stravniku", True)
     if not isinstance(show_diner_list, bool):
         raise ConfigError("'seznam_stravniku' musí být true nebo false.")
+    try:
+        collection_status = normalize_collection_status(raw.get("odber_stravy"))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
     language = raw.get("jazyk_jidelnicku", "česky")
     if not isinstance(language, str) or not language.strip():
@@ -610,6 +619,7 @@ def load_config(
         show_delivery_summary=delivery_summary,
         delivery_show_names=delivery_names,
         delivery_page_per_type=delivery_pages,
+        collection_status=collection_status,
     )
 
 
@@ -735,6 +745,7 @@ def build_delivery_rows(diners, bulk_rows, rate_rows):
 
 
 def fetch_report(config: AppConfig) -> ReportData:
+    normalize_collection_status(config.collection_status)
     try:
         import psycopg
         from psycopg import sql
@@ -795,6 +806,10 @@ def fetch_report(config: AppConfig) -> ReportData:
             cursor.execute(SUBJECT_NAME_QUERY)
             subject_row = cursor.fetchone()
             subject_name = subject_row[0] if subject_row else None
+
+            if config.collection_status is not None:
+                from services.collection_report import fetch_collection_report
+                return fetch_collection_report(cursor, config, active_categories, subject_name)
 
             cursor.execute(
                 summary_query,
@@ -1382,6 +1397,8 @@ def create_pdf(
         "Seznam strávníků" if config.show_diner_list
         else "Souhrn objednané stravy"
     )
+    if config.collection_status is not None:
+        document_title = COLLECTION_TITLES[config.collection_status]
     total_portions = sum(item.portions for item in report.menus)
     temporary = target.with_name(f".{target.stem}.tmp.pdf")
 
@@ -1396,7 +1413,7 @@ def create_pdf(
         canvas.drawRightString(
             page_width - right_margin,
             page_height - 10 * mm,
-            f"Objednaná strava - {date_text}",
+            f"{document_title if config.collection_status else 'Objednaná strava'} - {date_text}",
         )
         canvas.setStrokeColor(medium_gray)
         canvas.setLineWidth(0.4)
@@ -1444,7 +1461,7 @@ def create_pdf(
         [
             para("Datum", header_cell_style),
             para(date_text, cell_center_style),
-            para("Celkem porcí", header_cell_style),
+            para("Objednávek" if config.collection_status else "Celkem porcí", header_cell_style),
             para(total_portions, cell_center_style),
             para("Vybraných kategorií", header_cell_style),
             para(len(active_categories), cell_center_style),
@@ -1475,6 +1492,31 @@ def create_pdf(
         ),
     )
     story.extend([info_table, Spacer(1, 2 * mm)])
+
+    def save_document():
+        try:
+            document.build(
+                story,
+                onFirstPage=page_header_footer,
+                onLaterPages=page_header_footer,
+            )
+            reader = PdfReader(str(temporary))
+            if not reader.pages:
+                raise RuntimeError("Vytvořené PDF nemá žádnou stránku.")
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+
+        return target
+
+    if config.collection_status is not None:
+        from services.collection_report import collection_pdf_story
+        story.extend(collection_pdf_story(
+            config, report, table=make_table,
+            body_style=body_style, section_style=section_style, width=usable_width,
+        ))
+        return save_document()
 
     story.append(Paragraph("Jídelníček a počty porcí", section_style))
     if report.menus:
@@ -1715,21 +1757,7 @@ def create_pdf(
             ]
         )
 
-    try:
-        document.build(
-            story,
-            onFirstPage=page_header_footer,
-            onLaterPages=page_header_footer,
-        )
-        reader = PdfReader(str(temporary))
-        if not reader.pages:
-            raise RuntimeError("Vytvořené PDF nemá žádnou stránku.")
-        temporary.replace(target)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
-
-    return target
+    return save_document()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

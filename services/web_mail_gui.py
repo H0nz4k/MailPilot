@@ -26,6 +26,7 @@ from services.web_worker_status import observed_status
 from services.web_task_output import TaskOutputEditor
 from services.web_controls import day_stepper
 from services.web_scheduler_notice import SchedulerServiceNotice
+from services.collection_status import COLLECTION_TITLES, validate_task_history
 
 REPORTS = {"daily": "Denní PDF přehled", "meal_summary": "Původní souhrn (nepodporováno)"}
 LEGACY_PROFILE_LABEL = "Dosavadní společné nastavení"
@@ -268,6 +269,8 @@ def build_mail_tasks_panel(
                             f"Typ stravy: {meal_filter_caption(chosen.meal_type)}.",
                             "Se seznamem strávníků." if chosen.show_diner_list else "Bez seznamu strávníků.",
                         ]
+                        if chosen.collection_status:
+                            parts.append(COLLECTION_TITLES[chosen.collection_status] + ". Historie je povolena.")
                         details.set_text(" ".join(parts))
                     elif profile.value == "" and legacy_common:
                         details.set_text(
@@ -375,6 +378,17 @@ def build_mail_tasks_panel(
                 offset.stepper_row.bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 offset.bind_visibility_from(mode, "value", backward=lambda value: value == "offset")
                 fixed.bind_visibility_from(mode, "value", backward=lambda value: value == "fixed")
+                def history_options():
+                    chosen = saved_profiles.get(profile.value)
+                    special = bool(chosen and chosen.collection_status)
+                    offset.min = -370 if special else 0
+                    offset.props["label"] = "Posun dní (−1 = včera)" if special else "Kolik dní dopředu? (2 = pozítří)"
+                    offset.update()
+                    offset.refresh_bounds()
+                    fixed.props["min"] = None if special else date.today().isoformat()
+                    fixed.update()
+                profile.on_value_change(lambda _event: history_options())
+                history_options()
                 only_cooking = ui.checkbox("Spustit jen tehdy, když se v den přehledu vaří", value=task.only_cooking_days if task else True)
                 ui.label("Kontroluje cílové datum PDF, nikoli dnešek. U jednoho typu jeho kalendář; u více vybraných typů alespoň jeden z nich; u všech typů libovolný. Nevarný den se přeskočí, datum se neposouvá.").classes("ui-help")
                 enabled = ui.checkbox("Spouštět automaticky", value=task.enabled if task else True)
@@ -456,6 +470,8 @@ def build_mail_tasks_panel(
                             new = replace(new, first_send_date=first.date().isoformat() if first else None)
                         if new.profile_id and new.profile_id not in profile_options():
                             raise ValueError("Vyberte existující uložený přehled.")
+                        selected_profile = saved_profiles.get(new.profile_id)
+                        validate_task_history(new, selected_profile.collection_status if selected_profile else None)
                     except (OSError, ValueError, TypeError) as exc:
                         ui.notify(f"Úlohu nelze uložit: {exc}", type="negative")
                         return

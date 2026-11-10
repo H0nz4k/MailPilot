@@ -17,9 +17,11 @@ from services.web_meal_types import meal_filter_caption
 from services.web_task_output import TaskOutputEditor
 from services.web_controls import day_stepper
 from services.web_scheduler_notice import SchedulerServiceNotice
+from services.collection_status import COLLECTION_TITLES, validate_report_history
 
 RULES = {"today": "Dnes", "tomorrow": "Zítra", "after_tomorrow": "Pozítří (2 dny dopředu)",
          "next_cooking_day": "Následující varný den", "offset": "Jiný počet dní dopředu"}
+HISTORY_RULES = {"yesterday": "Včera", "history": "Jiný počet dní zpět"}
 STEPS = ("Datum a strava", "Obsah a PDF", "Na který den", "E-mail a uložení")
 WEEKDAYS = ("pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle")
 
@@ -60,6 +62,9 @@ class ReportWizardMixin:
         self.wizard_offset = day_stepper("Počet kalendářních dní dopředu", 2)
         self.wizard_offset.stepper_row.bind_visibility_from(self.wizard_mode, "value", backward=lambda mode: mode == "offset")
         self.wizard_offset.bind_visibility_from(self.wizard_mode, "value", backward=lambda mode: mode == "offset")
+        self.wizard_history_days = day_stepper("Počet kalendářních dní zpět", 1, minimum=1)
+        self.wizard_history_days.stepper_row.bind_visibility_from(self.wizard_mode, "value", backward=lambda mode: mode == "history")
+        self.wizard_history_days.bind_visibility_from(self.wizard_mode, "value", backward=lambda mode: mode == "history")
         ui.label("Dva dny dopředu znamená dva kalendářní dny. Následující varný den se určí podle kalendáře Jídelny.").classes("ui-help")
         self.wizard_only_cooking = ui.checkbox("Spustit jen tehdy, když se v den přehledu vaří", value=True)
         with ui.expansion("Jiný kalendář varných dnů (volitelné)", icon="event").classes("w-full"):
@@ -70,7 +75,7 @@ class ReportWizardMixin:
             self.wizard_calendar_status = ui.label("").classes("ui-help")
             ui.button("Načíst kalendáře", icon="refresh", on_click=self._wizard_load_calendars).props("outline no-caps")
         self.wizard_date_preview = ui.label("").classes("ds-wizard-preview").props('role="status" aria-live="polite"')
-        for field in (self.wizard_mode, self.wizard_offset, self.wizard_only_cooking,
+        for field in (self.wizard_mode, self.wizard_offset, self.wizard_history_days, self.wizard_only_cooking,
                       self.wizard_calendar_mode, self.wizard_calendars):
             field.on_value_change(lambda _e: self._wizard_queue_preview())
 
@@ -146,6 +151,9 @@ class ReportWizardMixin:
             meals = meal_filter_caption(self._selected_daily_meal_type())
             count = len(self._selected_category_order())
             content = "součty a jména" if self.show_diner_list.value else "jen součty"
+            status = self._selected_collection_status()
+            if status:
+                content = COLLECTION_TITLES[status]
             deliveries = getattr(self, "delivery_type_select", None)
             chosen = deliveries.value if deliveries else []
             delivery_label = f"typů výdeje: {len(chosen)}" if chosen else "všechny typy výdeje"
@@ -162,6 +170,7 @@ class ReportWizardMixin:
             self._manual_daily_categories()
         if number == 2:
             self._current_daily_profile()
+            validate_report_history(self._selected_date(), self._selected_collection_status())
         if number >= 3:
             self._wizard_task(validate_recipients=False)
         if number == 4:
@@ -184,6 +193,13 @@ class ReportWizardMixin:
         offset = 2 if mode == "after_tomorrow" else self.wizard_offset.value
         if mode == "offset" and (offset is None or int(offset) != offset or not 0 <= offset <= 370):
             raise ValueError("Zadejte celý počet dní od 0 do 370.")
+        if mode in HISTORY_RULES:
+            if not self._selected_collection_status():
+                raise ValueError("Dny zpět lze zvolit pouze pro sestavu Odebraná / neodebraná strava.")
+            days = 1 if mode == "yesterday" else self.wizard_history_days.value
+            if days is None or isinstance(days, bool) or int(days) != days or not 1 <= days <= 370:
+                raise ValueError("Zadejte celý počet dní zpět od 1 do 370.")
+            offset = -int(days)
         calendar = self.wizard_calendar_mode.value
         selected = list(self.wizard_calendars.value or [])
         if calendar == "selected" and not selected:
@@ -194,7 +210,7 @@ class ReportWizardMixin:
             "name": self.wizard_name.value, "report": "daily",
             "recipients": self.wizard_recipients.addresses if validate_recipients else ["preview@example.invalid"],
             "send_time": self.wizard_time.value, "enabled": self.wizard_enabled.value,
-            "date_mode": "offset" if mode == "after_tomorrow" else mode,
+            "date_mode": "offset" if mode == "after_tomorrow" or mode in HISTORY_RULES else mode,
             "day_offset": int(offset or 0), "only_cooking_days": self.wizard_only_cooking.value,
             "cooking_meal_type": "*" if calendar == "all" else selected if calendar == "selected" else None,
         })

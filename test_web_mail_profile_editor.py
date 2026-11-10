@@ -76,3 +76,24 @@ async def test_editing_old_task_keeps_shared_settings_until_user_changes_them(tm
             user.find("Uložit").click()
             assert load_tasks(task_file(tmp_path)) == [old]
 
+
+@pytest.mark.asyncio
+async def test_negative_offset_is_available_only_for_collection_profile(tmp_path):
+    special = DailyProfile.from_dict({"name": "Odběry", "categories": ["1"], "collection_status": "both"})
+    ordinary = DailyProfile.from_dict({"name": "Objednávky", "categories": ["1"]})
+    for profile in (special, ordinary):
+        save_profile(profile_file(tmp_path), profile)
+    async with user_simulation(lambda: build_mail_tasks_panel(tmp_path)) as user:
+        await user.open("/")
+        user.find("Nová úloha").click()
+        with user:
+            choices = field(user, ui.select, "Uložený přehled")
+            choices.value = special.id
+            offset = field(user, ui.number, "Posun dní (−1 = včera)")
+            assert offset.min == -370
+            offset.value = -1
+            choices.value = ordinary.id
+            assert offset.min == 0 and offset.value == 0
+            fixed = field(user, ui.input, "Vybraný den")
+            assert fixed.props["min"] == date.today().isoformat()
+
