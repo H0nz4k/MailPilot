@@ -61,12 +61,16 @@ class TargetCookingTests(unittest.TestCase):
             calendar.report_is_cooking_day(Path('config.json'), task, date.today())
 
     def worker_namespace(self):
+        from services.collection_status import validate_report_history, validate_task_history
         tree = ast.parse((ROOT / 'services/web_mail_worker.py').read_text(encoding='utf-8'))
         wanted = {'dispatch', 'tick'}
         body = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
         ns = {'Path': Path, 'date': date, 'datetime': datetime, 'WEB_BUILD': 'test',
               'resolve_task_date': Mock(return_value=date(2026, 10, 28)),
               'report_is_cooking_day': Mock(return_value=False),
+              'task_collection_status': Mock(return_value=None),
+              'validate_report_history': validate_report_history,
+              'validate_task_history': validate_task_history,
               'deliver_daily': Mock(), 'record_event': Mock(), 'LOG': Mock(),
               'state_path': lambda p: p, 'load_state': lambda p: {},
               'save_state': Mock(), 'task_file': lambda p: p, 'runtime_status': Mock()}
@@ -75,7 +79,7 @@ class TargetCookingTests(unittest.TestCase):
 
     def test_skip_does_not_deliver_and_is_completed_once(self):
         ns = self.worker_namespace()
-        task = SimpleNamespace(id='task', name='Lunch', report='daily', enabled=True, send_time='06:30')
+        task = SimpleNamespace(id='task', name='Lunch', report='daily', date_mode='today', enabled=True, send_time='06:30')
         ns['load_tasks'] = lambda p: [task]
         ns['tick'](Path('config.json'), datetime(2026, 10, 26, 7))
         ns['deliver_daily'].assert_not_called()
@@ -90,7 +94,7 @@ class TargetCookingTests(unittest.TestCase):
     def test_cooking_target_delivers(self):
         ns = self.worker_namespace()
         ns['report_is_cooking_day'].return_value = True
-        task = SimpleNamespace(id='task', name='Lunch', report='daily')
+        task = SimpleNamespace(id='task', name='Lunch', report='daily', date_mode='today')
         ns['dispatch'](Path('config.json'), task, date(2026, 10, 26))
         ns['deliver_daily'].assert_called_once_with(Path('config.json'), task, date(2026, 10, 28))
 

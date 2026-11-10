@@ -15,6 +15,7 @@ screenshots/
 dist-web/
 dist-web-worker/
 daily_reports.json
+pdf_templates.json
 
 
 .venv-test/

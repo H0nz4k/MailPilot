@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -27,6 +26,22 @@ NSSM_FALLBACK_ASSET = 'repos/H0nz4k/MailPilot/releases/assets/666037948'
 NSSM_FALLBACK_SHA256 = '6cc4eb73e25a8a43d28fbd865918136459db586a48bb52eb1ca50d49d02feaa9'
 NSSM_RC8_SHA256 = '0c36e63cea5b8f9f6f96d497c4fc324909a76ab927c7683fafb45d71e1a8243a'
 REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'START_WEB.cmd', 'START_WORKER_MANUAL.cmd')
+EXCLUDED_DOCUMENTS = {'build_info.json', 'ctete_me.md', 'export_prehledu.md', 'novinky.md', 'kontrola_funkci.md'}
+
+
+def release_readme(commit: str) -> str:
+    """One versioned user guide, assembled anew for every release."""
+    def content(path):
+        text = path.read_text(encoding='utf-8').strip()
+        if text.startswith('# '):
+            text = text.partition('\n')[2].lstrip()
+        return text.replace('{{VERSION}}', WEB_VERSION).replace('{{BUILD}}', WEB_BUILD)
+    return '\n\n'.join((
+        f'# DataShip {WEB_VERSION}\n\nSestavení **{WEB_BUILD}** · Windows 10/11 x64\n\nZdrojový commit: `{commit}`.',
+        f'## Novinky verze {WEB_VERSION}\n\n' + content(ROOT / 'docs/releases' / f'{WEB_VERSION}.md'),
+        f'## Spuštění a nastavení – verze {WEB_VERSION}\n\n' + content(ROOT / 'docs/RELEASE_WINDOWS.md'),
+        f'## Export uloženého přehledu – verze {WEB_VERSION}\n\n' + content(ROOT / 'docs/CLI_EXPORT_PREHLEDU.md'),
+    )) + '\n'
 
 
 def verified_nssm(archive: Path) -> bytes:
@@ -92,6 +107,8 @@ def make_zip(stage: Path, output: Path) -> None:
     with ZipFile(output, 'w', compression=ZIP_DEFLATED, compresslevel=6) as z:
         for item in sorted(stage.rglob('*')):
             if item.is_file():
+                if item.name.casefold() in EXCLUDED_DOCUMENTS:
+                    continue
                 z.write(item, Path('DataShip') / item.relative_to(stage))
 
 
@@ -141,13 +158,7 @@ def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Pa
         sample = ROOT / 'config.example.json'
         shutil.copy2(sample, stage / 'config.example.json')
         shutil.copy2(sample, stage / 'config.json')
-        shutil.copy2(ROOT / 'docs/RELEASE_TEST_CHECKLIST.md', stage / 'KONTROLA_FUNKCI.md')
-        shutil.copy2(ROOT / 'docs/RELEASE_WINDOWS.md', stage / 'CTETE_ME.md')
-        shutil.copy2(ROOT / 'docs/CLI_EXPORT_PREHLEDU.md', stage / 'EXPORT_PREHLEDU.md')
-        shutil.copy2(ROOT / 'docs/releases' / f'{WEB_VERSION}.md', stage / 'NOVINKY.md')
-        metadata = {'product': 'DataShip', 'version': WEB_VERSION, 'build': WEB_BUILD, 'commit': commit,
-                    'platform': 'windows-x64', 'python': sys.version.split()[0]}
-        (stage / 'BUILD_INFO.json').write_text(json.dumps(metadata, indent=2)+'\n', encoding='utf-8')
+        (stage / 'README.md').write_text(release_readme(commit), encoding='utf-8')
         make_zip(stage, paths[0])
         install_nssm(nssm_archive, stage)
         shutil.copy2(ROOT / 'scripts/install_dataship_service.sh', stage / 'INSTALOVAT_SLUZBU.sh')

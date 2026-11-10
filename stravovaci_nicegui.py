@@ -100,6 +100,7 @@ from services.web_first_run import FirstRunMixin, database_error_message
 from services.web_date_ui import CZECH_DATE_LOCALE, initial_report_date
 from services.web_navigation import EDITABLE_TABS, visible_tabs
 from services.web_report_output import manual_pdf_path
+from services.collection_status import COLLECTION_TITLES, validate_report_history
 from services.web_meal_types import normalize_meal_filter, meal_filter_values, meal_filter_caption
 from services.web_daily_design import DailyDesignMixin
 from services.web_daily_design_css import DATASHIP_CSS
@@ -1003,6 +1004,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.date_input.on("change", self._on_date_changed)
 
     async def _on_date_changed(self) -> None:
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer.changed()
         self.update_mail_subject()
         self._queue_daily_summary()
         await self._reload_meal_types()
@@ -1646,6 +1649,8 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 bool(self.raw.get("pdf_tucne", False)),
                 "Vytiskne tučně obsah tabulek; nadpisy jsou tučné vždy.",
             )
+            self.pdf_compact_rows = ui.checkbox("Zkracovat názvy jídel – stejně vysoké řádky", value=bool(self.raw.get("pdf_zkracovat_jidla", False))).classes("w-full").mark("pdf-compact-rows")
+            ui.label("Dlouhé názvy jídel skončí výpustkou (…). Ostatní údaje se přizpůsobí do jednoho řádku; celý název jídla zobrazíte vypnutím této volby.").classes("ui-help")
         with w.form_grid(4):
             self.language_input = w.setting_input(
                 "Jazyk jídelníčku",
@@ -2362,12 +2367,15 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         except ValueError:
             return
         self.date_input.value = selected.strftime(CZECH_DATE_FORMAT)
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer.changed()
         self.date_menu.close()
         self.update_mail_subject()
         self._queue_daily_summary()
         asyncio.create_task(self._reload_meal_types())
 
     def _collect_config(self) -> dict[str, Any]:
+        self.pdf_designer.settings()
         allowed = self._allowed_category_order()
         if not self.all_categories and not allowed:
             raise ConfigError("Správce musí povolit alespoň jednu kategorii.")
@@ -2427,7 +2435,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 "pdf_velikost_dat": data_size,
                 "pdf_velikost_popisku": label_size,
                 "pdf_tucne": bool(self.pdf_bold.value),
+                "pdf_zkracovat_jidla": bool(self.pdf_compact_rows.value),
+                "pdf_rozlozeni": self.pdf_designer.layout_values()["pdf_layout"],
+                "pdf_nove_stranky": self.pdf_designer.layout_values()["pdf_page_breaks"],
                 "seznam_stravniku": bool(self.show_diner_list.value),
+                "odber_stravy": self._selected_collection_status(),
                 # Typ stravy je volba pro jeden ruční export, ne pro worker.
                 "typ_stravy_denne": None,
             }
@@ -2630,10 +2642,11 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
             return
         try:
+            validate_report_history(self._selected_date(), self._selected_collection_status())
             categories = self._manual_daily_categories()
             allowed = tuple(self._allowed_category_order())
             await self._persist_settings()
-        except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
+        except (ValueError, CredentialStoreError, EnvStoreError) as exc:
             ui.notify(str(exc), type="negative", position="top")
             return
 
@@ -2677,9 +2690,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             meal_type=meal_type,
             categories=categories if categories is not None else config.categories,
         )
+        validate_report_history(config.report_date, config.collection_status)
         report = fetch_report(config)
         output_path = (
-            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type)
+            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type, collection_status=config.collection_status, delivery_types=config.delivery_types)
             if categories is not None and allowed_categories is not None else None
         )
         return create_pdf(config, report, output_path=output_path)
@@ -2763,6 +2777,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             ui.notify("Nejprve proveďte úspěšný TEST připojení.", type="warning")
             return
         try:
+            validate_report_history(self._selected_date(), self._selected_collection_status())
             categories = self._manual_daily_categories()
             allowed = tuple(self._allowed_category_order())
             if not self.wizard_recipients.commit_pending():
@@ -2771,10 +2786,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             outgoing = self._outgoing_mail_settings()
             api_key = await self._persist_settings(require_api_key=outgoing["transport"] == "resend")
             sender = normalize_recipient(self._outgoing_sender())
-            template_data = {"report": "Denní stav", "date": self._selected_date().strftime("%d.%m.%Y")}
+            template_data = {"report": COLLECTION_TITLES.get(self._selected_collection_status(), "Denní stav"), "date": self._selected_date().strftime("%d.%m.%Y")}
             subject = outgoing["subject_template"].format(**template_data)
             body = outgoing["body_template"].format(**template_data)
-        except (ConfigError, CredentialStoreError, EnvStoreError) as exc:
+        except (ValueError, CredentialStoreError, EnvStoreError) as exc:
             ui.notify(str(exc), type="negative", position="top")
             return
 
@@ -2849,9 +2864,10 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         if only_cooking_days and not should_send_on_cooking_day(statuses):
             return {"skipped": True, "message": cooking_status_message(statuses)}
 
+        validate_report_history(config.report_date, config.collection_status)
         report = fetch_report(config)
         output_path = (
-            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type)
+            manual_pdf_path(config.pdf_output, categories, allowed_categories, meal_type, collection_status=config.collection_status, delivery_types=config.delivery_types)
             if categories is not None and allowed_categories is not None else None
         )
         path = create_pdf(config, report, output_path=output_path)
@@ -2923,6 +2939,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", dest="export_output", type=Path, metavar="SOUBOR.pdf", help="cílové PDF; relativní cesta platí vůči složce konfigurace")
     parser.add_argument("--open-pdf", action="store_true", help="po exportu otevřít PDF ve výchozím prohlížeči PDF")
     parser.add_argument("--version-file", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--pdf-self-check", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(remaining)
     args.uzaverka_current = period == CURRENT_CLOSING_PERIOD
     args.uzaverka_period = period if isinstance(period, tuple) else None
@@ -2951,6 +2968,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.version_file.write_text(f"{APP_TITLE} {APP_VERSION} build {WEB_BUILD}\n", encoding="utf-8")
         except OSError as exc:
             print(f"Verzi nelze zapsat: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.pdf_self_check is not None:
+        try:
+            from services.pdf_preview import self_check
+            self_check(args.pdf_self_check)
+        except Exception as exc:
+            print(f"Kontrola PDF selhala: {exc}", file=sys.stderr)
             return 2
         return 0
     if args.export_report is not None or args.export_report_id is not None:

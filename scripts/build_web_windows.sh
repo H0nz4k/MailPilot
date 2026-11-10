@@ -39,6 +39,8 @@ echo "[2/5] Sestavuji webovou aplikaci pro prohlizec..."
   --workpath "$ROOT/build/web-gui" \
   --specpath "$ROOT/build/web-spec" \
   --collect-all nicegui \
+  --collect-all pypdfium2 \
+  --collect-all pypdfium2_raw \
   --collect-submodules psycopg \
   --hidden-import services.web_mail_gui \
   --hidden-import services.web_mail_settings_gui \

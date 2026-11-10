@@ -121,6 +121,12 @@ def main():
         )
         if headless.returncode != 2 or not headless_log.is_file() or 'nebyl nalezen' not in headless_log.read_text(encoding='utf-8'):
             raise RuntimeError('Headless saved-report error handling failed.')
+        preview = tmp / 'pdf-preview'
+        subprocess.run([str(app / 'DataShip.exe'), '--pdf-self-check', str(preview)],
+                       check=True, timeout=90, capture_output=True)
+        if not (preview / 'preview.pdf').read_bytes().startswith(b'%PDF') or not (preview / 'preview.png').read_bytes().startswith(b'\x89PNG'):
+            raise RuntimeError('Frozen PDF export/preview check failed.')
+        print('Frozen EXE generated PDF and rendered its PNG using bundled PDFium; no DB/email used.')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]

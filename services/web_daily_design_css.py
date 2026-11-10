@@ -1,6 +1,12 @@
 """DataShip visual layer; themes, zoom and legacy layout settings remain usable."""
 
 DATASHIP_CSS = """
+.ds-pdf-dialog { width: min(1240px, 96vw) !important; max-width: 96vw !important; }
+.ds-pdf-designer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+.ds-pdf-layout-row { padding: 12px; border: 1px solid var(--app-border); border-radius: 8px; }
+.ds-pdf-block { padding: 12px; background: var(--app-primary-soft); border: 1px solid var(--app-field-border); border-radius: 6px; overflow-wrap: anywhere; }
+.ds-pdf-preview-image { background: white; border: 1px solid var(--app-border); box-shadow: 0 3px 16px #0002; }
+@media(max-width: 767px) { .ds-pdf-designer { grid-template-columns: minmax(0, 1fr); gap: 16px; } }
 .dataship-ui {
     --ds-on-primary: var(--custom-on-primary, #ffffff);
     --ds-space: 16px;

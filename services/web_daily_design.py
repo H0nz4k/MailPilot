@@ -10,9 +10,11 @@ from nicegui import run, ui
 import ui_widgets as w
 from services.web_daily_profiles import DailyProfile, load_profiles, profile_file, save_profile
 from stravovaci_sestava import AppConfig, fetch_report, available_delivery_types
+from services.collection_status import COLLECTION_OPTIONS, validate_report_history
 
 
-from services.web_report_wizard import ReportWizardMixin
+from services.web_report_wizard import ReportWizardMixin, RULES, HISTORY_RULES
+from services.web_pdf_designer import PdfDesigner
 
 
 class DailyDesignMixin(ReportWizardMixin):
@@ -39,7 +41,7 @@ class DailyDesignMixin(ReportWizardMixin):
                 self._build_date_field()
                 self.date_input.classes(remove="w-36 shrink-0").classes("w-full").props("outlined")
                 self.date_input.props["label"] = "Datum náhledu"
-                ui.label("Výchozí je dnešek. Toto datum slouží pro náhled; pravidelné odesílání nastavíte ve třetím kroku.").classes("ui-help")
+                ui.label("Výchozí je dnešek. Toto datum slouží pro náhled; pravidelné odesílání nastavíte ve třetím kroku. Minulost je dostupná pouze pro speciální sestavu Odebraná / neodebraná strava.").classes("ui-help")
                 with ui.element("div").classes("ds-report-filters w-full"):
                     self.meal_type_select = ui.select({}, value=[], multiple=True, label="Typy stravy").classes("hidden")
                     self.meal_types_button = ui.button("Typy stravy: všechny", icon="checklist", on_click=self._open_meal_types_dialog).props("outline no-caps").classes("ds-report-filter")
@@ -62,7 +64,13 @@ class DailyDesignMixin(ReportWizardMixin):
             self._wizard_cards.append(selection)
             with w.card().classes("w-full") as pdf:
                 ui.label("Co má být v PDF?").classes("app-heading")
-                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam"}, value="names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("ds-wizard-content w-full")
+                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam", "collection": "Speciální: Odebraná / neodebraná strava"}, value="collection" if self.raw.get("odber_stravy") else "names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("ds-wizard-content w-full")
+                self.collection_status_select = ui.select(COLLECTION_OPTIONS, value=self.raw.get("odber_stravy") or "both", label="Které odběry zobrazit?").props("outlined").classes("w-full").mark("collection-status")
+                self.collection_status_select.bind_visibility_from(self.wizard_content, "value", backward=lambda value: value == "collection")
+                with ui.column().classes("w-full gap-2") as history:
+                    ui.label("Tato sestava umožňuje i historii. Platí datum, typy stravy, kategorie a typy výdeje z prvního kroku.").classes("ui-help")
+                    ui.button("Upravit datum a filtry", icon="event", on_click=lambda: self._wizard_show_step(1)).props("outline no-caps")
+                history.bind_visibility_from(self.wizard_content, "value", backward=lambda value: value == "collection")
                 self.daily_pdf_settings_button = ui.button("Nastavení PDF", icon="tune", on_click=lambda: self.daily_pdf_settings_dialog.open()).props("outline no-caps")
                 with ui.row().classes("ds-summary-heading w-full items-center justify-between"):
                     with ui.column().classes("gap-1 min-w-0"):
@@ -93,10 +101,12 @@ class DailyDesignMixin(ReportWizardMixin):
             self._build_wizard_footer()
 
         self._build_daily_pdf_settings_dialog()
-        self.wizard_content.on_value_change(lambda e: self.show_diner_list.set_value(e.value == "names"))
-        self.show_diner_list.on_value_change(lambda e: self.wizard_content.set_value("names" if e.value else "counts"))
+        self.wizard_content.on_value_change(lambda _e: self._content_changed())
+        self.collection_status_select.on_value_change(lambda _e: self._daily_filters_changed())
+        self.show_diner_list.on_value_change(lambda e: self.wizard_content.set_value("names" if e.value else "counts") if self.wizard_content.value != "collection" else None)
         self._build_daily_summary_dialog()
         self._build_daily_save_dialog()
+        self._content_changed()
         self._render_daily_profile_choices()
         if self.daily_profiles:
             self._load_daily_profile(self.daily_profiles[0])
@@ -107,6 +117,21 @@ class DailyDesignMixin(ReportWizardMixin):
         values = self.delivery_type_select.value or []
         self.delivery_types_button.set_text(f"Typy výdeje ({len(values)})" if values else "Typy výdeje: všechny")
         self._daily_filters_changed()
+
+    def _selected_collection_status(self):
+        return self.collection_status_select.value if self.wizard_content.value == "collection" else None
+
+    def _content_changed(self):
+        special = self.wizard_content.value == "collection"
+        self.show_diner_list.set_value(self.wizard_content.value != "counts")
+        self.show_diner_list.set_enabled(not special)
+        self.wizard_mode.set_options({**RULES, **HISTORY_RULES} if special else RULES)
+        if not special and self.wizard_mode.value in HISTORY_RULES:
+            self.wizard_mode.value = "today"
+        self._daily_filters_changed()
+        self._wizard_queue_preview()
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer._render_layout()
 
     async def _open_delivery_types_dialog(self):
         if not self.connection_ok or not self._connection_password:
@@ -208,16 +233,33 @@ class DailyDesignMixin(ReportWizardMixin):
         """Výběr je na hlavní stránce zastoupen počtem; položky jsou v dialogu."""
 
     def _build_daily_pdf_settings_dialog(self) -> None:
-        with ui.dialog() as self.daily_pdf_settings_dialog, ui.card().classes("ds-mail-dialog"):
+        with ui.dialog() as self.daily_pdf_settings_dialog, ui.card().classes("ds-mail-dialog ds-pdf-dialog"):
             ui.label("Nastavení PDF").classes("ds-dialog-title")
             with ui.column().classes("ds-dialog-body w-full"):
-                self._build_pdf_settings_section()
+                with ui.tabs().props("no-caps").classes("w-full") as tabs:
+                    appearance = ui.tab("Vzhled a obsah", icon="tune")
+                    layout = ui.tab("Rozložení, náhled a šablony", icon="dashboard_customize")
+                with ui.tab_panels(tabs, value=appearance).classes("w-full"):
+                    with ui.tab_panel(appearance).classes("p-0"):
+                        self._build_pdf_settings_section()
+                    with ui.tab_panel(layout).classes("p-0"):
+                        self.pdf_designer = PdfDesigner(self)
                 for field in (self.category_separation, self.show_categories, self.show_norms, self.show_diner_list, self.show_delivery_summary, self.delivery_show_names, self.delivery_page_per_type,
-                              self.pdf_orientation, self.pdf_data_size, self.pdf_label_size, self.pdf_bold,
+                              self.pdf_orientation, self.pdf_data_size, self.pdf_label_size, self.pdf_bold, self.pdf_compact_rows,
                               self.language_input, self.menu_number):
-                    field.on_value_change(lambda _e: self._mark_daily_dirty())
+                    field.on_value_change(lambda _e: self.pdf_designer.changed())
             with ui.row().classes("ds-dialog-footer w-full justify-end"):
                 ui.button("Hotovo", on_click=self.daily_pdf_settings_dialog.close).props("no-caps unelevated")
+
+    def _apply_pdf_appearance(self, settings):
+        fields = {"pdf_orientation": self.pdf_orientation, "pdf_data_font_size": self.pdf_data_size,
+                  "pdf_label_font_size": self.pdf_label_size, "pdf_bold": self.pdf_bold,
+                  "pdf_compact_rows": self.pdf_compact_rows, "category_separation": self.category_separation,
+                  "show_by_categories": self.show_categories, "show_by_norms": self.show_norms,
+                  "show_diner_list": self.show_diner_list, "show_delivery_summary": self.show_delivery_summary,
+                  "delivery_show_names": self.delivery_show_names, "delivery_page_per_type": self.delivery_page_per_type}
+        for key, field in fields.items():
+            field.value = settings[key]
 
     def _build_daily_summary_dialog(self) -> None:
         with ui.dialog() as self.daily_summary_dialog, ui.card().classes("ds-mail-dialog ds-summary-dialog"):
@@ -292,16 +334,21 @@ class DailyDesignMixin(ReportWizardMixin):
 
     def _daily_filters_changed(self) -> None:
         self._mark_daily_dirty()
+        self._wizard_update_caption()
         self._queue_daily_summary()
+        if hasattr(self, "pdf_designer"):
+            self.pdf_designer.changed()
 
     def _current_daily_profile(self) -> DailyProfile:
         if not self.categories:
             raise ValueError("Jídelna ještě není připojena. Požádejte správce o nastavení připojení.")
+        self.pdf_designer.settings()
         return DailyProfile.from_dict({
             "id": self.daily_profile_id or str(uuid4()), "name": self.daily_profile_name.value,
             "categories": self._selected_category_order(),
             "meal_type": self._selected_daily_meal_type(),
             "delivery_types": list(self.delivery_type_select.value or []),
+            "collection_status": self._selected_collection_status(),
             "category_separation": bool(self.category_separation.value),
             "show_by_categories": bool(self.show_categories.value),
             "show_by_norms": bool(self.show_norms.value),
@@ -313,6 +360,8 @@ class DailyDesignMixin(ReportWizardMixin):
             "pdf_data_font_size": self.pdf_data_size.value,
             "pdf_label_font_size": self.pdf_label_size.value,
             "pdf_bold": bool(self.pdf_bold.value),
+            "pdf_compact_rows": bool(self.pdf_compact_rows.value),
+            **self.pdf_designer.layout_values(),
             "language": self.language_input.value,
             "menu_list_number": self.menu_number.value,
         })
@@ -340,6 +389,8 @@ class DailyDesignMixin(ReportWizardMixin):
         self.selected_categories = set(self.allowed_categories)
         self.meal_type_select.value = []
         self.delivery_type_select.value = []
+        self.wizard_content.value = "names"
+        self.collection_status_select.value = "both"
         self._render_daily_selection()
         self._mark_daily_dirty()
         self._render_daily_profile_choices()
@@ -375,6 +426,8 @@ class DailyDesignMixin(ReportWizardMixin):
             self.delivery_type_select.options = {**self.delivery_type_select.options, **{value: value for value in profile.delivery_types}}
             self.delivery_type_select.value = list(profile.delivery_types)
             self._delivery_types_changed()
+            self.collection_status_select.value = profile.collection_status or "both"
+            self.wizard_content.value = "collection" if profile.collection_status else "names" if profile.show_diner_list else "counts"
             for field, value in ((self.category_separation, profile.category_separation),
                                  (self.show_categories, profile.show_by_categories),
                                  (self.show_norms, profile.show_by_norms),
@@ -383,6 +436,8 @@ class DailyDesignMixin(ReportWizardMixin):
                                  (self.delivery_show_names, profile.delivery_show_names),
                                  (self.delivery_page_per_type, profile.delivery_page_per_type)):
                 field.value = value
+            self.pdf_compact_rows.value = profile.pdf_compact_rows
+            self.pdf_designer.set_layout(profile.pdf_layout, profile.pdf_page_breaks)
             for field, key, raw_key, default in (
                 (self.pdf_orientation, "pdf_orientation", "pdf_orientace", "na_vysku"),
                 (self.pdf_data_size, "pdf_data_font_size", "pdf_velikost_dat", 8.5),
@@ -426,6 +481,8 @@ class DailyDesignMixin(ReportWizardMixin):
         try:
             categories = self._manual_daily_categories()
             day = self._selected_date()
+            status = self._selected_collection_status()
+            validate_report_history(day, status)
             meal_type = self._selected_daily_meal_type()
             database = dict(self._collect_database(), password=self._connection_password)
             self.daily_summary_total.set_text("—")
@@ -435,7 +492,7 @@ class DailyDesignMixin(ReportWizardMixin):
             self.daily_summary_status.set_text("Načítám počty porcí…")
             config = AppConfig(database=database, report_date=day, categories=categories,
                 meal_type=meal_type, delivery_types=tuple(self.delivery_type_select.value or []), language=str(self.language_input.value or "česky"),
-                menu_list_number=int(self.menu_number.value or 1), show_diner_list=False)
+                menu_list_number=int(self.menu_number.value or 1), show_diner_list=False, collection_status=status)
             report = await run.io_bound(self._fetch_daily_summary, config)
         except Exception as exc:
             if revision == self._daily_summary_revision:

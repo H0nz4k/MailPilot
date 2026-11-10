@@ -25,6 +25,8 @@ def manual_pdf_path(
     selected_categories: Sequence[str],
     allowed_categories: Sequence[str],
     meal_type: str | None = None,
+    *, collection_status: str | None = None,
+    delivery_types: Sequence[str] = (),
 ) -> Path:
     """Return distinct paths for category subsets without touching config.
 
@@ -37,15 +39,19 @@ def manual_pdf_path(
     allowed = {str(code).strip() for code in allowed_categories}
     if not selected or not selected <= allowed:
         raise ValueError("Pro PDF vyberte alespoň jednu povolenou kategorii.")
-    if selected == allowed and not meal_type:
+    if selected == allowed and not meal_type and not collection_status and not delivery_types:
         return Path(configured_path)
 
     ordered = sorted(selected, key=lambda code: (code.casefold(), code))
     # A short fingerprint distinguishes category and meal selections without
     # placing every category name into the filename.
     signature = "\\0".join(ordered) + "\\0" + (meal_type or "")
+    if collection_status or delivery_types:
+        signature += "\\0" + (collection_status or "") + "\\0" + "\\0".join(sorted(delivery_types))
     digest = sha256(signature.encode("utf-8")).hexdigest()[:12]
     suffix = f"kat-{len(ordered)}_{digest}"
+    if collection_status:
+        suffix = f"odbery-{collection_status}_{digest}"
     path = Path(configured_path)
     return path.with_name(f"{path.stem}_{suffix}{path.suffix}")
 
