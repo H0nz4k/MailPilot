@@ -114,8 +114,42 @@ def imported_scheduler_jobs(path, workspace):
     from settings_bridge import workspace_path
     from planovac import ACTION_LABELS, format_schedule, load_jobs, scheduler_config_path
     config_path = workspace_path(path, workspace)
-    return [{'name': job.name, 'action': ACTION_LABELS[job.action], 'schedule': format_schedule(replace(job, enabled=True))}
+    return [{'name': job.name, 'action': ACTION_LABELS[job.action], 'schedule': format_schedule(replace(job, enabled=True)),
+             'convertible': job.action == 'poctyemailem' and job.schedule_type == 'daily'}
             for job in load_jobs(scheduler_config_path(config_path.parent), config_path.parent)]
+
+
+def legacy_job_wizard(path, workspace, name):
+    """Prepare, but do not save or enable, a converted daily email job."""
+    from settings_bridge import workspace_path
+    from planovac import load_jobs, scheduler_config_path
+    from services.web_meal_types import meal_filter_values
+    from services.config_io import load_raw_config
+    config_path = workspace_path(path, workspace)
+    job = next((item for item in load_jobs(scheduler_config_path(config_path.parent), config_path.parent)
+                if item.name == name), None)
+    if job is None or job.action != 'poctyemailem' or job.schedule_type != 'daily':
+        raise ValueError('Tuto starší úlohu zatím nelze převést průvodcem.')
+    profile = legacy_global_profile(str(config_path), job.name)
+    options = filter_options(str(config_path), date.today().isoformat())
+    meal_names = {item.casefold(): item for item in options['meals']}
+    raw = load_raw_config(config_path)
+    recipients = raw.get('mail_prijemci') or []
+    if isinstance(recipients, str):
+        recipients = [recipients]
+    if not isinstance(recipients, list) or any(not isinstance(item, str) for item in recipients):
+        raise ValueError('Příjemce staré úlohy nelze načíst; nastavte je ručně.')
+    values = {'name':job.name, 'date':date.today().isoformat(), 'categories':list(profile.categories),
+              'meals':[meal_names.get(value.casefold(), value) for value in meal_filter_values(profile.meal_type)] or None,
+              'deliveries':list(profile.delivery_types) or None,
+              'content':'names' if profile.show_diner_list else 'counts', 'mode':'today',
+              'output':'email', 'recipients':', '.join(recipients), 'time':job.time,
+              'enabled':False, 'cooking':raw.get('mail_jen_varne_dny', False), 'calendar_mode':'report', 'calendars':[]}
+    for field in ('category_separation','show_by_categories','show_by_norms','show_delivery_summary',
+                  'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
+                  'pdf_data_font_size','pdf_label_font_size','language','menu_list_number','pdf_layout','pdf_page_breaks'):
+        values[field] = getattr(profile, field)
+    return values
 
 
 def tasks(path):

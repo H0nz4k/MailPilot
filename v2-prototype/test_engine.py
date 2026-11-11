@@ -1507,7 +1507,7 @@ def test_imported_scheduler_jobs_are_read_only_and_visible(tmp_path):
                                             'schedule':{'type':'daily','time':'08:30'}, 'enabled':False}]}), encoding='utf-8')
     before = jobfile.read_bytes()
     jobs = legacy_bridge.imported_scheduler_jobs(str(config),str(workspace))
-    assert jobs == [{'name':'Uzávěrka','action':'Uzávěrka','schedule':'Denně v 08:30'}]
+    assert jobs == [{'name':'Uzávěrka','action':'Uzávěrka','schedule':'Denně v 08:30','convertible':False}]
     assert jobfile.read_bytes() == before
     with pytest.raises(ValueError,match='odděleném prostoru'):
         legacy_bridge.imported_scheduler_jobs(str(config),str(tmp_path/'other'))
@@ -1587,3 +1587,23 @@ def test_connection_and_category_settings_reject_stale_revisions(tmp_path, monke
         settings_bridge.save_category_settings(str(path),str(workspace),'pw',True,[],expected_revision=cat_revision)
     result=json.loads(path.read_text(encoding='utf-8'))
     assert result['databaze']['host']=='new' and not result['poctyemailem']['vsechny_kategorie']
+
+def test_convert_legacy_daily_job_prepares_disabled_wizard_without_writing(tmp_path, monkeypatch):
+    import json, sys
+    from stravovaci_sestava import AppConfig
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    workspace=tmp_path/'workspace'; workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text(json.dumps({'mail_prijemci':['a@example.invalid'],'mail_jen_varne_dny':True}),encoding='utf-8')
+    jobs=workspace/'planovac.json'
+    jobs.write_text(json.dumps({'jobs':[{'name':'Denní','action':'poctyemailem','path':'C:/old/app.exe',
+                                      'schedule':{'type':'daily','time':'07:15'},'enabled':False}]}),encoding='utf-8')
+    before=jobs.read_bytes()
+    cfg=AppConfig(database={},report_date=date.today(),categories=('ZACI',),language='česky',menu_list_number=1,show_diner_list=False)
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:cfg)
+    monkeypatch.setattr(legacy_bridge,'filter_options',lambda path,day:{'meals':[],'deliveries':[]})
+    result=legacy_bridge.legacy_job_wizard(str(config),str(workspace),'Denní')
+    assert result['enabled'] is False and result['time']=='07:15' and result['content']=='counts'
+    assert result['recipients']=='a@example.invalid' and result['cooking'] is True
+    assert jobs.read_bytes()==before and not (workspace/'web_mail_tasks.json').exists()

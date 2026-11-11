@@ -75,3 +75,5 @@ Jeden testovací e-mail se smyšleným PDF odeslal zabalený engine přes Resend
 Ve Windows proběhl izolovaný test sestaveného enginu s administrátorskými právy: instalace DataShip2Scheduler, spuštění, heartbeat workeru, zastavení a odstranění služby uspěly. Použil prázdné úlohy a vlastní testovací konfiguraci; služba po testu nezůstala nainstalovaná. Běh skutečné naplánované úlohy pod systémovým účtem ani automatické odeslání tím nebyly ověřeny.
 
 Druhý izolovaný test skutečné Windows služby použil jedinou testovací úlohu typu pouze PDF a dostupnou databázi. Služba pod systémovým účtem vytvořila PDF, poté byla zastavena a odstraněna; e-mail neodesílala a testovací prostor byl odstraněn. Automatické odeslání e-mailu službou stále nebylo ověřeno.
+
+Denní e-mailovou úlohu starého desktopového plánovače lze načíst do průvodce s převzatými filtry, příjemci a časem. Před uložením je třeba zkontrolovat nastavení; nová úloha je pozastavená a původní definice zůstává zachována. Ostatní typy a intervalové plány zatím převedeny nejsou.

@@ -180,6 +180,9 @@ def handle(request):
     if request.get('action') == 'legacy_options':
         from legacy_bridge import filter_options
         return filter_options(request.get('config_path'), request.get('date'))
+    if request.get('action') == 'legacy_job_wizard':
+        from legacy_bridge import legacy_job_wizard
+        return legacy_job_wizard(request.get('config_path'), request['workspace_dir'], request.get('name'))
     if request.get('action') == 'imported_scheduler_jobs':
         from legacy_bridge import imported_scheduler_jobs
         return imported_scheduler_jobs(request.get('config_path'), request['workspace_dir'])
