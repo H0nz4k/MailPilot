@@ -251,3 +251,45 @@ def test_wizard_persists_pdf_options_in_profile(tmp_path, monkeypatch):
     assert profile.category_separation and not profile.show_by_categories
     assert profile.show_delivery_summary and profile.delivery_page_per_type
     assert profile.pdf_orientation=='na_vysku' and profile.pdf_bold is True
+
+
+def test_scheduler_status_reports_observed_worker_and_service_without_control(tmp_path,monkeypatch):
+    import sys
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    calls=[]
+    monkeypatch.setattr('services.web_worker_status.observed_status',lambda path:'Běh plánovače není potvrzen')
+    monkeypatch.setattr('services.web_mail_nssm.scheduler_installation_notice',lambda path:'Chybí služba')
+    def command(path,action):
+        calls.append(action)
+        raise ValueError('NSSM chybí')
+    monkeypatch.setattr('services.web_mail_nssm.service_command',command)
+    status=legacy_bridge.scheduler_status(str(tmp_path/'config.json'))
+    assert calls==['status']
+    assert status['worker']=='Běh plánovače není potvrzen'
+    assert status['notice']=='Chybí služba' and 'NSSM chybí' in status['service']
+
+
+def test_edit_task_preserves_profile_and_revalidates_changes(tmp_path,monkeypatch):
+    import sys
+    import pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    from services.web_mail_task_store import load_tasks,task_file
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'name':'Původní','date':date.today().isoformat(),'category':'all','meal':'all','content':'names',
+          'mode':'today','output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':True}
+    path=str(tmp_path/'config.json')
+    before=legacy_bridge.save_task(path,data)['task']
+    legacy_bridge.update_task(path,before['id'],{'name':'Nový název','send_time':'09:15','recipients':['b@example.invalid']})
+    after=load_tasks(task_file(tmp_path))[0]
+    assert after.name=='Nový název' and after.send_time=='09:15' and after.recipients==('b@example.invalid',)
+    assert after.id==before['id'] and after.profile_id==before['profile_id']
+    assert not after.enabled and after.only_cooking_days
+    with pytest.raises(ValueError):
+        legacy_bridge.update_task(path,before['id'],{'recipients':['invalid']})
+    with pytest.raises(ValueError):
+        legacy_bridge.update_task(path,before['id'],{'date_mode':'offset','day_offset':-1})
+    assert load_tasks(task_file(tmp_path))[0] == after

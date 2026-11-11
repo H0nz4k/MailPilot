@@ -69,8 +69,7 @@ def tasks(path):
     from services.web_mail_task_store import load_tasks, task_file
     from services.web_worker_status import observed_status
     directory = Path(path).parent
-    return [{'id': task.id, 'name': task.name, 'time': task.send_time,
-             'enabled': task.enabled, 'status': observed_status(directory, task),
+    return [{**task.to_dict(), 'time': task.send_time, 'status': observed_status(directory, task),
              'output': task.output_mode} for task in load_tasks(task_file(directory))]
 
 
@@ -164,3 +163,42 @@ def set_task_enabled(path, task_id, enabled):
         updated = replace(updated, first_send_date=max(first, task.first_send_date or first))
     save_tasks(target, [updated if item.id == task_id else item for item in existing])
     return {'id': updated.id, 'enabled': updated.enabled}
+
+
+def scheduler_status(path):
+    from services.web_mail_nssm import scheduler_installation_notice, service_command
+    from services.web_worker_status import observed_status
+    directory = Path(path).parent
+    installation = scheduler_installation_notice(directory)
+    try:
+        service = service_command(directory, 'status')
+    except (OSError, ValueError, RuntimeError) as exc:
+        service = f'Stav služby nelze zjistit: {exc}'
+    return {'worker': observed_status(directory), 'service': service, 'notice': installation}
+
+
+def update_task(path, task_id, changes):
+    from datetime import datetime
+    from services.collection_status import validate_task_history
+    from services.web_daily_profiles import task_collection_status
+    from services.web_mail_tasks import MailTask, next_send_at
+    from services.web_mail_task_store import load_tasks, save_tasks, task_file
+    allowed = {'name', 'send_time', 'recipients', 'output_directory', 'output_filename',
+               'date_mode', 'day_offset', 'only_cooking_days'}
+    if not isinstance(task_id, str) or not isinstance(changes, dict) or set(changes) - allowed:
+        raise ValueError('Neplatná úprava úlohy.')
+    configuration(path)
+    directory = Path(path).parent
+    target = task_file(directory)
+    existing = load_tasks(target)
+    original = next((item for item in existing if item.id == task_id), None)
+    if original is None:
+        raise ValueError('Úloha již neexistuje.')
+    updated = MailTask.from_dict({**original.to_dict(), **changes})
+    validate_task_history(updated, task_collection_status(directory, updated))
+    if updated.send_time != original.send_time:
+        next_run = next_send_at(replace(updated, enabled=True), datetime.now())
+        first = next_run.date().isoformat()
+        updated = replace(updated, first_send_date=max(first, original.first_send_date or first))
+    save_tasks(target, [updated if item.id == task_id else item for item in existing])
+    return {'id':updated.id}
