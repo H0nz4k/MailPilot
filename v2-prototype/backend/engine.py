@@ -31,6 +31,8 @@ class FixtureCursor:
 def handle(request):
     # Version 1.4 does not participate in v2's interprocess lock. Never mutate
     # its task/profile store, even if a caller bypasses the user interface.
+    if request.get('action') in {'save_mail_settings', 'save_database_settings', 'save_category_settings'} and not isinstance(request.get('revision'), str):
+        raise ValueError('Chybí verze nastavení. Zavřete jej a znovu načtěte.')
     if request.get('action') in {'legacy_save_task', 'legacy_delete_task',
                                  'legacy_update_task', 'legacy_set_task_enabled'}:
         from settings_bridge import workspace_path
@@ -45,6 +47,8 @@ def handle(request):
         from bulk_bridge import send_message
         return send_message(request.get('config_path'),request.get('data', {}))
     if request.get('action') == 'save_special':
+        if not isinstance(request.get('data'), dict) or not isinstance(request['data'].get('revision'), str):
+            raise ValueError('Chybí verze nastavení. Zavřete jej a znovu načtěte.')
         from special_bridge import save_special
         return save_special(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('data', {}))
     if request.get('action') == 'special_defaults':
@@ -91,16 +95,16 @@ def handle(request):
         return category_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))
     if request.get('action') == 'save_category_settings':
         from settings_bridge import save_category_settings
-        return save_category_settings(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('all'), request.get('selected'))
+        return save_category_settings(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('all'), request.get('selected'), request.get('revision'))
     if request.get('action') == 'read_settings':
         from settings_bridge import read_settings
         return read_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))
     if request.get('action') == 'save_database_settings':
         from settings_bridge import save_connection
-        return save_connection(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('database'), request.get('database_password'))
+        return save_connection(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('database'), request.get('database_password'), request.get('revision'))
     if request.get('action') == 'save_mail_settings':
         from settings_bridge import save_mail
-        return save_mail(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('changes'), request.get('resend_key'))
+        return save_mail(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('changes'), request.get('resend_key'), request.get('revision'))
     if request.get('action') == 'workspace_status':
         path = Path(request['workspace_dir']) / 'config.json'
         return {'exists': path.is_file(), 'config_path': str(path) if path.is_file() else None}

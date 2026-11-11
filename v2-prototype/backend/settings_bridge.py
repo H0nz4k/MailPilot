@@ -1,7 +1,19 @@
 """Password-protected, minimal settings bridge for the isolated v2 workspace."""
 from pathlib import Path
 import hmac
+import hashlib
+import json
 from task_lock import task_store_lock
+
+
+def revision(value):
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def check_revision(expected, value):
+    if expected is not None and (not isinstance(expected, str) or expected != revision(value)):
+        raise ValueError('Nastavení se mezitím změnilo. Zavřete jej a znovu načtěte.')
 
 
 def authorize(password):
@@ -27,12 +39,14 @@ def read_settings(config_path, workspace, password):
     authorize(password)
     path = workspace_path(config_path, workspace)
     settings = load_settings(settings_path(path.parent))
-    return {'database':database_parameters(load_raw_config(path)),
-            'mail':{key:settings[key] for key in DEFAULTS},
+    raw = load_raw_config(path)
+    mail = {key:settings[key] for key in DEFAULTS}
+    return {'database':database_parameters(raw), 'database_revision':revision(raw.get('databaze')),
+            'mail':mail, 'mail_revision':revision(mail),
             'resend_key_present':bool(get_resend_api_key())}
 
 
-def save_mail(config_path, workspace, password, changes, resend_key=None):
+def save_mail(config_path, workspace, password, changes, resend_key=None, expected_revision=None):
     from env_store import EnvStoreError, set_resend_api_key
     from services.web_mail_settings import load_settings, save_settings, settings_path
     authorize(password)
@@ -46,6 +60,8 @@ def save_mail(config_path, workspace, password, changes, resend_key=None):
     with task_store_lock(path.parent):
         settings_file = settings_path(path.parent)
         settings = load_settings(settings_file)
+        from services.web_mail_settings import DEFAULTS
+        check_revision(expected_revision, {key:settings[key] for key in DEFAULTS})
         settings.update(changes)
         # Never accept or alter the isolated service's name via mail settings.
         settings['service_name'] = 'DataShip2Scheduler'
@@ -60,10 +76,10 @@ def save_mail(config_path, workspace, password, changes, resend_key=None):
                 set_resend_api_key(resend_key)
             except (EnvStoreError, OSError) as exc:
                 raise ValueError('Nastavení bylo uloženo, ale API klíč se nepodařilo uložit.') from exc
-    return {'saved':True}
+    return {'saved':True, 'revision':revision({key:settings[key] for key in DEFAULTS})}
 
 
-def save_connection(config_path, workspace, password, values, new_database_password=None):
+def save_connection(config_path, workspace, password, values, new_database_password=None, expected_revision=None):
     from credential_store import get_password, set_password
     from services.config_io import load_raw_config, normalize_database, save_raw_config
     from services.database import probe_connection
@@ -80,6 +96,7 @@ def save_connection(config_path, workspace, password, values, new_database_passw
     connection = probe_connection(database, secret, remember=False)
     with task_store_lock(path.parent):
         raw = load_raw_config(path)
+        check_revision(expected_revision, raw.get('databaze'))
         raw['databaze'] = database
         if new_database_password:
             set_password(database, new_database_password)
@@ -104,11 +121,11 @@ def category_settings(config_path, workspace, password):
     secret = db.pop('password')
     info = probe_connection(db, secret, remember=False)
     raw = load_raw_config(path)
-    return {'all':all_client_categories(raw), 'selected':peek_client_categories(raw),
+    return {'revision':revision(raw.get('poctyemailem')), 'all':all_client_categories(raw), 'selected':peek_client_categories(raw),
             'available':[{'code':code,'name':name or code} for code,name in info.categories]}
 
 
-def save_category_settings(config_path, workspace, password, use_all, selected):
+def save_category_settings(config_path, workspace, password, use_all, selected, expected_revision=None):
     from services.config_io import load_raw_config, save_raw_config
     authorize(password)
     path = workspace_path(config_path, workspace)
@@ -120,6 +137,7 @@ def save_category_settings(config_path, workspace, password, use_all, selected):
         if not use_all and (not selected or not set(selected).issubset(available)):
             raise ValueError('Vyberte alespoň jednu dostupnou kategorii.')
         raw = load_raw_config(path)
+        check_revision(expected_revision, raw.get('poctyemailem'))
         block = raw.get('poctyemailem') or {}
         if not isinstance(block, dict):
             raise ValueError('Neplatné nastavení kategorií.')

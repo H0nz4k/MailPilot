@@ -1083,6 +1083,9 @@ def test_save_special_mapping_preserves_categories_outside_scope(tmp_path,monkey
     raw=json.loads(config.read_text(encoding='utf-8'))
     assert raw['z17']['mapovani_kategorii']['0102']==['MIMO']
     assert raw['z17']['mapovani_kategorii']['0103']==['ZACI']
+    with pytest.raises(ValueError,match='mezitím změnilo'):
+        special_bridge.save_special(str(config),str(workspace),'admin',data)
+    assert json.loads(config.read_text(encoding='utf-8')) == raw
 
 
 def test_save_report_files_copies_only_one_generated_folder_without_overwrite(tmp_path):
@@ -1540,3 +1543,47 @@ def test_concurrent_connection_and_categories_preserve_both_changes(tmp_path, mo
     result = json.loads(config.read_text(encoding='utf-8'))
     assert result['databaze']['host'] == 'new'
     assert result['poctyemailem']['povolene_kategorie'] == ['ZACI']
+
+def test_mail_settings_reject_stale_revision_without_overwrite(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import settings_bridge, credential_store, env_store
+    from services.web_mail_settings import load_settings, settings_path, DEFAULTS
+    workspace = tmp_path / 'workspace'; workspace.mkdir()
+    config = workspace / 'config.json'; config.write_text('{}', encoding='utf-8')
+    monkeypatch.setattr(credential_store, 'get_admin_password', lambda: 'pw')
+    monkeypatch.setattr(env_store, 'get_resend_api_key', lambda: None)
+    current = load_settings(settings_path(workspace))
+    old = settings_bridge.revision({key:current[key] for key in DEFAULTS})
+    first = settings_bridge.save_mail(str(config),str(workspace),'pw',{'from_name':'První'},expected_revision=old)
+    assert first['revision'] != old
+    with pytest.raises(ValueError,match='mezitím změnilo'):
+        settings_bridge.save_mail(str(config),str(workspace),'pw',{'from_name':'Zastaralý'},expected_revision=old)
+    assert load_settings(settings_path(workspace))['from_name'] == 'První'
+
+def test_connection_and_category_settings_reject_stale_revisions(tmp_path, monkeypatch):
+    import json, sys
+    from types import SimpleNamespace
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import settings_bridge, credential_store
+    import services.database as database_service
+    workspace = tmp_path / 'workspace'; workspace.mkdir()
+    path = workspace / 'config.json'
+    db = {'host':'old','port':5432,'dbname':'db','user':'test'}
+    path.write_text(json.dumps({'databaze':db,'poctyemailem':{'vsechny_kategorie':True}}), encoding='utf-8')
+    monkeypatch.setattr(settings_bridge, 'authorize', lambda password: None)
+    monkeypatch.setattr(settings_bridge, 'category_settings', lambda *args: {'available':[{'code':'ZACI'}]})
+    monkeypatch.setattr(credential_store, 'get_password', lambda database: 'test')
+    monkeypatch.setattr(database_service, 'probe_connection', lambda *args, **kwargs: SimpleNamespace(subject_name='Test',database_name='db'))
+    db_revision = settings_bridge.revision(db)
+    cat_revision = settings_bridge.revision({'vsechny_kategorie':True})
+    settings_bridge.save_connection(str(path),str(workspace),'pw',{**db,'host':'new'},expected_revision=db_revision)
+    with pytest.raises(ValueError,match='mezitím změnilo'):
+        settings_bridge.save_connection(str(path),str(workspace),'pw',{**db,'host':'stale'},expected_revision=db_revision)
+    settings_bridge.save_category_settings(str(path),str(workspace),'pw',False,['ZACI'],expected_revision=cat_revision)
+    with pytest.raises(ValueError,match='mezitím změnilo'):
+        settings_bridge.save_category_settings(str(path),str(workspace),'pw',True,[],expected_revision=cat_revision)
+    result=json.loads(path.read_text(encoding='utf-8'))
+    assert result['databaze']['host']=='new' and not result['poctyemailem']['vsechny_kategorie']

@@ -1,6 +1,7 @@
 """Z 17-01 preparation using the existing report implementation."""
 from pathlib import Path
 from task_lock import task_store_lock
+from settings_bridge import revision, check_revision
 from uuid import uuid4
 import json
 import tempfile
@@ -18,7 +19,7 @@ def special_defaults(config_path):
     allowed = {item['code'] for item in categories}
     selected = sorted(allowed) if form.use_all_categories else [c for c in form.categories if c in allowed]
     mapping = {key:[c for c in values if c in allowed] for key,values in peek_row_mapping(raw).items()}
-    return {'year':form.year,'categories':categories,'selected':selected,'mapping':mapping,
+    return {'revision':revision(raw.get('z17')), 'year':form.year,'categories':categories,'selected':selected,'mapping':mapping,
             'supplement_rows':list(peek_supplement_rows(raw)),
             'rows':[{'code':code,'label':label} for code,label in row_choices()]}
 
@@ -55,6 +56,7 @@ def save_special(config_path, workspace, password, data):
     path = workspace_path(config_path, workspace)
     with task_store_lock(path.parent):
         raw = load_raw_config(path)
+        check_revision(data.get('revision'), raw.get('z17'))
         year = parse_z17_year(data.get('year'))
         allowed = {item['code'] for item in info(str(path))['categories']}
         selected, mapping, supplement = data.get('selected'), data.get('mapping'), data.get('supplement_rows')
@@ -69,5 +71,6 @@ def save_special(config_path, workspace, password, data):
         merged = {row:[c for c in previous[row] if c not in allowed] + list(mapping.get(row,[])) for row in MAPPABLE_ROWS}
         previous_form = peek_special_form(raw)
         form = SpecialForm(year=year,output=previous_form.output,use_all_categories=False,categories=tuple(selected))
-        save_raw_config(path, apply_row_mapping(apply_special_form(raw,form),merged,supplement))
-    return {'saved':True}
+        updated = apply_row_mapping(apply_special_form(raw,form),merged,supplement)
+        save_raw_config(path, updated)
+    return {'saved':True, 'revision':revision(updated.get('z17'))}

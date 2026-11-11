@@ -68,4 +68,4 @@ Na dostupné skutečné databázi byly načteny i typy stravy, výdeje a kalend�
 
 Zachované úlohy staršího plánovače jsou v Přehledech viditelné s typem a původním plánem; zůstávají neaktivní a nejsou spouštěny workerem DataShip 2.
 
-Úpravy připojení, oprávnění kategorií, Z 17-01 a e-mailu používají společný zámek prostoru. Současný zápis databáze a kategorií je ověřen testem; zámek neřeší dva uživatele, kteří přepíší tutéž hodnotu podle starého formuláře.
+Úpravy připojení, oprávnění kategorií, Z 17-01 a e-mailu používají společný zámek prostoru. Současný zápis databáze a kategorií je ověřen testem; zápisy navíc kontrolují revizi části nastavení, takže zastaralý formulář nepřepíše novější hodnotu.
