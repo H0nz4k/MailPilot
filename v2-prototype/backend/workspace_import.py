@@ -56,3 +56,46 @@ def import_workspace(source_config, destination):
             raise ValueError('Prostor DataShip 2 již existuje; import jej nepřepíše.')
         os.rename(staging, target)
     return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles), 'templates':len(templates)}
+
+
+def create_workspace(destination, database_values, database_password, admin_password, admin_repeat):
+    """Provision an empty isolated workspace; no task or service is started."""
+    from credential_store import get_admin_password, set_admin_password, set_password
+    from services.config_io import normalize_database
+    from services.database import probe_connection
+    from services.web_mail_settings import save_settings
+    from task_lock import task_store_lock
+    import hmac
+    target = Path(destination).resolve()
+    if not isinstance(database_values, dict):
+        raise ValueError('Vyplňte připojení k databázi.')
+    database = normalize_database(database_values)
+    if not isinstance(database_password,str) or not database_password:
+        raise ValueError('Vyplňte heslo databáze.')
+    if not isinstance(admin_password,str) or not admin_password.strip():
+        raise ValueError('Vyplňte heslo administrace.')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with task_store_lock(target.parent, name='.dataship-v2-setup.lock'):
+        if target.exists():
+            raise ValueError('Prostor DataShip 2 již existuje; nastavení nebylo přepsáno.')
+        stored = get_admin_password()
+        if stored:
+            if not hmac.compare_digest(admin_password.encode('utf-8'), stored.encode('utf-8')):
+                raise ValueError('Nesprávné heslo administrace.')
+        elif admin_password != admin_repeat or len(admin_password.strip()) < 4:
+            raise ValueError('Zadejte shodné heslo administrace o délce alespoň 4 znaky.')
+        connection = probe_connection(database, database_password, remember=False)
+        with tempfile.TemporaryDirectory(prefix='.dataship2-setup-', dir=target.parent) as temp:
+            staging = Path(temp) / 'workspace'
+            staging.mkdir()
+            (staging/'config.json').write_text(json.dumps({'databaze':database},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+            save_tasks(task_file(staging), [])
+            save_settings(settings_path(staging), {**load_settings(settings_path(staging)), 'service_name':'DataShip2Scheduler'})
+            set_password(database, database_password)
+            if not stored:
+                set_admin_password(admin_password.strip())
+            try:
+                os.rename(staging,target)
+            except OSError as exc:
+                raise ValueError('Systémová hesla byla uložena, ale prostor aplikace se nepodařilo vytvořit.') from exc
+    return {'config_path':str(target/'config.json'), 'subject':connection.subject_name or connection.database_name}

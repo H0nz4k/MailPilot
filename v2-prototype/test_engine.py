@@ -985,3 +985,31 @@ def test_initialize_and_change_admin_password_with_existing_password_guard(tmp_p
         settings_bridge.change_admin_password(str(config),str(workspace),'wrong','novéheslo','novéheslo')
     settings_bridge.change_admin_password(str(config),str(workspace),'abcd','novéheslo','novéheslo')
     assert state['password']=='novéheslo'
+
+
+def test_create_workspace_validates_before_writing_and_starts_no_tasks(tmp_path,monkeypatch):
+    import sys,json,pytest
+    from types import SimpleNamespace
+    from services.web_mail_task_store import load_tasks,task_file
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import workspace_import,credential_store
+    import services.database as database_service
+    state={'admin':None,'db':[]}
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:state['admin'])
+    monkeypatch.setattr(credential_store,'set_admin_password',lambda value:state.update(admin=value))
+    monkeypatch.setattr(credential_store,'set_password',lambda db,pwd:state['db'].append((db,pwd)))
+    calls=[]
+    monkeypatch.setattr(database_service,'probe_connection',lambda db,pwd,remember:calls.append((db,pwd,remember)) or SimpleNamespace(subject_name='Test',database_name='db'))
+    target=tmp_path/'workspace'
+    values={'host':'db-host','port':5432,'dbname':'db','user':'reader'}
+    with pytest.raises(ValueError,match='shodné'):
+        workspace_import.create_workspace(target,values,'not-real','admin','other')
+    assert not target.exists() and not state['db'] and state['admin'] is None
+    result=workspace_import.create_workspace(target,values,'not-real','admin','admin')
+    assert result['subject']=='Test' and state['admin']=='admin' and calls[0][2] is False
+    assert load_tasks(task_file(target))==[]
+    config=(target/'config.json').read_text(encoding='utf-8')
+    assert 'not-real' not in config and json.loads(config)['databaze']['host']=='db-host'
+    with pytest.raises(ValueError,match='již existuje'):
+        workspace_import.create_workspace(target,values,'another','admin','admin')
+    assert len(state['db'])==1

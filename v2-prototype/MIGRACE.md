@@ -4,6 +4,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 ## Přeneseno a ověřeno izolovaně
 
+- Nový prázdný prostor lze založit bez verze 1.4, po testu připojení a nastavení systémových hesel; ověřeno s náhradami databáze a trezoru.
 - Volitelný import do odděleného prostoru verze 2 kopíruje konfiguraci, profily, šablony PDF a historii příjemců a úlohy převede jako pozastavené; nepřepisuje existující prostor ani staré soubory. Nová služba používá vlastní název. Ověřeno izolovaně.
 - Jednorázové Odběry: po vytvoření lze PDF uložit pod novým názvem nebo odeslat podle nastavení SMTP/Resend bez vytvoření úlohy. Odeslání je testováno pouze s náhradním transportem.
 - Odběry za období: součty po strávnících v náhledu a PDF, výběr stavu, více kategorií a typů stravy/výdeje, volitelný souhrn kategorií a desktopové vytvoření ukázkového PDF.

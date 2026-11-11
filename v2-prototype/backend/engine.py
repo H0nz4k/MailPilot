@@ -29,6 +29,12 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'global_admin_status':
+        from credential_store import get_admin_password
+        return {'configured':bool(get_admin_password())}
+    if request.get('action') == 'create_workspace':
+        from workspace_import import create_workspace
+        return create_workspace(request['workspace_dir'], request.get('database'), request.get('database_password'), request.get('password'), request.get('repeat'))
     if request.get('action') == 'import_workspace':
         from workspace_import import import_workspace
         from legacy_bridge import configuration
