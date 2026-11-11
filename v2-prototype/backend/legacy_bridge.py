@@ -465,7 +465,8 @@ def preview_wizard(path, data, output_dir):
         if task is None:
             raise ValueError('Úloha již neexistuje.')
         require_current_revision(task, data.get('revision'))
-        original = next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
+        original = (next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
+                    if task.profile_id else legacy_global_profile(path, task.name))
         if original is None:
             raise ValueError('Původní profil úlohy neexistuje.')
         profile = preserve_profile(original, profile, data.get('profile_revision'))

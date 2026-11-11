@@ -1330,6 +1330,15 @@ def test_edit_legacy_global_task_snapshots_settings_and_rejects_stale_config(tmp
     edit = legacy_bridge.wizard_edit_data(path, task.id)
     assert edit['legacy_global'] and edit['data']['content'] == 'counts' and edit['data']['pdf_bold'] is True
     data = {**edit['data'], 'edit_id': task.id, 'revision': edit['revision'], 'profile_revision': edit['profile_revision']}
+    import automaticky_export
+    import services.web_daily_profiles as daily_profiles
+    from types import SimpleNamespace
+    monkeypatch.setattr(automaticky_export, 'read_saved_settings', lambda path: {})
+    monkeypatch.setattr(daily_profiles, 'apply_profile', lambda cfg, profile, raw: cfg)
+    monkeypatch.setattr(legacy_bridge, 'fetch_report', lambda cfg: SimpleNamespace(menus=[]))
+    monkeypatch.setattr(legacy_bridge, 'create_pdf', lambda cfg, report, output_path: Path(output_path).write_bytes(b'%PDF-test'))
+    assert Path(legacy_bridge.preview_wizard(path, data, str(tmp_path))['pdf']).is_file()
+    assert legacy_bridge.preview_schedule(path, data)['today_report'] == date.today().isoformat()
     current[0] = replace(config, pdf_bold=False)
     with pytest.raises(ValueError, match='mezitím změnil'):
         legacy_bridge.save_task(path, data)
