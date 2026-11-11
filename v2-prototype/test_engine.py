@@ -1247,3 +1247,29 @@ def test_activity_requires_admin_and_reads_only_workspace(tmp_path,monkeypatch):
     assert len(rows)==1 and rows[0]['message']=='Testovací chyba'
     with pytest.raises(ValueError,match='odděleném prostoru'):
         settings_bridge.read_activity(str(config),str(tmp_path/'other'),'admin')
+
+
+def test_wizard_layout_is_saved_and_template_uses_current_layout(tmp_path,monkeypatch):
+    import sys,pytest
+    from types import SimpleNamespace
+    from services.pdf_templates import load_templates,template_file
+    from services.web_daily_profiles import load_profiles,profile_file
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    workspace=tmp_path/'workspace';workspace.mkdir()
+    path=workspace/'config.json';path.touch()
+    cfg=SimpleNamespace(pdf_orientation='na_vysku',pdf_data_font_size=8.5,pdf_label_font_size=9,pdf_bold=False)
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:cfg)
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    layout=[['menus'],['categories','norms'],['delivery'],['diners'],['collection']]
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False,
+          'pdf_layout':layout,'pdf_page_breaks':['diners']}
+    legacy_bridge.save_task(str(path),data)
+    profile=load_profiles(profile_file(workspace))[0]
+    assert profile.pdf_layout[1]==('categories','norms') and profile.pdf_page_breaks==('diners',)
+    legacy_bridge.save_pdf_template(str(path),str(workspace),data,'Rozložení')
+    assert load_templates(template_file(workspace))[0].settings['pdf_layout'][1]==('categories','norms')
+    invalid={**data,'delivery_page_per_type':True,'pdf_layout':[['menus','delivery']]}
+    with pytest.raises(ValueError,match='vlastní řádek'):
+        legacy_bridge.save_task(str(path),invalid)

@@ -14,7 +14,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Volitelné čtení konfigurace verze 1.4 a odběrů přes původní služby, s omezením na povolené kategorie. Připojení používá uložené heslo, ale heslo ani konfiguraci nepřepisuje. Ověřeno pouze testy s náhradou databáze; skutečná Jídelna a její výsledky zatím nejsou ověřeny.
 - Průvodce umí vypočítat příští den spuštění a den sestavy včetně kalendáře varných dnů (ověřeno náhradou databáze).
 - Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
-- Průvodce načítá uložené šablony PDF a umožňuje uložit nové; zachovává jejich rozložení i velikosti písma.
+- Průvodce načítá uložené šablony PDF a umožňuje uložit nové; pořadí, umístění vedle sebe, prohození a zalomení bloků lze upravit přímo v průvodci.
 - Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF, velikosti písma, jazyk a číslo jídelníčku; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
 - Administrace umožňuje vytvořit nebo změnit heslo v systémovém úložišti (sdíleném s původním DataShipem); ověřeno testovacími náhradami trezoru.
 - Administrace umožňuje vybrat povolené kategorie ze skutečné Jídelny; ověřeno s náhradou databáze.
@@ -28,7 +28,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 1. Ověření administrace, připojení a oprávnění na skutečném počítači a Jídelně.
 2. Přehledy a PDF včetně všech voleb z 1.4, hromadných strávníků, šablon a uložených profilů.
-3. Dokončit průvodce: zbývající volby PDF a interaktivní náhled; ověřit běh přes skutečnou službu.
+3. Dokončit interaktivní stránkový náhled PDF a ověřit průvodce a plánování přes skutečnou službu.
 4. Ověřit samostatný plánovač a jeho Windows službu v reálném prostředí; zabránit duplicitnímu odeslání při souběhu samostatných konfigurací. Nezapínat automatické odesílání při migraci bez jasného stavu a ověření.
 5. Jednorázové Odběry: doplnit zbývající původní volby a ověřit skutečné doručení a cílové uložení v desktopu.
 6. Ověřit uzávěrku a odeslání na reálném prostředí; doplnit ostatní sestavy, diagnostiku a návody.

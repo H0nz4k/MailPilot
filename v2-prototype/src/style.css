@@ -16,3 +16,5 @@
 textarea{font:inherit;width:100%;padding:11px;border:1px solid #bdcbdc;border-radius:7px;color:inherit;resize:vertical}textarea:focus-visible{outline:3px solid #65aaf5;outline-offset:2px}
 
 .activity-list{max-height:360px;overflow:auto;border:1px solid #dce4ee;border-radius:8px}.activity-row{padding:12px;border-bottom:1px solid #dce4ee}.activity-row:last-child{border-bottom:0}.activity-row p{margin-top:4px;overflow-wrap:anywhere}
+
+.layout-row{display:grid;gap:8px;padding:12px 0;border-top:1px solid #dce4ee}.layout-row .secondary{min-width:44px}

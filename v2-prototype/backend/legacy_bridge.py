@@ -161,7 +161,9 @@ def profile_for_wizard(path, data):
                  'delivery_page_per_type':data.get('delivery_page_per_type', False),
                  'pdf_orientation':data.get('pdf_orientation'), 'pdf_bold':data.get('pdf_bold'),
                  'pdf_compact_rows':data.get('pdf_compact_rows', False),
-                 **{key:data[key] for key in ('pdf_data_font_size','pdf_label_font_size','language','menu_list_number') if key in data}})
+                 **{key:data[key] for key in ('pdf_data_font_size','pdf_label_font_size','language','menu_list_number','pdf_layout','pdf_page_breaks') if key in data and data[key] is not None}})
+    if profile.delivery_page_per_type and any('delivery' in row and len(row)==2 for row in profile.pdf_layout):
+        raise ValueError('Pro samostatné stránky typů výdeje umístěte tento blok na vlastní řádek.')
     return profile
 
 
@@ -196,21 +198,19 @@ def wizard_edit_data(path, task_id):
               'cooking':task.only_cooking_days}
     for field in ('category_separation','show_by_categories','show_by_norms','show_delivery_summary',
                   'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
-                  'pdf_data_font_size','pdf_label_font_size','language','menu_list_number'):
+                  'pdf_data_font_size','pdf_label_font_size','language','menu_list_number','pdf_layout','pdf_page_breaks'):
         values[field] = getattr(profile, field)
     return {'data':values, 'id':task.id, 'revision':task_revision(task), 'profile_revision':task_revision(profile)}
 
 
-def preserve_profile(original, profile, revision, *, use_template=False):
+def preserve_profile(original, profile, revision):
     from services.web_daily_profiles import DailyProfile
     if revision != task_revision(original):
         raise ValueError('Profil úlohy se mezitím změnil. Obnovte seznam a úpravu zopakujte.')
     fields = ('name','categories','meal_type','delivery_types','show_diner_list','collection_status',
               'category_separation','show_by_categories','show_by_norms','show_delivery_summary',
               'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
-              'pdf_data_font_size','pdf_label_font_size','language','menu_list_number')
-    if use_template:
-        fields += ('pdf_layout', 'pdf_page_breaks')
+              'pdf_data_font_size','pdf_label_font_size','language','menu_list_number','pdf_layout','pdf_page_breaks')
     values = original.to_dict()
     changed = profile.to_dict()
     values.update({key:changed[key] for key in fields})
@@ -272,7 +272,7 @@ def save_task(path, data):
             original_profile = next((item for item in load_profiles(profile_file(directory)) if item.id == original.profile_id), None)
             if original_profile is None or original.report != 'daily':
                 raise ValueError('Původní profil úlohy neexistuje nebo jej nelze upravit.')
-            profile = preserve_profile(original_profile, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
+            profile = preserve_profile(original_profile, profile, data.get('profile_revision'))
             first_send = (original.first_send_date if original.enabled and task.enabled and original.send_time == task.send_time
                           else max(task.first_send_date, original.first_send_date or task.first_send_date))
             task = replace(task, id=original.id, cooking_meal_type=original.cooking_meal_type, first_send_date=first_send)
@@ -400,7 +400,7 @@ def preview_wizard(path, data, output_dir):
         original = next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
         if original is None:
             raise ValueError('Původní profil úlohy neexistuje.')
-        profile = preserve_profile(original, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
+        profile = preserve_profile(original, profile, data.get('profile_revision'))
     raw = read_saved_settings(Path(path))
     config = apply_profile(replace(config, report_date=date.fromisoformat(data['date']), report_end_date=None), profile, raw)
     report = fetch_report(config)
@@ -592,7 +592,7 @@ def preview_schedule(path, data):
         original_profile = next((p for p in load_profiles(profile_file(directory)) if p.id == original.profile_id), None)
         if original_profile is None:
             raise ValueError('Původní profil úlohy neexistuje.')
-        preserve_profile(original_profile, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
+        preserve_profile(original_profile, profile, data.get('profile_revision'))
         task = replace(task, cooking_meal_type=original.cooking_meal_type)
     upcoming = next_send_at(replace(task, enabled=True), datetime.now())
     if task.date_mode == 'next_cooking_day':
@@ -701,17 +701,16 @@ def save_pdf_template(path, workspace, data, name):
         original = next((p for p in load_profiles(profile_file(config_path.parent)) if p.id == task.profile_id), None)
         if original is None:
             raise ValueError('Původní profil úlohy neexistuje.')
-        profile = preserve_profile(original, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
+        profile = preserve_profile(original, profile, data.get('profile_revision'))
     values = dict(DEFAULT_SETTINGS)
-    if data.get('edit_id'):
-        values['pdf_layout'] = profile.pdf_layout
-        values['pdf_page_breaks'] = profile.pdf_page_breaks
     source_id = data.get('pdf_template_id')
     if source_id:
         source = next((t for t in load_templates(template_file(config_path.parent)) if t.id == source_id), None)
         if source is None:
             raise ValueError('Šablona PDF již neexistuje.')
         values.update(source.settings)
+    values['pdf_layout'] = profile.pdf_layout
+    values['pdf_page_breaks'] = profile.pdf_page_breaks
     for key in ('category_separation','show_by_categories','show_by_norms','show_diner_list',
                 'show_delivery_summary','delivery_show_names','delivery_page_per_type',
                 'pdf_compact_rows'):
