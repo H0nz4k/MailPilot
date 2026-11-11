@@ -1062,3 +1062,24 @@ def test_special_report_restricts_categories_and_keeps_mapping_without_writes(tm
     with pytest.raises(ValueError,match='nepovolenou kategorii'):
         special_bridge.generate_special(str(config),{**form,'mapping':{'0102':['NEPOVOLENA']}},tmp_path/'output')
     assert len(seen)==1
+
+
+def test_save_special_mapping_preserves_categories_outside_scope(tmp_path,monkeypatch):
+    import sys,json,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import special_bridge,credential_store
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text(json.dumps({'databaze':{},'z17':{'mapovani_kategorii':{'0102':['ZACI','MIMO']}}}),encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'admin')
+    monkeypatch.setattr(special_bridge,'info',lambda path:{'categories':[{'code':'ZACI','name':'Žáci'}]})
+    data=special_bridge.special_defaults(str(config))
+    data['mapping']['0102']=[]
+    data['mapping']['0103']=['ZACI']
+    with pytest.raises(ValueError,match='Nesprávné'):
+        special_bridge.save_special(str(config),str(workspace),'wrong',data)
+    special_bridge.save_special(str(config),str(workspace),'admin',data)
+    raw=json.loads(config.read_text(encoding='utf-8'))
+    assert raw['z17']['mapovani_kategorii']['0102']==['MIMO']
+    assert raw['z17']['mapovani_kategorii']['0103']==['ZACI']

@@ -44,3 +44,28 @@ def generate_special(config_path, data, output_dir):
         temporary_config.write_text(json.dumps(updated,ensure_ascii=False,indent=2),encoding='utf-8')
         result = run_special(temporary_config,year=year)
     return {'year':result.year,'files':[str(p) for p in result.files],'detail':result.detail}
+
+
+def save_special(config_path, workspace, password, data):
+    from settings_bridge import authorize, workspace_path
+    from services.config_io import save_raw_config
+    from z17_nastaveni import MAPPABLE_ROWS, parse_z17_year
+    authorize(password)
+    path = workspace_path(config_path, workspace)
+    raw = load_raw_config(path)
+    year = parse_z17_year(data.get('year'))
+    allowed = {item['code'] for item in info(str(path))['categories']}
+    selected, mapping, supplement = data.get('selected'), data.get('mapping'), data.get('supplement_rows')
+    if not isinstance(selected,list) or not selected or any(not isinstance(c,str) or c not in allowed for c in selected):
+        raise ValueError('Vyberte alespoň jednu povolenou kategorii.')
+    if not isinstance(mapping,dict) or set(mapping)-set(MAPPABLE_ROWS) or not isinstance(supplement,list) or any(row not in MAPPABLE_ROWS for row in supplement):
+        raise ValueError('Neplatné mapování řádků výkazu.')
+    if any(not isinstance(values,list) or any(not isinstance(c,str) or c not in allowed for c in values) for values in mapping.values()):
+        raise ValueError('Mapování obsahuje nepovolenou kategorii.')
+    # Do not erase mappings outside the current administrator's permitted scope.
+    previous = peek_row_mapping(raw)
+    merged = {row:[c for c in previous[row] if c not in allowed] + list(mapping.get(row,[])) for row in MAPPABLE_ROWS}
+    previous_form = peek_special_form(raw)
+    form = SpecialForm(year=year,output=previous_form.output,use_all_categories=False,categories=tuple(selected))
+    save_raw_config(path, apply_row_mapping(apply_special_form(raw,form),merged,supplement))
+    return {'saved':True}

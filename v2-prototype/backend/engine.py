@@ -29,6 +29,9 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'save_special':
+        from special_bridge import save_special
+        return save_special(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('data', {}))
     if request.get('action') == 'special_defaults':
         from special_bridge import special_defaults
         return special_defaults(request.get('config_path'))
