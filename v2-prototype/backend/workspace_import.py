@@ -9,6 +9,8 @@ from credential_store import sanitize_config
 from services.web_daily_profiles import load_profiles, profile_file
 from services.web_mail_settings import load_settings, save_settings, settings_path
 from services.web_mail_task_store import load_tasks, save_tasks, task_file
+from services.pdf_templates import load_templates, template_file
+from services.web_recipient_history import load_recipient_history, save_recipient_history
 
 
 def import_workspace(source_config, destination):
@@ -28,6 +30,8 @@ def import_workspace(source_config, destination):
         raise ValueError('Neplatná konfigurace.')
     profiles = load_profiles(profile_file(source.parent))
     tasks = load_tasks(task_file(source.parent))
+    templates = load_templates(template_file(source.parent))
+    recipients = load_recipient_history(source.parent)
     ids = {p.id for p in profiles}
     if any(t.profile_id and t.profile_id not in ids for t in tasks):
         raise ValueError('Některé úlohy odkazují na chybějící profil. Import nebyl proveden.')
@@ -41,10 +45,14 @@ def import_workspace(source_config, destination):
         (staging / 'config.json').write_text(json.dumps(sanitize_config(raw),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         if profile_file(source.parent).exists():
             profile_file(staging).write_text(json.dumps({'version':1,'profiles':[p.to_dict() for p in profiles]},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        if template_file(source.parent).exists():
+            template_file(staging).write_text(json.dumps({'version':1,'templates':[t.to_dict() for t in templates]},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        if recipients:
+            save_recipient_history(staging, recipients)
         save_tasks(task_file(staging), [replace(task, enabled=False) for task in tasks])
         save_settings(settings_path(staging), settings)
         # Windows refuses to replace an existing nonempty destination directory.
         if target.exists():
             raise ValueError('Prostor DataShip 2 již existuje; import jej nepřepíše.')
         os.rename(staging, target)
-    return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles)}
+    return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles), 'templates':len(templates)}

@@ -23,3 +23,5 @@ release-dist/
 core
 
 recipient_history.json
+
+.test-deps/

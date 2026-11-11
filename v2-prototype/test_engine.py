@@ -790,3 +790,46 @@ def test_schedule_preview_negative_days_require_collection(tmp_path,monkeypatch)
           'mode':'history','days':'2','time':'08:00','enabled':False,'cooking':False}
     with pytest.raises(ValueError,match='Dny zpět'):
         legacy_bridge.preview_schedule(str(tmp_path/'config.json'),data)
+
+
+def test_workspace_import_preserves_pdf_templates_and_recipient_history(tmp_path):
+    import sys, json
+    from services.pdf_templates import PdfTemplate, save_template, template_file, load_templates
+    from services.web_recipient_history import save_recipient_history, load_recipient_history
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import workspace_import
+    source=tmp_path/'old'
+    source.mkdir()
+    (source/'config.json').write_text(json.dumps({'databaze':{}}),encoding='utf-8')
+    template=PdfTemplate.from_dict({'name':'Tisk kuchyně','settings':{}})
+    save_template(template_file(source),template)
+    save_recipient_history(source,['a@example.invalid'])
+    target=tmp_path/'new'/'workspace'
+    result=workspace_import.import_workspace(str(source/'config.json'),target)
+    assert result['templates']==1
+    assert load_templates(template_file(target))[0] == template
+    assert load_recipient_history(target)==['a@example.invalid']
+
+
+def test_wizard_applies_template_and_preserves_hidden_pdf_settings(tmp_path,monkeypatch):
+    import sys, pytest
+    from types import SimpleNamespace
+    from services.pdf_templates import PdfTemplate,save_template,template_file
+    from services.web_daily_profiles import load_profiles,profile_file
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    template=PdfTemplate.from_dict({'name':'Tisk kuchyně','settings':{'pdf_data_font_size':12,'pdf_label_font_size':11,'pdf_orientation':'na_sirku','pdf_bold':True}})
+    save_template(template_file(tmp_path),template)
+    data={'name':'Podle šablony','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False,
+          'pdf_template_id':template.id,'pdf_orientation':'na_sirku','pdf_bold':True}
+    path=str(tmp_path/'config.json')
+    assert legacy_bridge.pdf_templates(path)[0]['id']==template.id
+    legacy_bridge.save_task(path,data)
+    profile=load_profiles(profile_file(tmp_path))[0]
+    assert profile.pdf_data_font_size==12 and profile.pdf_label_font_size==11
+    assert profile.pdf_orientation=='na_sirku' and profile.pdf_bold is True
+    with pytest.raises(ValueError,match='Šablona PDF již neexistuje'):
+        legacy_bridge.save_task(path,{**data,'pdf_template_id':'missing'})

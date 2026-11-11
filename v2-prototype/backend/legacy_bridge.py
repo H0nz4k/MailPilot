@@ -143,7 +143,15 @@ def profile_for_wizard(path, data):
             if selected is not None and (not isinstance(selected, list) or not selected or
                     any(not isinstance(item, str) or item not in options[key] for item in selected)):
                 raise ValueError('Vyberte alespoň jednu dostupnou možnost filtru.')
-    profile = DailyProfile.from_dict({'name':data.get('name'), 'categories':categories,
+    template_settings = {}
+    template_id = data.get('pdf_template_id')
+    if template_id:
+        from services.pdf_templates import load_templates, template_file
+        template = next((t for t in load_templates(template_file(Path(path).parent)) if t.id == template_id), None)
+        if template is None:
+            raise ValueError('Šablona PDF již neexistuje. Vyberte ji znovu.')
+        template_settings = template.settings
+    profile = DailyProfile.from_dict({**template_settings, 'name':data.get('name'), 'categories':categories,
                  'meal_type':selected_meals, 'delivery_types':selected_deliveries or (), 'show_diner_list':content != 'counts', 'collection_status':status,
                  'category_separation':data.get('category_separation', False),
                  'show_by_categories':data.get('show_by_categories', True),
@@ -191,13 +199,15 @@ def wizard_edit_data(path, task_id):
     return {'data':values, 'id':task.id, 'revision':task_revision(task), 'profile_revision':task_revision(profile)}
 
 
-def preserve_profile(original, profile, revision):
+def preserve_profile(original, profile, revision, *, use_template=False):
     from services.web_daily_profiles import DailyProfile
     if revision != task_revision(original):
         raise ValueError('Profil úlohy se mezitím změnil. Obnovte seznam a úpravu zopakujte.')
     fields = ('name','categories','meal_type','delivery_types','show_diner_list','collection_status',
               'category_separation','show_by_categories','show_by_norms','show_delivery_summary',
               'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows')
+    if use_template:
+        fields += ('pdf_data_font_size', 'pdf_label_font_size', 'pdf_layout', 'pdf_page_breaks')
     values = original.to_dict()
     changed = profile.to_dict()
     values.update({key:changed[key] for key in fields})
@@ -259,7 +269,7 @@ def save_task(path, data):
             original_profile = next((item for item in load_profiles(profile_file(directory)) if item.id == original.profile_id), None)
             if original_profile is None or original.report != 'daily':
                 raise ValueError('Původní profil úlohy neexistuje nebo jej nelze upravit.')
-            profile = preserve_profile(original_profile, profile, data.get('profile_revision'))
+            profile = preserve_profile(original_profile, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
             first_send = (original.first_send_date if original.enabled and task.enabled and original.send_time == task.send_time
                           else max(task.first_send_date, original.first_send_date or task.first_send_date))
             task = replace(task, id=original.id, cooking_meal_type=original.cooking_meal_type, first_send_date=first_send)
@@ -387,7 +397,7 @@ def preview_wizard(path, data, output_dir):
         original = next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
         if original is None:
             raise ValueError('Původní profil úlohy neexistuje.')
-        profile = preserve_profile(original, profile, data.get('profile_revision'))
+        profile = preserve_profile(original, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
     raw = read_saved_settings(Path(path))
     config = apply_profile(replace(config, report_date=date.fromisoformat(data['date']), report_end_date=None), profile, raw)
     report = fetch_report(config)
@@ -579,7 +589,7 @@ def preview_schedule(path, data):
         original_profile = next((p for p in load_profiles(profile_file(directory)) if p.id == original.profile_id), None)
         if original_profile is None:
             raise ValueError('Původní profil úlohy neexistuje.')
-        preserve_profile(original_profile, profile, data.get('profile_revision'))
+        preserve_profile(original_profile, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
         task = replace(task, cooking_meal_type=original.cooking_meal_type)
     upcoming = next_send_at(replace(task, enabled=True), datetime.now())
     if task.date_mode == 'next_cooking_day':
@@ -596,3 +606,9 @@ def preview_schedule(path, data):
         next_day = target_date(task, upcoming.date())
     return {'today_report':current.isoformat(), 'next_run':upcoming.isoformat(timespec='minutes'),
             'next_report':next_day.isoformat(), 'only_cooking_days':task.only_cooking_days}
+
+
+def pdf_templates(path):
+    from services.pdf_templates import load_templates, template_file
+    configuration(path)
+    return [item.to_dict() for item in load_templates(template_file(Path(path).parent))]
