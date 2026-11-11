@@ -962,3 +962,26 @@ def test_category_permissions_are_saved_and_unknown_codes_rejected(tmp_path,monk
     with pytest.raises(ValueError,match='dostupnou kategorii'):
         settings_bridge.save_category_settings(str(config),str(workspace),'admin',False,[])
     assert json.loads(config.read_text(encoding='utf-8'))==raw
+
+
+def test_initialize_and_change_admin_password_with_existing_password_guard(tmp_path,monkeypatch):
+    import sys,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge,credential_store
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.touch()
+    state={'password':None}
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:state['password'])
+    monkeypatch.setattr(credential_store,'set_admin_password',lambda value:state.update(password=value))
+    assert not settings_bridge.admin_password_status(str(config),str(workspace))['configured']
+    with pytest.raises(ValueError,match='shodné'):
+        settings_bridge.initialize_admin_password(str(config),str(workspace),'abcd','different')
+    settings_bridge.initialize_admin_password(str(config),str(workspace),'abcd','abcd')
+    with pytest.raises(ValueError,match='již existuje'):
+        settings_bridge.initialize_admin_password(str(config),str(workspace),'other','other')
+    with pytest.raises(ValueError,match='Nesprávné'):
+        settings_bridge.change_admin_password(str(config),str(workspace),'wrong','novéheslo','novéheslo')
+    settings_bridge.change_admin_password(str(config),str(workspace),'abcd','novéheslo','novéheslo')
+    assert state['password']=='novéheslo'

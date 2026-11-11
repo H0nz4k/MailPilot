@@ -34,6 +34,15 @@ def handle(request):
         from legacy_bridge import configuration
         configuration(request.get('config_path'))
         return import_workspace(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'admin_password_status':
+        from settings_bridge import admin_password_status
+        return admin_password_status(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'initialize_admin_password':
+        from settings_bridge import initialize_admin_password
+        return initialize_admin_password(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('repeat'))
+    if request.get('action') == 'change_admin_password':
+        from settings_bridge import change_admin_password
+        return change_admin_password(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('new_password'), request.get('repeat'))
     if request.get('action') == 'read_category_settings':
         from settings_bridge import category_settings
         return category_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))

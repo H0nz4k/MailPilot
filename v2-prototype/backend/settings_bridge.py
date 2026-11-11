@@ -122,3 +122,32 @@ def save_category_settings(config_path, workspace, password, use_all, selected):
     raw['poctyemailem'] = {**block,'vsechny_kategorie':use_all,'povolene_kategorie':list(dict.fromkeys(selected))}
     save_raw_config(path, raw)
     return {'saved':True}
+
+
+def admin_password_status(config_path, workspace):
+    from credential_store import get_admin_password
+    workspace_path(config_path, workspace)
+    return {'configured':bool(get_admin_password())}
+
+
+def initialize_admin_password(config_path, workspace, password, repeat):
+    from credential_store import get_admin_password, set_admin_password
+    from task_lock import task_store_lock
+    workspace_path(config_path, workspace)
+    if not isinstance(password, str) or password != repeat or len(password.strip()) < 4:
+        raise ValueError('Zadejte shodné heslo administrace o délce alespoň 4 znaky.')
+    with task_store_lock(workspace):
+        if get_admin_password():
+            raise ValueError('Heslo administrace již existuje; přihlaste se existujícím heslem.')
+        set_admin_password(password.strip())
+    return {'configured':True}
+
+
+def change_admin_password(config_path, workspace, password, new_password, repeat):
+    from credential_store import set_admin_password
+    workspace_path(config_path, workspace)
+    authorize(password)
+    if not isinstance(new_password, str) or new_password != repeat or len(new_password.strip()) < 4:
+        raise ValueError('Zadejte shodné nové heslo o délce alespoň 4 znaky.')
+    set_admin_password(new_password.strip())
+    return {'changed':True}

@@ -25,4 +25,4 @@ Příkaz „Převést do DataShip 2“ vytvoří oddělený uživatelský prosto
 
 Odběry lze po připojení jednorázově vytvořit a odeslat podle existujícího nastavení SMTP/Resend; plánovaná úloha se tím nevytváří. Vytvořené PDF lze zkopírovat na uvedenou úplnou cestu, pokud cílový soubor dosud neexistuje. Skutečné odesílání nebylo ověřeno.
 
-Nastavení e-mailu v samostatném prostoru vyžaduje existující heslo administrace DataShipu. Klíč Resend se při importu nekopíruje; lze jej zadat v Nastavení. Heslo SMTP se používá z prostředí služby. Připojení k databázi se před uložením ověřuje; heslo se ukládá do systémového úložiště, které může používat i verze 1.4.
+Nastavení v samostatném prostoru vyžaduje heslo administrace DataShipu. Pokud zatím neexistuje, lze jej při prvním vstupu vytvořit. Klíč Resend se při importu nekopíruje; lze jej zadat v Nastavení. Heslo SMTP se používá z prostředí služby. Připojení k databázi se před uložením ověřuje; heslo se ukládá do systémového úložiště, které může používat i verze 1.4.
