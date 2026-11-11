@@ -71,3 +71,5 @@ Zachované úlohy staršího plánovače jsou v Přehledech viditelné s typem a
 Úpravy připojení, oprávnění kategorií, Z 17-01 a e-mailu používají společný zámek prostoru. Současný zápis databáze a kategorií je ověřen testem; zápisy navíc kontrolují revizi části nastavení, takže zastaralý formulář nepřepíše novější hodnotu.
 
 Jeden testovací e-mail se smyšleným PDF odeslal zabalený engine přes Resend na adresu určenou uživatelem. Uživatel potvrdil doručení a otevření přílohy. Test nepoužil osobní údaje z databáze a netestoval automatické odeslání službou.
+
+Ve Windows proběhl izolovaný test sestaveného enginu s administrátorskými právy: instalace DataShip2Scheduler, spuštění, heartbeat workeru, zastavení a odstranění služby uspěly. Použil prázdné úlohy a vlastní testovací konfiguraci; služba po testu nezůstala nainstalovaná. Běh skutečné naplánované úlohy pod systémovým účtem ani automatické odeslání tím nebyly ověřeny.
