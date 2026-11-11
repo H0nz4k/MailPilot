@@ -1508,3 +1508,35 @@ def test_imported_scheduler_jobs_are_read_only_and_visible(tmp_path):
     assert jobfile.read_bytes() == before
     with pytest.raises(ValueError,match='odděleném prostoru'):
         legacy_bridge.imported_scheduler_jobs(str(config),str(tmp_path/'other'))
+
+def test_concurrent_connection_and_categories_preserve_both_changes(tmp_path, monkeypatch):
+    import json, sys, threading, time
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import settings_bridge, credential_store
+    import services.config_io as config_io
+    import services.database as database_service
+    workspace = tmp_path / 'workspace'; workspace.mkdir()
+    config = workspace / 'config.json'
+    config.write_text(json.dumps({'databaze':{'host':'old','port':5432,'dbname':'db','user':'test'}}), encoding='utf-8')
+    monkeypatch.setattr(settings_bridge, 'authorize', lambda password: None)
+    monkeypatch.setattr(settings_bridge, 'category_settings', lambda *args: {'available':[{'code':'ZACI'}]})
+    monkeypatch.setattr(credential_store, 'get_password', lambda database: 'test')
+    monkeypatch.setattr(database_service, 'probe_connection', lambda *args, **kwargs: SimpleNamespace(subject_name='Test',database_name='db'))
+    original_save = config_io.save_raw_config
+    def slow_save(path, raw):
+        time.sleep(.15)
+        original_save(path, raw)
+    monkeypatch.setattr(config_io, 'save_raw_config', slow_save)
+    barrier = threading.Barrier(2); errors=[]
+    def run(fn):
+        try: barrier.wait(); fn()
+        except Exception as exc: errors.append(exc)
+    threads = [threading.Thread(target=run, args=(lambda: settings_bridge.save_connection(str(config),str(workspace),'pw',{'host':'new','port':5432,'dbname':'db','user':'test'}),)),
+               threading.Thread(target=run, args=(lambda: settings_bridge.save_category_settings(str(config),str(workspace),'pw',False,['ZACI']),))]
+    for thread in threads: thread.start()
+    for thread in threads: thread.join()
+    assert not errors
+    result = json.loads(config.read_text(encoding='utf-8'))
+    assert result['databaze']['host'] == 'new'
+    assert result['poctyemailem']['povolene_kategorie'] == ['ZACI']

@@ -1,6 +1,7 @@
 """Password-protected, minimal settings bridge for the isolated v2 workspace."""
 from pathlib import Path
 import hmac
+from task_lock import task_store_lock
 
 
 def authorize(password):
@@ -42,22 +43,23 @@ def save_mail(config_path, workspace, password, changes, resend_key=None):
         raise ValueError('Neplatné nastavení e-mailu.')
     if resend_key is not None and not isinstance(resend_key, str):
         raise ValueError('Neplatný API klíč.')
-    settings_file = settings_path(path.parent)
-    settings = load_settings(settings_file)
-    settings.update(changes)
-    # Never accept or alter the isolated service's name via mail settings.
-    settings['service_name'] = 'DataShip2Scheduler'
-    from services.web_mail_smtp import normalize_recipient
-    if str(settings.get('from_email') or '').strip():
-        normalize_recipient(settings['from_email'])
-    if settings.get('transport') == 'smtp' and settings.get('smtp_security') == 'none':
-        raise ValueError('Pro SMTP vyberte STARTTLS nebo SSL/TLS.')
-    save_settings(settings_file, settings)
-    if resend_key and resend_key.strip():
-        try:
-            set_resend_api_key(resend_key)
-        except (EnvStoreError, OSError) as exc:
-            raise ValueError('Nastavení bylo uloženo, ale API klíč se nepodařilo uložit.') from exc
+    with task_store_lock(path.parent):
+        settings_file = settings_path(path.parent)
+        settings = load_settings(settings_file)
+        settings.update(changes)
+        # Never accept or alter the isolated service's name via mail settings.
+        settings['service_name'] = 'DataShip2Scheduler'
+        from services.web_mail_smtp import normalize_recipient
+        if str(settings.get('from_email') or '').strip():
+            normalize_recipient(settings['from_email'])
+        if settings.get('transport') == 'smtp' and settings.get('smtp_security') == 'none':
+            raise ValueError('Pro SMTP vyberte STARTTLS nebo SSL/TLS.')
+        save_settings(settings_file, settings)
+        if resend_key and resend_key.strip():
+            try:
+                set_resend_api_key(resend_key)
+            except (EnvStoreError, OSError) as exc:
+                raise ValueError('Nastavení bylo uloženo, ale API klíč se nepodařilo uložit.') from exc
     return {'saved':True}
 
 
@@ -76,16 +78,17 @@ def save_connection(config_path, workspace, password, values, new_database_passw
     if not secret:
         raise ValueError('Zadejte heslo databáze; pro toto připojení není uložené.')
     connection = probe_connection(database, secret, remember=False)
-    raw = load_raw_config(path)
-    raw['databaze'] = database
-    if new_database_password:
-        set_password(database, new_database_password)
-    try:
-        save_raw_config(path, raw)
-    except (OSError, ValueError) as exc:
+    with task_store_lock(path.parent):
+        raw = load_raw_config(path)
+        raw['databaze'] = database
         if new_database_password:
-            raise ValueError('Heslo databáze bylo uloženo, ale konfiguraci se nepodařilo zapsat.') from exc
-        raise
+            set_password(database, new_database_password)
+        try:
+            save_raw_config(path, raw)
+        except (OSError, ValueError) as exc:
+            if new_database_password:
+                raise ValueError('Heslo databáze bylo uloženo, ale konfiguraci se nepodařilo zapsat.') from exc
+            raise
     return {'saved':True, 'subject':connection.subject_name or connection.database_name}
 
 
@@ -111,16 +114,17 @@ def save_category_settings(config_path, workspace, password, use_all, selected):
     path = workspace_path(config_path, workspace)
     if not isinstance(use_all, bool) or not isinstance(selected, list) or any(not isinstance(c,str) or not c for c in selected):
         raise ValueError('Neplatný výběr kategorií.')
-    options = category_settings(str(path), workspace, password)
-    available = {item['code'] for item in options['available']}
-    if not use_all and (not selected or not set(selected).issubset(available)):
-        raise ValueError('Vyberte alespoň jednu dostupnou kategorii.')
-    raw = load_raw_config(path)
-    block = raw.get('poctyemailem') or {}
-    if not isinstance(block, dict):
-        raise ValueError('Neplatné nastavení kategorií.')
-    raw['poctyemailem'] = {**block,'vsechny_kategorie':use_all,'povolene_kategorie':list(dict.fromkeys(selected))}
-    save_raw_config(path, raw)
+    with task_store_lock(path.parent):
+        options = category_settings(str(path), workspace, password)
+        available = {item['code'] for item in options['available']}
+        if not use_all and (not selected or not set(selected).issubset(available)):
+            raise ValueError('Vyberte alespoň jednu dostupnou kategorii.')
+        raw = load_raw_config(path)
+        block = raw.get('poctyemailem') or {}
+        if not isinstance(block, dict):
+            raise ValueError('Neplatné nastavení kategorií.')
+        raw['poctyemailem'] = {**block,'vsechny_kategorie':use_all,'povolene_kategorie':list(dict.fromkeys(selected))}
+        save_raw_config(path, raw)
     return {'saved':True}
 
 
