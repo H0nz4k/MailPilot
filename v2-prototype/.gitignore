@@ -8,3 +8,4 @@ backend/*.spec
 src-tauri/gen/
 portable/
 DataShip-2-Prototyp.zip
+frontend-dist/

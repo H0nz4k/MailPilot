@@ -153,6 +153,31 @@ def collection_pdf_story(config, report, *, table, body_style, section_style, wi
             story.extend([CondPageBreak(35 * mm), Paragraph("Počty podle kategorií", heading),
                           table(headers, rows, [width * .6] + [width * .4 / len(status_columns)] * len(status_columns),
                                 centered_columns=set(range(1, len(headers)))), Spacer(1, 2 * mm)])
+    if config.report_end_date is not None:
+        # One person may have many orders or change categories during the period.
+        people = {}
+        for row in report.diners:
+            key = ("number", row.diner_number) if row.diner_number is not None else ("name", row.name, row.classroom)
+            person = people.setdefault(key, {"name": row.name or "[bez jména]", "number": row.diner_number,
+                                             "categories": set(), "collected": 0, "uncollected": 0})
+            person["categories"].add(row.category_code)
+            person["collected" if row.collected else "uncollected"] += 1
+        story.extend([CondPageBreak(35 * mm), Paragraph("Součty podle strávníků", heading)])
+        status_columns = (["collected", "uncollected"] if config.collection_status == "both"
+                          else [config.collection_status])
+        headers = ("Číslo", "Jméno", "Kategorie") + tuple(
+            "Odebráno" if status == "collected" else "Neodebráno" for status in status_columns)
+        rows = [(person["number"], person["name"], ", ".join(sorted(person["categories"])),
+                 *(person[status] for status in status_columns))
+                for person in sorted(people.values(), key=lambda p: (p["name"].casefold(), str(p["number"] or "")))]
+        if rows:
+            ratios = [.12, .38, .20] + [.30 / len(status_columns)] * len(status_columns)
+            story.append(table(headers, rows, [width * ratio for ratio in ratios],
+                               centered_columns={0, *range(3, len(headers))}))
+        else:
+            story.append(Paragraph("Pro zvolené období a filtry nebyly nalezeny žádné objednávky.", body_style))
+        story.extend([Spacer(1, 2 * mm), Paragraph("Zahrnuty jsou jednotlivé objednávky stravy. Hromadné přihlášky se zde nevykazují.", body_style)])
+        return story
     story.extend([CondPageBreak(35 * mm), Paragraph("Seznam strávníků a odběrů", heading)])
     if not report.diners:
         story.append(Paragraph("Pro zvolený den a filtry nebyly nalezeny žádné objednávky odpovídající výběru.", body_style))

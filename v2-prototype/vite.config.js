@@ -1,2 +1,2 @@
 import { defineConfig } from 'vite';
-export default defineConfig({server:{port:1420,strictPort:true},clearScreen:false});
+export default defineConfig({server:{port:1420,strictPort:true},build:{outDir:"frontend-dist"},clearScreen:false});
