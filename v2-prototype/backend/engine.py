@@ -29,6 +29,15 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'bulk_options':
+        from bulk_bridge import options
+        return options(request.get('config_path'))
+    if request.get('action') == 'bulk_preview':
+        from bulk_bridge import preview_message
+        return preview_message(request.get('config_path'),request.get('data', {}))
+    if request.get('action') == 'bulk_send':
+        from bulk_bridge import send_message
+        return send_message(request.get('config_path'),request.get('data', {}))
     if request.get('action') == 'save_special':
         from special_bridge import save_special
         return save_special(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('data', {}))

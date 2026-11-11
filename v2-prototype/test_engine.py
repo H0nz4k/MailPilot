@@ -1150,3 +1150,43 @@ def test_send_generated_closing_files_never_schedules_or_sends_unknown_files(tmp
     with pytest.raises(ValueError,match='jedné vytvořené sestavy'):
         legacy_bridge.send_report_files(str(config),[str(outsider)],['a@example.invalid'],'Uzávěrka','10/2026',str(root))
     assert len(calls)==1
+
+
+def test_bulk_message_rechecks_preview_and_restricts_categories(tmp_path,monkeypatch):
+    import sys,pytest
+    from types import SimpleNamespace
+    from services.bulk import BulkData, BulkDiner
+    import services.web_mail_settings as settings
+    import automaticky_export,env_store
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import bulk_bridge
+    config=tmp_path/'config.json';config.touch()
+    diners=(BulkDiner(1,'Anna','anna@example.invalid','3.A','ZACI'),BulkDiner(2,'Eva','eva@example.invalid','3.A','HOST'),BulkDiner(3,'Jan',None,'3.A','ZACI'))
+    monkeypatch.setattr(bulk_bridge,'configuration',lambda p:SimpleNamespace(database={'password':'not-real'},categories=('ZACI',)))
+    monkeypatch.setattr(bulk_bridge,'load_bulk_data',lambda db,pwd:BulkData(classes=(('3.A',''),),categories=(('ZACI','Žáci'),('HOST','Hosté')),diners=diners))
+    monkeypatch.setattr(automaticky_export,'read_saved_settings',lambda p:{})
+    monkeypatch.setattr(settings,'load_settings',lambda p:{'transport':'resend','from_email':'sender@example.invalid'})
+    monkeypatch.setattr(env_store,'get_resend_api_key',lambda:'not-real')
+    sent=[]
+    monkeypatch.setattr(bulk_bridge,'send_bulk',lambda preview,**kwargs:sent.append(preview.recipients) or SimpleNamespace(recipients=preview.recipients))
+    request={'filter_type':'trida','values':['3.A'],'subject':'Předmět','body':'Text'}
+    preview=bulk_bridge.preview_message(str(config),request)
+    assert preview['recipients']==1 and preview['missing']==1
+    assert {r['name'] for r in preview['rows']}=={'Anna','Jan'}
+    assert bulk_bridge.send_message(str(config),{**request,'revision':preview['revision']})['sent']==1
+    assert sent==[('anna@example.invalid',)]
+    with pytest.raises(ValueError,match='změnili'):
+        bulk_bridge.send_message(str(config),{**request,'body':'Jiný text','revision':preview['revision']})
+    assert len(sent)==1
+
+
+def test_bulk_preview_shows_missing_addresses_without_sending(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from services.bulk import BulkData,BulkDiner
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import bulk_bridge
+    monkeypatch.setattr(bulk_bridge,'configuration',lambda p:SimpleNamespace(database={'password':'x'},categories=()))
+    monkeypatch.setattr(bulk_bridge,'load_bulk_data',lambda db,pwd:BulkData(classes=(('3.A',''),),categories=(),diners=(BulkDiner(1,'Jan',None,'3.A','ZACI'),)))
+    preview=bulk_bridge.preview_message(str(tmp_path/'config.json'),{'filter_type':'trida','values':['3.A'],'subject':'','body':''})
+    assert preview['missing']==1 and preview['recipients']==0

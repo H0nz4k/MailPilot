@@ -6,6 +6,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 - Nový prázdný prostor lze založit bez verze 1.4, po testu připojení a nastavení systémových hesel; ověřeno s náhradami databáze a trezoru.
 - Volitelný import do odděleného prostoru verze 2 kopíruje konfiguraci, profily, šablony PDF a historii příjemců a úlohy převede jako pozastavené; nepřepisuje existující prostor ani staré soubory. Nová služba používá vlastní název. Ověřeno izolovaně.
+- Hromadná zpráva: výběr tříd nebo kategorií, náhled příjemců a Resend; při odeslání se seznam znovu načte a porovná s náhledem. Ověřeno s náhradní databází a odesílačem, skutečné odeslání neproběhlo.
 - Speciál Z 17-01: jednorázový podklad s výběrem povolených kategorií a mapováním řádků přes původní výpočet; ověřeno s náhradou výpočtu, nikoli na skutečných datech. Mapování lze v odděleném prostoru uložit s heslem administrace; kategorie mimo oprávněný rozsah zůstávají zachované.
 - Uzávěrka: generování FKSP, stravovacího archu a rekapitulace přes původní služby, do jedinečné dočasné složky bez odeslání e-mailu, s následným uložením do nové cílové složky a jednorázovým odesláním; ověřeno s náhradou výpočtu, nikoli na skutečných datech.
 - Jednorázové Odběry: po vytvoření lze PDF uložit pod novým názvem nebo odeslat podle nastavení SMTP/Resend bez vytvoření úlohy. Odeslání je testováno pouze s náhradním transportem.
