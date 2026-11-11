@@ -614,11 +614,7 @@ def pdf_templates(path):
     return [item.to_dict() for item in load_templates(template_file(Path(path).parent))]
 
 
-def save_report_files(sources, destination, output_dir):
-    """Copy generated PDFs/ZIPs into a new directory without overwriting files."""
-    import os
-    import shutil
-    import tempfile
+def checked_report_files(sources, output_dir):
     if not isinstance(sources,list) or not sources or any(not isinstance(x,str) for x in sources):
         raise ValueError('Nejsou vybrány žádné vytvořené soubory.')
     root = Path(output_dir).resolve()
@@ -627,7 +623,16 @@ def save_report_files(sources, destination, output_dir):
     if (directory.parent != root or any(p.parent != directory or p.suffix.casefold() not in ('.pdf','.zip')
                                        or not p.is_file() for p in files)
             or len({p.name.casefold() for p in files}) != len(files)):
-        raise ValueError('Lze uložit pouze soubory jedné vytvořené sestavy.')
+        raise ValueError('Lze použít pouze soubory jedné vytvořené sestavy.')
+    return files
+
+
+def save_report_files(sources, destination, output_dir):
+    """Copy generated PDFs/ZIPs into a new directory without overwriting files."""
+    import os
+    import shutil
+    import tempfile
+    files = checked_report_files(sources, output_dir)
     target = Path(destination)
     if not target.is_absolute():
         raise ValueError('Zadejte úplnou cestu k nové výstupní složce.')
@@ -645,3 +650,32 @@ def save_report_files(sources, destination, output_dir):
             raise ValueError('Výstupní složka již existuje. Zvolte jiný název.')
         os.rename(staging,target)
     return {'directory':str(target),'files':[str(target/p.name) for p in files]}
+
+
+def send_report_files(config_path, sources, recipients, report_type, period, output_dir):
+    from automaticky_export import read_saved_settings
+    from env_store import get_resend_api_key
+    from mail_service import normalize_recipient, normalize_recipients, send_files_via_mailsender
+    from services.web_mail_settings import load_settings, settings_path
+    from services.web_mail_smtp import smtp_send_files
+    if report_type not in ('Uzávěrka', 'Z 17-01') or not isinstance(period,str) or len(period)>30:
+        raise ValueError('Neplatný typ sestavy.')
+    recipients = normalize_recipients(recipients)
+    files = checked_report_files(sources, output_dir)
+    path = Path(config_path)
+    configuration(str(path))
+    raw = read_saved_settings(path)
+    settings = load_settings(settings_path(path.parent))
+    fields = {'report':report_type, 'date':period}
+    subject, body = settings['subject_template'].format(**fields), settings['body_template'].format(**fields)
+    if settings['transport'] == 'smtp':
+        smtp_send_files(settings,recipients,subject,body,files)
+    elif settings['transport'] == 'resend':
+        sender = normalize_recipient(settings['from_email'] or raw.get('mail_odesilatel'))
+        key = get_resend_api_key()
+        if not key:
+            raise ValueError('Chybí Resend API klíč.')
+        send_files_via_mailsender(recipients,subject,body,files,api_key=key,sender_email=sender)
+    else:
+        raise ValueError('Neznámý způsob odesílání.')
+    return {'sent':len(recipients)}

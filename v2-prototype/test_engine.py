@@ -1103,3 +1103,50 @@ def test_save_report_files_copies_only_one_generated_folder_without_overwrite(tm
     with pytest.raises(ValueError,match='jedné vytvořené sestavy'):
         legacy_bridge.save_report_files([str(pdf),str(outsider)],str(tmp_path/'bad'),str(root))
     assert not (tmp_path/'bad').exists()
+
+
+def test_smtp_multiple_attachments_uses_pdf_and_zip_content_types(tmp_path,monkeypatch):
+    import services.web_mail_smtp as smtp
+    pdf=tmp_path/'report.pdf';pdf.write_bytes(b'%PDF-test')
+    archive=tmp_path/'report.zip';archive.write_bytes(b'PK-test')
+    sent=[]
+    class Client:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def ehlo(self):pass
+        def starttls(self,**kwargs):pass
+        def send_message(self,message):sent.append(message)
+    monkeypatch.setattr(smtp.smtplib,'SMTP',lambda *args,**kwargs:Client())
+    settings={'smtp_host':'example.invalid','smtp_port':587,'smtp_security':'starttls',
+              'smtp_username':'','from_email':'sender@example.invalid','from_name':''}
+    smtp.smtp_send_files(settings,['a@example.invalid'],'Report','Body',[pdf,archive])
+    parts=list(sent[0].iter_attachments())
+    assert [part.get_content_type() for part in parts]==['application/pdf','application/zip']
+    assert [part.get_filename() for part in parts]==['report.pdf','report.zip']
+
+
+def test_send_generated_closing_files_never_schedules_or_sends_unknown_files(tmp_path,monkeypatch):
+    import sys,pytest
+    from types import SimpleNamespace
+    import automaticky_export
+    import services.web_mail_settings as settings
+    import services.web_mail_smtp as smtp
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    root=tmp_path/'generated'
+    output=root/'Uzaverka-2026-10-12345678'
+    output.mkdir(parents=True)
+    pdf=output/'report.pdf';pdf.write_bytes(b'%PDF-test')
+    config=tmp_path/'config.json';config.touch()
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(automaticky_export,'read_saved_settings',lambda path:{})
+    monkeypatch.setattr(settings,'load_settings',lambda path:{'transport':'smtp','subject_template':'{report} {date}','body_template':'{report}'})
+    calls=[]
+    monkeypatch.setattr(smtp,'smtp_send_files',lambda *args:calls.append(args))
+    result=legacy_bridge.send_report_files(str(config),[str(pdf)],['a@example.invalid'],'Uzávěrka','10/2026',str(root))
+    assert result['sent']==1 and len(calls)==1 and calls[0][4]==[pdf.resolve()]
+    assert not (tmp_path/'web_mail_tasks.json').exists()
+    outsider=tmp_path/'other.pdf';outsider.write_bytes(b'%PDF-other')
+    with pytest.raises(ValueError,match='jedné vytvořené sestavy'):
+        legacy_bridge.send_report_files(str(config),[str(outsider)],['a@example.invalid'],'Uzávěrka','10/2026',str(root))
+    assert len(calls)==1

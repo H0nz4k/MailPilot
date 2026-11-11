@@ -10,6 +10,10 @@ from mail_service import normalize_recipient, normalize_recipients
 
 
 def smtp_send(settings: dict, recipients, subject: str, body: str, attachment: Path):
+    return smtp_send_files(settings, recipients, subject, body, [attachment])
+
+
+def smtp_send_files(settings: dict, recipients, subject: str, body: str, attachments):
     host = str(settings.get("smtp_host", "")).strip()
     port = int(settings.get("smtp_port", 587))
     security = settings.get("smtp_security", "starttls")
@@ -33,8 +37,12 @@ def smtp_send(settings: dict, recipients, subject: str, body: str, attachment: P
     message["To"] = ", ".join(destinations)
     message["Subject"] = subject
     message.set_content(body)
-    path = Path(attachment)
-    message.add_attachment(path.read_bytes(), maintype="application", subtype="pdf", filename=path.name)
+    paths = [Path(item) for item in attachments]
+    if not paths or any(path.suffix.casefold() not in {'.pdf', '.zip'} or not path.is_file() for path in paths):
+        raise ValueError('Přílohy musí být existující soubory PDF nebo ZIP.')
+    for path in paths:
+        subtype = 'pdf' if path.suffix.casefold() == '.pdf' else 'zip'
+        message.add_attachment(path.read_bytes(), maintype='application', subtype=subtype, filename=path.name)
     context = ssl.create_default_context()
     if security == "ssl":
         client = smtplib.SMTP_SSL(host, port, timeout=30, context=context)
