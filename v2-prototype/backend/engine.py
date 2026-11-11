@@ -73,6 +73,9 @@ def handle(request):
     if request.get('action') == 'legacy_send':
         from legacy_bridge import send_collection
         return send_collection(request, request['output_dir'])
+    if request.get('action') == 'legacy_period_options':
+        from legacy_bridge import period_filter_options
+        return period_filter_options(request.get('config_path'), request.get('start'), request.get('end'))
     if request.get('action') == 'legacy_options':
         from legacy_bridge import filter_options
         return filter_options(request.get('config_path'), request.get('date'))

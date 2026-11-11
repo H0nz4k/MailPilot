@@ -5,7 +5,7 @@ import {ArrowLeft, ArrowRight, CheckCircle2} from 'lucide-react';
 const steps = ['Datum a strava', 'Obsah a PDF', 'Na který den', 'E-mail a uložení'];
 const initial = {categories:null, meals:null, deliveries:null, category_separation:false, show_by_categories:true, show_by_norms:true, show_delivery_summary:false, delivery_show_names:false, delivery_page_per_type:false, pdf_orientation:null, pdf_bold:null, pdf_compact_rows:false, name:'', date:new Date().toLocaleDateString('en-CA'), category:'all', meal:'all', content:'names', collection:'both', mode:'today', days:'2', output:'email', recipients:'', directory:'', filename:'Prehled_{date}.pdf', time:'08:00', enabled:false, cooking:true};
 const labels = {today:'Dnes', tomorrow:'Zítra', after_tomorrow:'Pozítří', offset:'Jiný počet dní dopředu', yesterday:'Včera', history:'Jiný počet dní zpět', next_cooking_day:'Následující varný den', fixed:'Konkrétní datum'};
-function Filters({label, options, value, onChange}) {
+export function Filters({label, options, value, onChange}) {
  const all = options.map(o=>o.value);
  const selected = value === null ? all : value;
  function toggle(item, checked){onChange(checked ? [...selected,item] : selected.filter(v=>v!==item));}

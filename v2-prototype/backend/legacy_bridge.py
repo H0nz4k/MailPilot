@@ -34,6 +34,19 @@ def filter_options(path, report_date):
             'deliveries': list(available_delivery_types(config.database))}
 
 
+def period_filter_options(path, start, end):
+    from stravovaci_sestava import available_meal_types, available_delivery_types
+    config = configuration(path)
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    if not 0 <= (last - first).days <= 365:
+        raise ValueError('Zadejte období nejvýše 366 dní.')
+    meals = set()
+    for year in range(first.year, last.year + 1):
+        meals.update(available_meal_types(config.database, date(year, 1, 1)))
+    return {'meals':sorted(meals, key=str.casefold),
+            'deliveries':list(available_delivery_types(config.database))}
+
+
 def collection(request, output_dir):
     config = configuration(request.get('config_path'))
     start, end = date.fromisoformat(request['start']), date.fromisoformat(request['end'])
@@ -43,14 +56,32 @@ def collection(request, output_dir):
     if status not in ('both', 'collected', 'uncollected'):
         raise ValueError('Neplatný stav odběru.')
     category = request.get('category', 'all')
-    if category != 'all':
+    selected = request.get('categories')
+    if selected is not None:
+        if not isinstance(selected, list) or not selected or any(not isinstance(item,str) for item in selected):
+            raise ValueError('Vyberte alespoň jednu kategorii.')
+        if config.categories and not set(selected).issubset(config.categories):
+            raise ValueError('Kategorie není povolená konfigurací.')
+        categories = tuple(dict.fromkeys(selected))
+    elif category != 'all':
         if config.categories and category not in config.categories:
             raise ValueError('Kategorie není povolená konfigurací.')
         categories = (category,)
     else:
         categories = config.categories
+    meals, deliveries = request.get('meals'), request.get('deliveries')
+    if meals is not None or deliveries is not None:
+        options = period_filter_options(request['config_path'],request['start'],request['end'])
+        for selected, key in ((meals,'meals'),(deliveries,'deliveries')):
+            if selected is not None and (not isinstance(selected,list) or not selected or
+                    any(not isinstance(value,str) or value not in options[key] for value in selected)):
+                raise ValueError('Vyberte alespoň jednu dostupnou možnost filtru.')
+    by_category = request.get('show_by_categories', True)
+    if not isinstance(by_category, bool):
+        raise ValueError('Neplatná volba souhrnu kategorií.')
     config = replace(config, report_date=start, report_end_date=end, categories=categories,
-                     collection_status=status, category_separation=False, show_by_categories=True)
+                     collection_status=status, category_separation=False, show_by_categories=by_category,
+                     meal_type=meals, delivery_types=tuple(deliveries or ()))
     report = fetch_report(config)
     rows = [{'date': r.order_date.isoformat(), 'name': r.name or '[bez jména]', 'number': r.diner_number,
              'category': r.category_name or r.category_code, 'meal': r.meal_type,

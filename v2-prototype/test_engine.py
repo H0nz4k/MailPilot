@@ -710,3 +710,43 @@ def test_save_pdf_never_overwrites_and_only_copies_generated_files(tmp_path):
         legacy_bridge.save_pdf(str(target),str(tmp_path/'second.pdf'),str(output))
     with pytest.raises(ValueError,match='úplnou cestu'):
         legacy_bridge.save_pdf(str(source),'relative.pdf',str(output))
+
+
+def test_collection_period_multiple_filters_are_applied_and_validated(tmp_path,monkeypatch):
+    import sys, pytest
+    from dataclasses import replace
+    from stravovaci_sestava import AppConfig
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    cfg=AppConfig(database={},report_date=date(2026,12,31),categories=('ZACI','HOST'),language='česky',menu_list_number=1)
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:cfg)
+    monkeypatch.setattr(legacy_bridge,'period_filter_options',lambda *args:{'meals':['Oběd','Večeře'],'deliveries':['Rozvoz']})
+    sample=engine.fetch_collection_period(engine.FixtureCursor(),replace(cfg,report_end_date=date(2027,1,1),collection_status='both'),cfg.categories,'Test')
+    seen=[]
+    monkeypatch.setattr(legacy_bridge,'fetch_report',lambda actual:seen.append(actual) or sample)
+    req={'config_path':'config.json','start':'2026-12-31','end':'2027-01-01','status':'both',
+         'categories':['ZACI','HOST'],'meals':['Oběd','Večeře'],'deliveries':['Rozvoz'],'show_by_categories':False}
+    legacy_bridge.collection(req,tmp_path)
+    actual=seen[0]
+    assert actual.categories==('ZACI','HOST') and actual.meal_type==['Oběd','Večeře']
+    assert actual.delivery_types==('Rozvoz',) and not actual.show_by_categories
+    with pytest.raises(ValueError,match='není povolená'):
+        legacy_bridge.collection({**req,'categories':['ZACI','NEPOVOLENA']},tmp_path)
+    with pytest.raises(ValueError,match='dostupnou možnost'):
+        legacy_bridge.collection({**req,'meals':['neexistuje']},tmp_path)
+    assert len(seen)==1
+
+
+def test_period_filter_options_includes_both_years(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import stravovaci_sestava as reports
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace(database={}))
+    years=[]
+    monkeypatch.setattr(reports,'available_meal_types',lambda db,day:years.append(day.year) or (f'Jídlo {day.year}',))
+    monkeypatch.setattr(reports,'available_delivery_types',lambda db:('Rozvoz',))
+    result=legacy_bridge.period_filter_options('config.json','2026-12-31','2027-01-01')
+    assert years==[2026,2027] and result['meals']==['Jídlo 2026','Jídlo 2027']
+    assert result['deliveries']==['Rozvoz']
