@@ -37,6 +37,9 @@ def handle(request):
     if request.get('action') == 'read_settings':
         from settings_bridge import read_settings
         return read_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))
+    if request.get('action') == 'save_database_settings':
+        from settings_bridge import save_connection
+        return save_connection(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('database'), request.get('database_password'))
     if request.get('action') == 'save_mail_settings':
         from settings_bridge import save_mail
         return save_mail(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('changes'), request.get('resend_key'))

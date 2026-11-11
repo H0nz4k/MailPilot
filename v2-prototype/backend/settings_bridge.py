@@ -59,3 +59,31 @@ def save_mail(config_path, workspace, password, changes, resend_key=None):
         except (EnvStoreError, OSError) as exc:
             raise ValueError('Nastavení bylo uloženo, ale API klíč se nepodařilo uložit.') from exc
     return {'saved':True}
+
+
+def save_connection(config_path, workspace, password, values, new_database_password=None):
+    from credential_store import get_password, set_password
+    from services.config_io import load_raw_config, normalize_database, save_raw_config
+    from services.database import probe_connection
+    authorize(password)
+    path = workspace_path(config_path, workspace)
+    if not isinstance(values, dict):
+        raise ValueError('Neplatné nastavení databáze.')
+    database = normalize_database(values)
+    if new_database_password is not None and not isinstance(new_database_password, str):
+        raise ValueError('Neplatné heslo databáze.')
+    secret = new_database_password or get_password(database)
+    if not secret:
+        raise ValueError('Zadejte heslo databáze; pro toto připojení není uložené.')
+    connection = probe_connection(database, secret, remember=False)
+    raw = load_raw_config(path)
+    raw['databaze'] = database
+    if new_database_password:
+        set_password(database, new_database_password)
+    try:
+        save_raw_config(path, raw)
+    except (OSError, ValueError) as exc:
+        if new_database_password:
+            raise ValueError('Heslo databáze bylo uloženo, ale konfiguraci se nepodařilo zapsat.') from exc
+        raise
+    return {'saved':True, 'subject':connection.subject_name or connection.database_name}

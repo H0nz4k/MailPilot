@@ -12,13 +12,14 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
 - Průvodce načítá uložené šablony PDF a zachovává jejich rozložení i velikosti písma.
 - Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
+- Nastavení databázového připojení se před uložením ověřuje a používá systémové úložiště hesel; ověřeno náhradou databáze.
 - Nastavení e-mailu a NSSM v odděleném prostoru je chráněné existujícím heslem administrace; klíč Resend se při importu nekopíruje. Ověřeno simulovanými přihlašovacími údaji.
 - Samostatný worker verze 2 používá zámek proti dalšímu workeru nad stejnou konfigurací. Službu lze nainstalovat, spustit, zastavit, opravit a odstranit; akce služby jsou ověřené pouze náhradami, nikoli skutečnou službou.
 - Čtyřkrokový průvodce při připojení uloží profil a úlohu do úložiště 1.4; umí vypsat úlohy, pozastavit, zapnout, odstranit a upravit je krokovým průvodcem. Při změně vytváří nový profil a chrání ostatní úlohy sdílející původní profil. Zobrazuje diagnostický stav původní služby a workeru; existující službu umí spustit a zastavit po ověření workeru a konfigurace. Nové úlohy jsou výchozím stavem pozastavené. Ověřeno izolovaně s náhradou databáze, ne reálnou službou nebo odesláním.
 
 ## K převodu a ověření
 
-1. Nastavení připojení, založení a změna hesla administrace, správa oprávnění a bezpečné ukládání hesel.
+1. Založení a změna hesla administrace, správa oprávnění a ověření nastavení připojení na skutečné Jídelně.
 2. Přehledy a PDF včetně všech voleb z 1.4, hromadných strávníků, šablon a uložených profilů.
 3. Dokončit průvodce: zbývající volby PDF a interaktivní náhled; ověřit běh přes skutečnou službu.
 4. Ověřit samostatný plánovač a jeho Windows službu v reálném prostředí; zabránit duplicitnímu odeslání při souběhu samostatných konfigurací. Nezapínat automatické odesílání při migraci bez jasného stavu a ověření.

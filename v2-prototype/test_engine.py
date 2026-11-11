@@ -894,3 +894,46 @@ def test_settings_unset_admin_and_key_failure_are_explicit(tmp_path,monkeypatch)
     with pytest.raises(ValueError,match='uloženo, ale API klíč'):
         settings_bridge.save_mail(str(config),str(workspace),'heslo',{'transport':'resend'},'not-real-key')
     assert (workspace/'web_mail_settings.json').exists()
+
+
+def test_database_settings_test_connection_before_saving_without_secrets(tmp_path,monkeypatch):
+    import sys,json
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge,credential_store
+    import services.database as database_service
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text(json.dumps({'databaze':{'host':'old','port':5432,'dbname':'old','user':'old'},'other':123}),encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'admin')
+    stored=[]
+    monkeypatch.setattr(credential_store,'set_password',lambda db,pwd:stored.append((db,pwd)))
+    calls=[]
+    monkeypatch.setattr(database_service,'probe_connection',lambda db,pwd,remember: calls.append((db,pwd,remember)) or SimpleNamespace(subject_name='Jídelna',database_name='new'))
+    values={'host':'db-host','port':'5433','dbname':'new','user':'reader','sslmode':'prefer'}
+    result=settings_bridge.save_connection(str(config),str(workspace),'admin',values,'not-real-password')
+    assert result=={'saved':True,'subject':'Jídelna'}
+    assert calls[0][2] is False and stored[0][1]=='not-real-password'
+    raw=json.loads(config.read_text(encoding='utf-8'))
+    assert raw['databaze']['host']=='db-host' and raw['other']==123
+    assert 'not-real-password' not in str(raw)
+
+
+def test_database_settings_connection_failure_never_writes(tmp_path,monkeypatch):
+    import sys,json,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge,credential_store
+    import services.database as database_service
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    original=json.dumps({'databaze':{'host':'old'}})
+    config.write_text(original,encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'admin')
+    monkeypatch.setattr(credential_store,'set_password',lambda *a:pytest.fail('password must not be saved'))
+    def fail(*args,**kwargs):raise ValueError('Připojení selhalo')
+    monkeypatch.setattr(database_service,'probe_connection',fail)
+    with pytest.raises(ValueError,match='Připojení selhalo'):
+        settings_bridge.save_connection(str(config),str(workspace),'admin',{'host':'new','port':5432,'dbname':'db','user':'user'},'not-real')
+    assert config.read_text(encoding='utf-8')==original
