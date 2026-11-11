@@ -202,3 +202,26 @@ def update_task(path, task_id, changes):
         updated = replace(updated, first_send_date=max(first, original.first_send_date or first))
     save_tasks(target, [updated if item.id == task_id else item for item in existing])
     return {'id':updated.id}
+
+
+def control_scheduler(path, action):
+    """Control only an existing 1.4 worker bound to the selected configuration."""
+    import shlex
+    from pathlib import PureWindowsPath
+    from services.web_branding import WORKER_EXE_NAME
+    from services.web_mail_nssm import _service_setup, _run_nssm, require_service_rights, service_command
+    if action not in ('start', 'stop'):
+        raise ValueError('Neznámá operace služby.')
+    config_path = Path(path).resolve()
+    configuration(path)
+    nssm, name = _service_setup(config_path.parent)
+    base = [str(nssm)]
+    program = _run_nssm(base + ['get', name, 'Application']).strip().strip('"')
+    if PureWindowsPath(program).name.casefold() != WORKER_EXE_NAME.casefold():
+        raise ValueError('Služba nepoužívá worker DataShipu; zůstala beze změny.')
+    parameters = _run_nssm(base + ['get', name, 'AppParameters'])
+    args = [part.strip('"') for part in shlex.split(parameters, posix=False)]
+    if len(args) != 2 or args[0] != '--config' or PureWindowsPath(args[1]) != PureWindowsPath(str(config_path)):
+        raise ValueError('Služba používá jinou konfiguraci; zůstala beze změny.')
+    require_service_rights(action)
+    return {'message': service_command(config_path.parent, action)}

@@ -293,3 +293,34 @@ def test_edit_task_preserves_profile_and_revalidates_changes(tmp_path,monkeypatc
     with pytest.raises(ValueError):
         legacy_bridge.update_task(path,before['id'],{'date_mode':'offset','day_offset':-1})
     assert load_tasks(task_file(tmp_path))[0] == after
+
+
+def test_scheduler_control_checks_worker_and_config_before_action(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import services.web_mail_nssm as nssm
+    from services.web_branding import WORKER_EXE_NAME
+    path=tmp_path/'config.json'
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(nssm,'_service_setup',lambda directory:(tmp_path/'nssm.exe','DataShipWorker'))
+    commands=[]
+    def call(args):
+        commands.append(args)
+        if args[-1]=='Application': return str(tmp_path/WORKER_EXE_NAME)
+        if args[-1]=='AppParameters': return f'--config "{path}"'
+        raise AssertionError(args)
+    monkeypatch.setattr(nssm,'_run_nssm',call)
+    monkeypatch.setattr(nssm,'require_service_rights',lambda action:None)
+    changes=[]
+    monkeypatch.setattr(nssm,'service_command',lambda directory,action:changes.append(action) or 'OK')
+    assert legacy_bridge.control_scheduler(str(path),'start')['message']=='OK'
+    assert changes==['start']
+    monkeypatch.setattr(nssm,'_run_nssm',lambda args: 'other.exe')
+    with pytest.raises(ValueError,match='zůstala beze změny'):
+        legacy_bridge.control_scheduler(str(path),'stop')
+    assert changes==['start']
+    with pytest.raises(ValueError,match='Neznámá'):
+        legacy_bridge.control_scheduler(str(path),'install')

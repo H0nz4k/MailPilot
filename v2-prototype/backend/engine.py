@@ -35,6 +35,9 @@ def handle(request):
     if request.get('action') == 'legacy_set_task_enabled':
         from legacy_bridge import set_task_enabled
         return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'))
+    if request.get('action') == 'legacy_control_scheduler':
+        from legacy_bridge import control_scheduler
+        return control_scheduler(request.get('config_path'), request.get('operation'))
     if request.get('action') == 'legacy_scheduler_status':
         from legacy_bridge import scheduler_status
         return scheduler_status(request.get('config_path'))
