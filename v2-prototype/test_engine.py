@@ -1013,3 +1013,27 @@ def test_create_workspace_validates_before_writing_and_starts_no_tasks(tmp_path,
     with pytest.raises(ValueError,match='již existuje'):
         workspace_import.create_workspace(target,values,'another','admin','admin')
     assert len(state['db'])==1
+
+
+def test_closing_generation_forces_no_mail_and_preserves_source(tmp_path,monkeypatch):
+    import sys,json
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import closing_bridge
+    source=tmp_path/'config.json'
+    source.write_text(json.dumps({'databaze':{},'uzaverka':{'odeslat_mail':True,'vsechny_kategorie':True}}),encoding='utf-8')
+    original=source.read_bytes()
+    seen=[]
+    def fake_run(path,*,year,month):
+        raw=json.loads(path.read_text(encoding='utf-8'))
+        seen.append(raw)
+        dest=Path(raw['uzaverka']['vystup'])
+        return SimpleNamespace(status='exported',files=(dest/'report.pdf',),attachments=(),detail='OK')
+    monkeypatch.setattr(closing_bridge,'run_closing',fake_run)
+    form={'year':2026,'month':10,'reports':['fksp','stravovaci_arch'],
+          'arch_variant':'StravovaciArch','include_bulk_arch':True,'recap_variant':'R','pack_zip':False}
+    result=closing_bridge.generate_closing(str(source),form,tmp_path/'output')
+    assert result['status']=='exported' and len(result['files'])==1
+    assert seen[0]['uzaverka']['odeslat_mail'] is False
+    assert seen[0]['uzaverka']['vsechny_kategorie'] is False
+    assert source.read_bytes()==original

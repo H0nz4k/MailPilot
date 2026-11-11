@@ -29,6 +29,16 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'closing_defaults':
+        from closing_bridge import closing_defaults
+        from legacy_bridge import configuration
+        configuration(request.get('config_path'))
+        return closing_defaults(request.get('config_path'))
+    if request.get('action') == 'generate_closing':
+        from closing_bridge import generate_closing
+        from legacy_bridge import configuration
+        configuration(request.get('config_path'))
+        return generate_closing(request.get('config_path'), request.get('data', {}), request['output_dir'])
     if request.get('action') == 'global_admin_status':
         from credential_store import get_admin_password
         return {'configured':bool(get_admin_password())}
