@@ -177,6 +177,22 @@ async def test_wizard_collection_history_meal_filters_and_saved_schedule(tmp_pat
                 page.wizard_content.value = "collection"
                 assert set(page.collection_status_select.options) == {"both", "collected", "uncollected"}
                 page.collection_status_select.value = "uncollected"
+                page.connection_ok = True
+                page._connection_password = "test-only"
+                sample = fetch_collection_report(Cursor(ROWS), config(), ("1", "2"), None)
+                with patch.object(page, "_fetch_daily_summary", return_value=sample):
+                    await page.refresh_daily_summary()
+                assert [row["name"] for row in page.daily_collection_table.rows] == ["Alena Černá", "Jan Novák"]
+                assert [row["status"] for row in page.daily_collection_table.rows] == ["Odebraná", "Neodebraná"]
+                assert page.daily_collection_table.visible
+                from credential_store import write_config
+                write_config(path, page._collect_config())
+                with patch("stravovaci_sestava.get_password", return_value="test-only"), \
+                     patch("stravovaci_nicegui.fetch_report", return_value=sample):
+                    output = page._create_pdf(categories=("1", "2"), allowed_categories=("1", "2"))
+                pdf_text = "\n".join(p.extract_text() for p in PdfReader(output).pages)
+                assert "Alena Černá" in pdf_text and "Jan Novák" in pdf_text
+                assert "Neodebraná strava" in pdf_text
                 page.meal_type_select.set_options({"oběd": "Oběd", "večeře": "Večeře"}, value=["oběd", "večeře"])
                 page.delivery_type_select.set_options({"Rozvoz": "Rozvoz"}, value=["Rozvoz"])
                 page._apply_daily_categories(["2"])
@@ -201,4 +217,5 @@ async def test_wizard_collection_history_meal_filters_and_saved_schedule(tmp_pat
                 assert task.day_offset == -1 and task.profile_id == profile.id
                 page._wizard_new()
                 assert page._selected_collection_status() is None
+                assert not page.daily_collection_table.visible
                 assert "yesterday" not in page.wizard_mode.options

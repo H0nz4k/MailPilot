@@ -269,6 +269,18 @@ class DailyDesignMixin(ReportWizardMixin):
                     {"name": "name", "label": "Kategorie", "field": "name", "align": "left"},
                     {"name": "portions", "label": "Porce", "field": "portions", "align": "right"},
                 ], rows=[], row_key="code").props('flat dense hide-bottom wrap-cells tabindex="0" aria-label="Souhrn počtu porcí podle kategorií"').classes("w-full ds-summary-table")
+                self.daily_collection_heading = ui.label("Seznam odběrů stravy").classes("app-heading")
+                self.daily_collection_table = ui.table(columns=[
+                    {"name": "number", "label": "Číslo", "field": "number", "align": "left"},
+                    {"name": "name", "label": "Jméno", "field": "name", "align": "left"},
+                    {"name": "classroom", "label": "Třída", "field": "classroom", "align": "left"},
+                    {"name": "category", "label": "Kategorie", "field": "category", "align": "left"},
+                    {"name": "meal", "label": "Strava", "field": "meal", "align": "left"},
+                    {"name": "menu", "label": "Menu", "field": "menu", "align": "left"},
+                    {"name": "status", "label": "Odběr", "field": "status", "align": "left"},
+                ], rows=[], row_key="id", pagination=25).props('flat dense wrap-cells aria-label="Seznam odběrů stravy"').classes("w-full")
+                self.daily_collection_heading.set_visibility(False)
+                self.daily_collection_table.set_visibility(False)
             with ui.row().classes("ds-dialog-footer w-full justify-end"):
                 ui.button("Zavřít", on_click=self.daily_summary_dialog.close).props("no-caps unelevated")
 
@@ -463,6 +475,10 @@ class DailyDesignMixin(ReportWizardMixin):
         self.daily_summary_total.set_text("—")
         self.daily_summary_table.rows = []
         self.daily_summary_table.update()
+        self.daily_collection_table.rows = []
+        self.daily_collection_table.update()
+        self.daily_collection_heading.set_visibility(False)
+        self.daily_collection_table.set_visibility(False)
         if self._daily_summary_timer is not None:
             self._daily_summary_timer.deactivate()
         if not self.connection_ok:
@@ -508,6 +524,16 @@ class DailyDesignMixin(ReportWizardMixin):
         self.daily_summary_total.set_text(f"{total:,}".replace(",", " "))
         self.daily_summary_table.rows = list(rows.values())
         self.daily_summary_table.update()
+        self.daily_collection_table.rows = [
+            {"id": i, "number": item.diner_number, "name": item.name or "[bez jména]",
+             "classroom": item.classroom or "", "category": item.category_code,
+             "meal": item.meal_type, "menu": f"Menu {item.menu}",
+             "status": "Odebraná" if item.collected else "Neodebraná"}
+            for i, item in enumerate(report.diners)
+        ] if status else []
+        self.daily_collection_table.update()
+        self.daily_collection_heading.set_visibility(status is not None)
+        self.daily_collection_table.set_visibility(status is not None)
         self.daily_summary_status.set_text(f"Vybraných kategorií: {len(categories)}")
 
     @staticmethod
