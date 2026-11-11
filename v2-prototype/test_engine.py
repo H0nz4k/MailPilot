@@ -651,3 +651,62 @@ def test_repair_scheduler_requires_stopped_v2_and_does_not_start(tmp_path,monkey
     with pytest.raises(ValueError,match='zastavte'):
         legacy_bridge.repair_scheduler(str(config),str(workspace))
     assert [c[1] for c in commands]==['status']
+
+
+def test_one_off_collection_email_uses_selected_dates_without_scheduling(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import automaticky_export
+    import services.web_mail_settings as settings
+    import services.web_mail_smtp as smtp
+    config=tmp_path/'config.json'
+    config.touch()
+    pdf=tmp_path/'report.pdf'
+    pdf.write_bytes(b'%PDF-test')
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(automaticky_export,'read_saved_settings',lambda path:{})
+    monkeypatch.setattr(settings,'load_settings',lambda path:{'transport':'smtp',
+        'subject_template':'{report}: {date}','body_template':'{report} {date}'})
+    requests=[]
+    monkeypatch.setattr(legacy_bridge,'collection',lambda req,out:requests.append(req) or {'pdf':str(pdf),'collected':2,'uncollected':1,'rows':[]})
+    sent=[]
+    monkeypatch.setattr(smtp,'smtp_send',lambda *args:sent.append(args))
+    request={'config_path':str(config),'start':'2026-11-01','end':'2026-11-03',
+             'status':'both','category':'ZACI','recipients':['a@example.invalid','a@example.invalid']}
+    result=legacy_bridge.send_collection(request,tmp_path)
+    assert result['sent']==1 and len(sent)==1
+    assert sent[0][1]==('a@example.invalid',) and '01.11.2026 – 03.11.2026' in sent[0][2]
+    assert requests[0]['action']=='legacy_pdf' and requests[0]['category']=='ZACI'
+    assert not (tmp_path/'web_mail_tasks.json').exists()
+
+
+def test_one_off_collection_email_rejects_invalid_recipient_before_pdf(tmp_path,monkeypatch):
+    import sys, pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    monkeypatch.setattr(legacy_bridge,'collection',lambda *args:pytest.fail('PDF should not be generated'))
+    with pytest.raises(ValueError):
+        legacy_bridge.send_collection({'config_path':str(tmp_path/'config.json'),'recipients':['invalid']},tmp_path)
+
+
+def test_save_pdf_never_overwrites_and_only_copies_generated_files(tmp_path):
+    import sys
+    import pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    output=tmp_path/'generated'
+    output.mkdir()
+    source=output/'report.pdf'
+    source.write_bytes(b'%PDF-example')
+    target=tmp_path/'saved.pdf'
+    result=legacy_bridge.save_pdf(str(source),str(target),str(output))
+    assert Path(result['path']).read_bytes()==b'%PDF-example'
+    with pytest.raises(ValueError,match='již existuje'):
+        legacy_bridge.save_pdf(str(source),str(target),str(output))
+    assert target.read_bytes()==b'%PDF-example'
+    with pytest.raises(ValueError,match='vytvořené'):
+        legacy_bridge.save_pdf(str(target),str(tmp_path/'second.pdf'),str(output))
+    with pytest.raises(ValueError,match='úplnou cestu'):
+        legacy_bridge.save_pdf(str(source),'relative.pdf',str(output))

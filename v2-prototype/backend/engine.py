@@ -67,6 +67,12 @@ def handle(request):
     if request.get('action') == 'legacy_scheduler_status':
         from legacy_bridge import scheduler_status
         return scheduler_status(request.get('config_path'))
+    if request.get('action') == 'save_pdf':
+        from legacy_bridge import save_pdf
+        return save_pdf(request.get('source'), request.get('destination'), request['output_dir'])
+    if request.get('action') == 'legacy_send':
+        from legacy_bridge import send_collection
+        return send_collection(request, request['output_dir'])
     if request.get('action') == 'legacy_options':
         from legacy_bridge import filter_options
         return filter_options(request.get('config_path'), request.get('date'))

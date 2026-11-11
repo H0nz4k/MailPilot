@@ -455,3 +455,70 @@ def repair_scheduler(path, workspace):
     except RuntimeError as exc:
         raise RuntimeError('Oprava služby není dokončena. ' + str(exc)) from exc
     return {'message':'Cesty služby byly opraveny. Služba zůstává zastavená.'}
+
+
+def send_collection(request, output_dir):
+    """Create and send a one-off collection PDF; never create a scheduled task."""
+    from automaticky_export import read_saved_settings
+    from env_store import get_resend_api_key
+    from mail_service import normalize_recipient, normalize_recipients, send_pdf_via_mailsender
+    from services.collection_status import COLLECTION_TITLES
+    from services.web_mail_settings import load_settings, settings_path
+    from services.web_mail_smtp import smtp_send
+    recipients = normalize_recipients(request.get('recipients'))
+    path = Path(request['config_path'])
+    settings = load_settings(settings_path(path.parent))
+    raw = read_saved_settings(path)
+    configuration(str(path))
+    label = COLLECTION_TITLES.get(request.get('status'))
+    if not label:
+        raise ValueError('Neplatný stav odběru.')
+    first, last = date.fromisoformat(request['start']), date.fromisoformat(request['end'])
+    date_label = first.strftime('%d.%m.%Y') if first == last else f'{first:%d.%m.%Y} – {last:%d.%m.%Y}'
+    fields = {'report':label, 'date':date_label}
+    subject = settings['subject_template'].format(**fields)
+    body = settings['body_template'].format(**fields)
+    if settings['transport'] == 'smtp':
+        transport = 'smtp'
+    elif settings['transport'] == 'resend':
+        transport = 'resend'
+        sender = normalize_recipient(settings['from_email'] or raw.get('mail_odesilatel'))
+        api_key = get_resend_api_key()
+        if not api_key:
+            raise ValueError('Chybí Resend API klíč.')
+    else:
+        raise ValueError('Neznámý způsob odesílání.')
+    result = collection({**request,'action':'legacy_pdf'}, output_dir)
+    pdf = Path(result['pdf'])
+    if transport == 'smtp':
+        smtp_send(settings, recipients, subject, body, pdf)
+    else:
+        send_pdf_via_mailsender(recipients, subject, body, pdf, api_key=api_key, sender_email=sender)
+    return {**result, 'sent':len(recipients)}
+
+
+def save_pdf(source, destination, output_dir):
+    """Save a generated PDF without overwriting an existing user file."""
+    import os
+    import shutil
+    source_path = Path(source).resolve()
+    output_path = Path(output_dir).resolve()
+    if source_path.parent != output_path or source_path.suffix.casefold() != '.pdf' or not source_path.is_file():
+        raise ValueError('Vyberte nejprve PDF vytvořené v DataShip 2.')
+    target = Path(destination)
+    if not target.is_absolute() or target.suffix.casefold() != '.pdf':
+        raise ValueError('Zadejte úplnou cestu k novému souboru PDF.')
+    target = target.resolve()
+    try:
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as exc:
+        raise ValueError('Soubor již existuje. Zvolte jiný název, aby se nepřepsal.') from exc
+    try:
+        with os.fdopen(descriptor, 'wb') as output, source_path.open('rb') as original:
+            shutil.copyfileobj(original, output)
+            output.flush()
+            os.fsync(output.fileno())
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    return {'path':str(target)}
