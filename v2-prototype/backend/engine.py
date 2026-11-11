@@ -49,6 +49,9 @@ def handle(request):
     if request.get('action') == 'legacy_set_task_enabled':
         from legacy_bridge import set_task_enabled
         return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'), request.get('revision'))
+    if request.get('action') == 'legacy_schedule_preview':
+        from legacy_bridge import preview_schedule
+        return preview_schedule(request.get('config_path'), request.get('data', {}))
     if request.get('action') == 'legacy_wizard_pdf':
         from legacy_bridge import preview_wizard
         return preview_wizard(request.get('config_path'), request.get('data', {}), request['output_dir'])

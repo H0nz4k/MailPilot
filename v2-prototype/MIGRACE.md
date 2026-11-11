@@ -8,6 +8,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Jednorázové Odběry: po vytvoření lze PDF uložit pod novým názvem nebo odeslat podle nastavení SMTP/Resend bez vytvoření úlohy. Odeslání je testováno pouze s náhradním transportem.
 - Odběry za období: součty po strávnících v náhledu a PDF, výběr stavu, více kategorií a typů stravy/výdeje, volitelný souhrn kategorií a desktopové vytvoření ukázkového PDF.
 - Volitelné čtení konfigurace verze 1.4 a odběrů přes původní služby, s omezením na povolené kategorie. Připojení používá uložené heslo, ale heslo ani konfiguraci nepřepisuje. Ověřeno pouze testy s náhradou databáze; skutečná Jídelna a její výsledky zatím nejsou ověřeny.
+- Průvodce umí vypočítat příští den spuštění a den sestavy včetně kalendáře varných dnů (ověřeno náhradou databáze).
 - Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
 - Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
 - Samostatný worker verze 2 používá zámek proti dalšímu workeru nad stejnou konfigurací. Službu lze nainstalovat, spustit, zastavit, opravit a odstranit; akce služby jsou ověřené pouze náhradami, nikoli skutečnou službou.

@@ -205,14 +205,9 @@ def preserve_profile(original, profile, revision):
     return DailyProfile.from_dict(values)
 
 
-def save_task(path, data):
-    from datetime import datetime
+def task_for_wizard(data, profile, *, preview=False):
     from services.collection_status import validate_task_history
-    from services.web_daily_profiles import profile_file, save_profile
-    from services.web_mail_tasks import MailTask, next_send_at
-    from services.web_mail_task_store import load_tasks, save_tasks, task_file
-
-    profile = profile_for_wizard(path, data)
+    from services.web_mail_tasks import MailTask
     status = profile.collection_status
     mode = data.get('mode')
     offsets = {'after_tomorrow': 2, 'yesterday': -1}
@@ -226,15 +221,26 @@ def save_task(path, data):
         offsets[mode] = -days if mode == 'history' else days
     if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day', 'fixed'):
         raise ValueError('Neplatný den přehledu.')
-    raw = {'name':data.get('name'), 'recipients':data.get('recipients', '').replace(';', ' ').replace(',', ' ').split(),
+    raw = {'name':data.get('name'), 'recipients':(['preview@example.invalid'] if preview else data.get('recipients', '').replace(';', ' ').replace(',', ' ').split()),
            'report':'daily', 'send_time':data.get('time'), 'enabled':data.get('enabled', False),
            'date_mode':'offset' if mode in offsets else mode, 'day_offset':offsets.get(mode, 0),
            'fixed_date':data.get('fixed_date') if mode == 'fixed' else None,
            'profile_id':profile.id, 'only_cooking_days':data.get('cooking', False),
-           'output_mode':data.get('output'), 'output_directory':data.get('directory'),
+           'output_mode':'email' if preview else data.get('output'), 'output_directory':data.get('directory'),
            'output_filename':data.get('filename')}
     task = MailTask.from_dict(raw)
     validate_task_history(task, status)
+    return task
+
+
+def save_task(path, data):
+    from datetime import datetime
+    from services.web_daily_profiles import profile_file, save_profile
+    from services.web_mail_tasks import next_send_at
+    from services.web_mail_task_store import load_tasks, save_tasks, task_file
+
+    profile = profile_for_wizard(path, data)
+    task = task_for_wizard(data, profile)
     # Match 1.4: no catch-up on the day when the configured time has already passed.
     upcoming = next_send_at(replace(task, enabled=True), datetime.now())
     task = replace(task, first_send_date=upcoming.date().isoformat())
@@ -553,3 +559,40 @@ def save_pdf(source, destination, output_dir):
         target.unlink(missing_ok=True)
         raise
     return {'path':str(target)}
+
+
+def preview_schedule(path, data):
+    from datetime import datetime
+    from services.web_mail_tasks import next_send_at, target_date
+    from services.web_mail_cooking_days import any_cooking_day_lookup, cooking_day_lookup, selected_cooking_day_lookup
+    config = configuration(path)
+    profile = profile_for_wizard(path, data)
+    task = task_for_wizard(data, profile, preview=True)
+    if data.get('edit_id'):
+        from services.web_mail_task_store import load_tasks, task_file
+        from services.web_daily_profiles import load_profiles, profile_file
+        directory = Path(path).parent
+        original = next((t for t in load_tasks(task_file(directory)) if t.id == data['edit_id']), None)
+        if original is None:
+            raise ValueError('Úloha již neexistuje.')
+        require_current_revision(original, data.get('revision'))
+        original_profile = next((p for p in load_profiles(profile_file(directory)) if p.id == original.profile_id), None)
+        if original_profile is None:
+            raise ValueError('Původní profil úlohy neexistuje.')
+        preserve_profile(original_profile, profile, data.get('profile_revision'))
+        task = replace(task, cooking_meal_type=original.cooking_meal_type)
+    upcoming = next_send_at(replace(task, enabled=True), datetime.now())
+    if task.date_mode == 'next_cooking_day':
+        meal = task.cooking_meal_type if task.cooking_meal_type is not None else profile.meal_type
+        if meal == '*':
+            meal = None
+        lookup = any_cooking_day_lookup if meal is None else selected_cooking_day_lookup if isinstance(meal, tuple) else cooking_day_lookup
+        args = (config.database,) if meal is None else (config.database, meal)
+        with lookup(*args) as is_day:
+            current = target_date(task, date.today(), is_cooking_day=is_day)
+            next_day = target_date(task, upcoming.date(), is_cooking_day=is_day)
+    else:
+        current = target_date(task, date.today())
+        next_day = target_date(task, upcoming.date())
+    return {'today_report':current.isoformat(), 'next_run':upcoming.isoformat(timespec='minutes'),
+            'next_report':next_day.isoformat(), 'only_cooking_days':task.only_cooking_days}

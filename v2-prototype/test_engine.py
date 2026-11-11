@@ -750,3 +750,43 @@ def test_period_filter_options_includes_both_years(monkeypatch):
     result=legacy_bridge.period_filter_options('config.json','2026-12-31','2027-01-01')
     assert years==[2026,2027] and result['meals']==['Jídlo 2026','Jídlo 2027']
     assert result['deliveries']==['Rozvoz']
+
+
+def test_schedule_preview_uses_real_calendar_lookup_without_saving(tmp_path,monkeypatch):
+    import sys
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    from datetime import datetime, timedelta
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import services.web_mail_cooking_days as calendar
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace(database={'mock':True}))
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    lookups=[]
+    @contextmanager
+    def fake(db):
+        lookups.append(db)
+        yield lambda day: day.weekday()<5
+    monkeypatch.setattr(calendar,'any_cooking_day_lookup',fake)
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','content':'names',
+          'mode':'next_cooking_day','time':'08:00','enabled':False,'cooking':True}
+    result=legacy_bridge.preview_schedule(str(tmp_path/'config.json'),data)
+    scheduled=datetime.fromisoformat(result['next_run']).date()
+    report=date.fromisoformat(result['next_report'])
+    expected=scheduled+timedelta(days=1)
+    while expected.weekday()>=5: expected+=timedelta(days=1)
+    assert report==expected and result['only_cooking_days'] is True
+    assert lookups==[{'mock':True}] and not list(tmp_path.iterdir())
+
+
+def test_schedule_preview_negative_days_require_collection(tmp_path,monkeypatch):
+    import sys, pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace(database={}))
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','content':'names',
+          'mode':'history','days':'2','time':'08:00','enabled':False,'cooking':False}
+    with pytest.raises(ValueError,match='Dny zpět'):
+        legacy_bridge.preview_schedule(str(tmp_path/'config.json'),data)
