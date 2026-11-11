@@ -1464,3 +1464,13 @@ def test_update_report_profile_checks_revision_and_category_permissions(tmp_path
     with pytest.raises(ValueError, match='nepovolené kategorie'):
         legacy_bridge.update_report_profile(str(config), str(workspace), data, 'p', legacy_bridge.task_revision(restricted))
     assert load_profiles(profile_file(workspace))[0] == restricted
+
+def test_bridge_configuration_uses_actual_legacy_date_format(tmp_path, monkeypatch):
+    import json, sys
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge, stravovaci_sestava
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'databaze': {'host':'localhost','port':5432,'dbname':'test','user':'test'}}), encoding='utf-8')
+    monkeypatch.setattr(stravovaci_sestava, 'get_password', lambda database: 'test-password')
+    loaded = legacy_bridge.configuration(str(config))
+    assert loaded.report_date == date.today()

@@ -12,7 +12,7 @@ from stravovaci_sestava import load_config, fetch_report, create_pdf
 def configuration(path):
     if not isinstance(path, str) or not path.strip():
         raise ValueError('Vyberte konfigurační soubor DataShip 1.4.')
-    return load_config(Path(path), date_override=date.today().isoformat())
+    return load_config(Path(path), date_override=date.today().strftime('%d.%m.%Y'))
 
 
 def info(path):
