@@ -505,3 +505,60 @@ def test_delete_task_rejects_stale_revision_and_keeps_shared_profile(tmp_path, m
     legacy_bridge.delete_task(path,first['id'],first_row['revision'])
     assert [t.id for t in load_tasks(task_file(tmp_path))]==['other']
     assert load_profiles(profile_file(tmp_path))[0].id==other.profile_id
+
+
+def test_workspace_import_preserves_source_and_pauses_all_tasks(tmp_path, monkeypatch):
+    import sys
+    import json
+    from types import SimpleNamespace
+    from services.web_mail_task_store import load_tasks,task_file
+    from services.web_daily_profiles import load_profiles,profile_file
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import workspace_import
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    source=tmp_path/'original'
+    source.mkdir()
+    config=source/'config.json'
+    config.write_text(json.dumps({'databaze':{'host':'localhost','password':'not-real'},'resend_api_key':'not-real'}),encoding='utf-8')
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':True,'cooking':False}
+    legacy_bridge.save_task(str(config),data)
+    original_config=config.read_bytes()
+    original_tasks=task_file(source).read_bytes()
+    target=tmp_path/'new'/'workspace'
+    result=workspace_import.import_workspace(str(config),target)
+    assert result['tasks']==1 and result['profiles']==1
+    assert load_tasks(task_file(target))[0].enabled is False
+    assert load_profiles(profile_file(target))[0].id==load_tasks(task_file(target))[0].profile_id
+    assert config.read_bytes()==original_config and task_file(source).read_bytes()==original_tasks
+    migrated=json.loads((target/'config.json').read_text(encoding='utf-8'))
+    assert 'password' not in migrated['databaze'] and 'resend_api_key' not in migrated
+    settings=json.loads((target/'web_mail_settings.json').read_text(encoding='utf-8'))
+    assert settings['service_name']=='DataShip2Scheduler'
+    import pytest
+    with pytest.raises(ValueError,match='nepřepíše'):
+        workspace_import.import_workspace(str(config),target)
+    assert task_file(source).read_bytes()==original_tasks
+
+
+def test_workspace_import_refuses_missing_profile_without_creating_destination(tmp_path):
+    import json
+    import pytest
+    import sys
+    from services.web_mail_tasks import MailTask
+    from services.web_mail_task_store import save_tasks,task_file
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import workspace_import
+    source=tmp_path/'original'
+    source.mkdir()
+    config=source/'config.json'
+    config.write_text(json.dumps({'databaze':{}}),encoding='utf-8')
+    task=MailTask.from_dict({'name':'Test','recipients':['a@example.invalid'],'send_time':'08:00',
+                            'date_mode':'today','profile_id':'missing'})
+    save_tasks(task_file(source),[task])
+    target=tmp_path/'new'/'workspace'
+    with pytest.raises(ValueError,match='chybějící profil'):
+        workspace_import.import_workspace(str(config),target)
+    assert not target.exists()

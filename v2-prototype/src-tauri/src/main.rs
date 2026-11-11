@@ -2,6 +2,7 @@
 
 use std::io::Write;
 use std::process::{Command, Stdio};
+use tauri::Manager;
 
 #[tauri::command]
 fn self_test_enabled() -> bool {
@@ -18,7 +19,9 @@ fn self_test_complete(app: tauri::AppHandle, result: serde_json::Value) -> Resul
 }
 
 #[tauri::command]
-async fn report(mut request: serde_json::Value) -> Result<serde_json::Value, String> {
+async fn report(app: tauri::AppHandle, mut request: serde_json::Value) -> Result<serde_json::Value, String> {
+    let workspace = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("workspace");
+    request["workspace_dir"] = workspace.to_string_lossy().to_string().into();
     tauri::async_runtime::spawn_blocking(move || {
         let engine = std::env::current_exe().map_err(|e| e.to_string())?
             .parent().ok_or("Chybí adresář aplikace")?.join("dataship-v2-engine.exe");

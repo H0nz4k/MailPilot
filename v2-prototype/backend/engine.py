@@ -29,6 +29,14 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'import_workspace':
+        from workspace_import import import_workspace
+        from legacy_bridge import configuration
+        configuration(request.get('config_path'))
+        return import_workspace(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'workspace_status':
+        path = Path(request['workspace_dir']) / 'config.json'
+        return {'exists': path.is_file(), 'config_path': str(path) if path.is_file() else None}
     if request.get('action') == 'legacy_delete_task':
         from legacy_bridge import delete_task
         return delete_task(request.get('config_path'), request.get('task_id'), request.get('revision'))

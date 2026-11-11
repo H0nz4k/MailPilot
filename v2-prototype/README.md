@@ -20,3 +20,5 @@ Rozbalte ZIP do vlastní složky a spusťte `DataShip-2-Prototyp.exe`. Soubor `d
 Sestavený prototyp lze spustit s argumentem `--self-test-pdf`. Izolovaný autotest aktivuje stejné tlačítko PDF ve WebView, použije smyšlená data a zapíše výsledek do dočasné složky systému; nepoužívá databázi ani e-mail.
 
 Úlohy neupravujte současně v DataShip 1.4 a 2: jejich sdílené soubory zatím nemají společné zamykání a souběžné změny by se mohly přepsat. Ověření na skutečné Jídelně a se službou zatím chybí.
+
+Příkaz „Převést do DataShip 2“ vytvoří oddělený uživatelský prostor, zachová původní soubory a převede úlohy jako pozastavené. Při tomto převodu se služba neinstaluje ani nespouští. Opakovaný import existující prostor nepřepíše. Pro používání samostatného plánování je ještě potřeba nainstalovat a ověřit službu pro tento prostor.

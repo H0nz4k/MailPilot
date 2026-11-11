@@ -4,6 +4,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 ## Přeneseno a ověřeno izolovaně
 
+- Volitelný import do odděleného prostoru verze 2 kopíruje konfiguraci a profily a úlohy převede jako pozastavené; nepřepisuje existující prostor ani staré soubory. Nová služba používá vlastní název. Ověřeno izolovaně.
 - Odběry za období: součty po strávnících v náhledu a PDF, výběr stavu a kategorie, desktopové vytvoření ukázkového PDF.
 - Volitelné čtení konfigurace verze 1.4 a odběrů přes původní služby, s omezením na povolené kategorie. Připojení používá uložené heslo, ale heslo ani konfiguraci nepřepisuje. Ověřeno pouze testy s náhradou databáze; skutečná Jídelna a její výsledky zatím nejsou ověřeny.
 - Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
@@ -22,4 +23,4 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 Nepovažovat simulované testy za ověření skutečného databázového připojení, odesílání nebo služby.
 
-Úpravy z více instancí verze 2 používají společný zámek a kontrolu změny úlohy. Pozor: verze 1.4 tento zámek nezná; souběžné úpravy z 1.4 a 2 stále nejsou bezpečné a před provozním nasazením je nutná jejich koordinace.
+Úpravy z více instancí verze 2 používají společný zámek a kontrolu změny úlohy. Oddělený import umožňuje pracovat s vlastními kopiemi. Pozor: verze 1.4 tento zámek nezná; souběžné úpravy z 1.4 a 2 stále nejsou bezpečné a před provozním nasazením je nutná jejich koordinace.
