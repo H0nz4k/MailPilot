@@ -1306,3 +1306,37 @@ def test_saved_profiles_are_reusable_without_expanding_permissions(tmp_path, mon
     assert profiles[0]['content'] == 'collection' and profiles[0]['collection'] == 'both'
     assert profiles[0]['meals'] == ['oběd'] and profiles[0]['deliveries'] == ['Rozvoz']
     assert profile.categories == ('ZACI', 'HOST')
+
+def test_edit_legacy_global_task_snapshots_settings_and_rejects_stale_config(tmp_path, monkeypatch):
+    import sys
+    from dataclasses import replace
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from stravovaci_sestava import AppConfig
+    from services.web_mail_tasks import MailTask
+    from services.web_mail_task_store import save_tasks, load_tasks, task_file
+    from services.web_daily_profiles import load_profiles, profile_file
+    config = AppConfig(database={}, report_date=date.today(), categories=('ZACI',), language='česky',
+                       menu_list_number=1, show_diner_list=False, pdf_bold=True)
+    current = [config]
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: current[0])
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories': [{'code': 'ZACI'}]})
+    monkeypatch.setattr(legacy_bridge, 'filter_options', lambda path, day: {'meals': [], 'deliveries': []})
+    task = MailTask.from_dict({'id': 'old', 'name': 'Starší', 'report': 'daily', 'recipients': ['a@example.invalid'],
+                               'send_time': '08:00', 'date_mode': 'today', 'enabled': False})
+    save_tasks(task_file(tmp_path), [task])
+    path = str(tmp_path / 'config.json')
+    edit = legacy_bridge.wizard_edit_data(path, task.id)
+    assert edit['legacy_global'] and edit['data']['content'] == 'counts' and edit['data']['pdf_bold'] is True
+    data = {**edit['data'], 'edit_id': task.id, 'revision': edit['revision'], 'profile_revision': edit['profile_revision']}
+    current[0] = replace(config, pdf_bold=False)
+    with pytest.raises(ValueError, match='mezitím změnil'):
+        legacy_bridge.save_task(path, data)
+    assert load_tasks(task_file(tmp_path))[0].profile_id is None
+    current[0] = config
+    legacy_bridge.save_task(path, data)
+    updated = load_tasks(task_file(tmp_path))[0]
+    assert updated.id == task.id and updated.profile_id
+    profile = load_profiles(profile_file(tmp_path))[0]
+    assert profile.id == updated.profile_id and profile.pdf_bold is True and not profile.show_diner_list

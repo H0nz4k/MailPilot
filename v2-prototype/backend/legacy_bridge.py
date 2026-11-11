@@ -191,6 +191,19 @@ def saved_report_profiles(path):
     return results
 
 
+def legacy_global_profile(path, name):
+    """Snapshot the effective global report settings used by a profile-less task."""
+    from services.web_daily_profiles import DailyProfile
+    config = configuration(path)
+    categories = list(config.categories) or [item['code'] for item in info(path)['categories']]
+    fields = ('meal_type', 'delivery_types', 'category_separation', 'show_by_categories',
+              'show_by_norms', 'show_diner_list', 'show_delivery_summary', 'delivery_show_names',
+              'delivery_page_per_type', 'pdf_orientation', 'pdf_data_font_size', 'pdf_label_font_size',
+              'pdf_bold', 'language', 'menu_list_number', 'pdf_compact_rows', 'pdf_layout', 'pdf_page_breaks')
+    return DailyProfile.from_dict({'id': 'legacy-global', 'name': name, 'categories': categories,
+                                   **{key: getattr(config, key) for key in fields}})
+
+
 def wizard_edit_data(path, task_id):
     from services.web_daily_profiles import load_profiles, profile_file
     from services.web_mail_task_store import load_tasks, task_file
@@ -200,9 +213,10 @@ def wizard_edit_data(path, task_id):
     task = next((t for t in load_tasks(task_file(directory)) if t.id == task_id), None)
     if task is None:
         raise ValueError('Úloha již neexistuje.')
-    if task.report != 'daily' or not task.profile_id:
-        raise ValueError('Tato starší úloha nemá uložený profil; upravte ji zatím v DataShip 1.4.')
-    profile = next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
+    if task.report != 'daily':
+        raise ValueError('Tento typ starší úlohy není podporován plánovačem.')
+    profile = (next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
+               if task.profile_id else legacy_global_profile(path, task.name))
     if profile is None:
         raise ValueError('Uložený profil úlohy neexistuje.')
     options = filter_options(path, date.today().isoformat())
@@ -224,7 +238,7 @@ def wizard_edit_data(path, task_id):
                   'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
                   'pdf_data_font_size','pdf_label_font_size','language','menu_list_number','pdf_layout','pdf_page_breaks'):
         values[field] = getattr(profile, field)
-    return {'data':values, 'id':task.id, 'revision':task_revision(task), 'profile_revision':task_revision(profile)}
+    return {'data':values, 'id':task.id, 'revision':task_revision(task), 'profile_revision':task_revision(profile), 'legacy_global':not bool(task.profile_id)}
 
 
 def preserve_profile(original, profile, revision):
@@ -293,7 +307,8 @@ def save_task(path, data):
             if not isinstance(data.get('revision'), str):
                 raise ValueError('Chybí verze upravované úlohy. Obnovte seznam.')
             require_current_revision(original, data['revision'])
-            original_profile = next((item for item in load_profiles(profile_file(directory)) if item.id == original.profile_id), None)
+            original_profile = (next((item for item in load_profiles(profile_file(directory)) if item.id == original.profile_id), None)
+                                if original.profile_id else legacy_global_profile(path, original.name))
             if original_profile is None or original.report != 'daily':
                 raise ValueError('Původní profil úlohy neexistuje nebo jej nelze upravit.')
             profile = preserve_profile(original_profile, profile, data.get('profile_revision'))

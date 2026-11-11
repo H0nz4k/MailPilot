@@ -43,3 +43,5 @@ Jednorázové odesílání uzávěrky a Z 17-01 používá nakonfigurovaný tran
 Průvodce zobrazuje jednotlivé stránky vytvořeného PDF přímo v aplikaci. Vykreslení bylo ověřeno na ukázkovém PDF i v zabaleném enginu; skutečná databáze dosud ověřena nebyla.
 
 Uložené přehledy lze načíst jako kopii v průvodci. Výběr kategorií se omezí na aktuální oprávnění a změna se nepromítá do původního profilu; ověřeno izolovaně.
+
+Starší denní úlohu bez vlastního profilu lze otevřít v průvodci; při uložení se její tehdejší společné nastavení převede na samostatný profil a před uložením se kontroluje jeho změna. Ověřeno izolovaně; automatické změny globálního nastavení se po převedení již do úlohy nepřenášejí.
