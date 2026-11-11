@@ -45,3 +45,5 @@ Průvodce zobrazuje jednotlivé stránky vytvořeného PDF přímo v aplikaci. V
 Uložené přehledy lze načíst jako kopii v průvodci. Výběr kategorií se omezí na aktuální oprávnění a změna se nepromítá do původního profilu; ověřeno izolovaně.
 
 Starší denní úlohu bez vlastního profilu lze otevřít v průvodci; při uložení se její tehdejší společné nastavení převede na samostatný profil a před uložením se kontroluje jeho změna. Ověřeno izolovaně; automatické změny globálního nastavení se po převedení již do úlohy nepřenášejí.
+
+Průvodce umožňuje zvolit kalendář podle typu přehledu, všechny kalendáře nebo konkrétní kalendáře z databáze. Výběr se při uložení i náhledu ověřuje; původní explicitní výběr lze upravit. Ověřeno testy s náhradou databáze a zobrazením ukázkového průvodce.

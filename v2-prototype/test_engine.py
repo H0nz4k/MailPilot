@@ -1340,3 +1340,32 @@ def test_edit_legacy_global_task_snapshots_settings_and_rejects_stale_config(tmp
     assert updated.id == task.id and updated.profile_id
     profile = load_profiles(profile_file(tmp_path))[0]
     assert profile.id == updated.profile_id and profile.pdf_bold is True and not profile.show_diner_list
+
+def test_wizard_calendar_choice_is_saved_edited_and_validated(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_mail_task_store import load_tasks, task_file
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories': [{'code': 'ZACI'}]})
+    monkeypatch.setattr(legacy_bridge, 'filter_options', lambda path, day: {'meals': [], 'deliveries': []})
+    monkeypatch.setattr(legacy_bridge, 'cooking_calendars', lambda path: ['Oběd', 'Snídaně'])
+    path = str(tmp_path / 'config.json')
+    data = {'name': 'Kalendář', 'date': date.today().isoformat(), 'categories': ['ZACI'],
+            'content': 'names', 'mode': 'today', 'output': 'email', 'recipients': 'a@example.invalid',
+            'time': '08:00', 'enabled': False, 'cooking': True,
+            'calendar_mode': 'selected', 'calendars': ['Snídaně']}
+    task = legacy_bridge.save_task(path, data)['task']
+    assert task['cooking_meal_type'] == ['Snídaně']
+    edit = legacy_bridge.wizard_edit_data(path, task['id'])
+    assert edit['data']['calendar_mode'] == 'selected' and edit['data']['calendars'] == ['Snídaně']
+    update = {**edit['data'], 'edit_id': task['id'], 'revision': edit['revision'], 'profile_revision': edit['profile_revision']}
+    update['calendars'] = ['Neznámý']
+    with pytest.raises(ValueError, match='kalendář'):
+        legacy_bridge.save_task(path, update)
+    assert load_tasks(task_file(tmp_path))[0].cooking_meal_type == ('Snídaně',)
+    update.update(calendar_mode='all', calendars=[])
+    legacy_bridge.save_task(path, update)
+    assert load_tasks(task_file(tmp_path))[0].cooking_meal_type == '*'

@@ -233,7 +233,15 @@ def wizard_edit_data(path, task_id):
               'fixed_date':task.fixed_date or '', 'output':task.output_mode,
               'recipients':', '.join(task.recipients), 'directory':task.output_directory or '',
               'filename':task.output_filename, 'time':task.send_time, 'enabled':task.enabled,
-              'cooking':task.only_cooking_days}
+              'cooking':task.only_cooking_days,
+              'calendar_mode':'all' if task.cooking_meal_type == '*' else 'selected' if task.cooking_meal_type else 'report',
+              'calendars': ([task.cooking_meal_type] if isinstance(task.cooking_meal_type, str) and task.cooking_meal_type != '*'
+                            else list(task.cooking_meal_type) if isinstance(task.cooking_meal_type, tuple) else [])}
+    if not task.profile_id and task.cooking_meal_type is None and (task.only_cooking_days or task.date_mode == 'next_cooking_day'):
+        from services.web_mail_cooking_days import task_calendar_type
+        calendar = task_calendar_type(Path(path), task)
+        values['calendar_mode'] = 'all' if calendar is None else 'selected'
+        values['calendars'] = [] if calendar is None else list(calendar) if isinstance(calendar, tuple) else [calendar]
     for field in ('category_separation','show_by_categories','show_by_norms','show_delivery_summary',
                   'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
                   'pdf_data_font_size','pdf_label_font_size','language','menu_list_number','pdf_layout','pdf_page_breaks'):
@@ -256,6 +264,19 @@ def preserve_profile(original, profile, revision):
     return DailyProfile.from_dict(values)
 
 
+def cooking_calendars(path):
+    from services.web_mail_cooking_days import available_cooking_calendars
+    configuration(path)
+    return list(available_cooking_calendars(Path(path)))
+
+
+def validate_wizard_calendars(path, data):
+    if data.get('calendar_mode', 'report') == 'selected':
+        available = {name.casefold() for name in cooking_calendars(path)}
+        if any(name.casefold() not in available for name in data['calendars']):
+            raise ValueError('Vybraný kalendář varných dnů již není dostupný. Obnovte seznam.')
+
+
 def task_for_wizard(data, profile, *, preview=False):
     from services.collection_status import validate_task_history
     from services.web_mail_tasks import MailTask
@@ -272,7 +293,14 @@ def task_for_wizard(data, profile, *, preview=False):
         offsets[mode] = -days if mode == 'history' else days
     if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day', 'fixed'):
         raise ValueError('Neplatný den přehledu.')
-    raw = {'name':data.get('name'), 'recipients':(['preview@example.invalid'] if preview else data.get('recipients', '').replace(';', ' ').replace(',', ' ').split()),
+    calendar_mode = data.get('calendar_mode', 'report')
+    calendars = data.get('calendars', [])
+    if calendar_mode not in ('report', 'all', 'selected'):
+        raise ValueError('Neplatný výběr kalendářů.')
+    if calendar_mode == 'selected' and (not isinstance(calendars, list) or not calendars or any(not isinstance(v, str) or not v.strip() for v in calendars)):
+        raise ValueError('Vyberte alespoň jeden kalendář varných dnů.')
+    raw = {'cooking_meal_type': '*' if calendar_mode == 'all' else calendars if calendar_mode == 'selected' else None,
+           'name':data.get('name'), 'recipients':(['preview@example.invalid'] if preview else data.get('recipients', '').replace(';', ' ').replace(',', ' ').split()),
            'report':'daily', 'send_time':data.get('time'), 'enabled':data.get('enabled', False),
            'date_mode':'offset' if mode in offsets else mode, 'day_offset':offsets.get(mode, 0),
            'fixed_date':data.get('fixed_date') if mode == 'fixed' else None,
@@ -292,6 +320,7 @@ def save_task(path, data):
 
     profile = profile_for_wizard(path, data)
     task = task_for_wizard(data, profile)
+    validate_wizard_calendars(path, data)
     # Match 1.4: no catch-up on the day when the configured time has already passed.
     upcoming = next_send_at(replace(task, enabled=True), datetime.now())
     task = replace(task, first_send_date=upcoming.date().isoformat())
@@ -314,7 +343,7 @@ def save_task(path, data):
             profile = preserve_profile(original_profile, profile, data.get('profile_revision'))
             first_send = (original.first_send_date if original.enabled and task.enabled and original.send_time == task.send_time
                           else max(task.first_send_date, original.first_send_date or task.first_send_date))
-            task = replace(task, id=original.id, cooking_meal_type=original.cooking_meal_type, first_send_date=first_send)
+            task = replace(task, id=original.id, first_send_date=first_send)
             save_profile(profile_file(directory), profile)
             save_tasks(task_file(directory), [task if item.id == edit_id else item for item in existing])
         else:
@@ -620,6 +649,7 @@ def preview_schedule(path, data):
     config = configuration(path)
     profile = profile_for_wizard(path, data)
     task = task_for_wizard(data, profile, preview=True)
+    validate_wizard_calendars(path, data)
     if data.get('edit_id'):
         from services.web_mail_task_store import load_tasks, task_file
         from services.web_daily_profiles import load_profiles, profile_file
@@ -628,11 +658,11 @@ def preview_schedule(path, data):
         if original is None:
             raise ValueError('Úloha již neexistuje.')
         require_current_revision(original, data.get('revision'))
-        original_profile = next((p for p in load_profiles(profile_file(directory)) if p.id == original.profile_id), None)
+        original_profile = (next((p for p in load_profiles(profile_file(directory)) if p.id == original.profile_id), None)
+                            if original.profile_id else legacy_global_profile(path, original.name))
         if original_profile is None:
             raise ValueError('Původní profil úlohy neexistuje.')
         preserve_profile(original_profile, profile, data.get('profile_revision'))
-        task = replace(task, cooking_meal_type=original.cooking_meal_type)
     upcoming = next_send_at(replace(task, enabled=True), datetime.now())
     if task.date_mode == 'next_cooking_day':
         meal = task.cooking_meal_type if task.cooking_meal_type is not None else profile.meal_type

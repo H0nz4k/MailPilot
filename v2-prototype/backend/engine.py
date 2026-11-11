@@ -101,6 +101,9 @@ def handle(request):
     if request.get('action') == 'legacy_delete_task':
         from legacy_bridge import delete_task
         return delete_task(request.get('config_path'), request.get('task_id'), request.get('revision'))
+    if request.get('action') == 'legacy_cooking_calendars':
+        from legacy_bridge import cooking_calendars
+        return cooking_calendars(request.get('config_path'))
     if request.get('action') == 'legacy_saved_profiles':
         from legacy_bridge import saved_report_profiles
         return saved_report_profiles(request.get('config_path'))
