@@ -3,6 +3,7 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
+from task_lock import task_store_lock
 
 from services.database import probe_connection
 from stravovaci_sestava import load_config, fetch_report, create_pdf
@@ -65,12 +66,24 @@ def collection(request, output_dir):
     return result
 
 
+def task_revision(task):
+    import hashlib
+    import json
+    value = json.dumps(task.to_dict(), ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+
+def require_current_revision(task, revision):
+    if revision is not None and revision != task_revision(task):
+        raise ValueError('Úloha se mezitím změnila. Obnovte seznam a úpravu zopakujte.')
+
+
 def tasks(path):
     from services.web_mail_task_store import load_tasks, task_file
     from services.web_worker_status import observed_status
     directory = Path(path).parent
     return [{**task.to_dict(), 'time': task.send_time, 'status': observed_status(directory, task),
-             'output': task.output_mode} for task in load_tasks(task_file(directory))]
+             'output': task.output_mode, 'revision': task_revision(task)} for task in load_tasks(task_file(directory))]
 
 
 def profile_for_wizard(path, data):
@@ -145,14 +158,15 @@ def save_task(path, data):
     upcoming = next_send_at(replace(task, enabled=True), datetime.now())
     task = replace(task, first_send_date=upcoming.date().isoformat())
     directory = Path(path).parent
-    existing = load_tasks(task_file(directory))
-    save_profile(profile_file(directory), profile)
-    save_tasks(task_file(directory), existing + [task])
+    with task_store_lock(directory):
+        existing = load_tasks(task_file(directory))
+        save_profile(profile_file(directory), profile)
+        save_tasks(task_file(directory), existing + [task])
     from services.web_worker_status import observed_status
     return {'task':task.to_dict(), 'status':observed_status(directory, task), 'next_run':upcoming.isoformat()}
 
 
-def set_task_enabled(path, task_id, enabled):
+def set_task_enabled(path, task_id, enabled, revision=None):
     from datetime import datetime
     from services.web_mail_task_store import load_tasks, save_tasks, task_file
     from services.web_mail_tasks import next_send_at
@@ -160,16 +174,18 @@ def set_task_enabled(path, task_id, enabled):
         raise ValueError('Neplatná změna stavu úlohy.')
     configuration(path)
     target = task_file(Path(path).parent)
-    existing = load_tasks(target)
-    task = next((task for task in existing if task.id == task_id), None)
-    if task is None:
-        raise ValueError('Úloha již neexistuje.')
-    updated = replace(task, enabled=enabled)
-    if enabled and not task.enabled:
-        upcoming = next_send_at(updated, datetime.now())
-        first = upcoming.date().isoformat()
-        updated = replace(updated, first_send_date=max(first, task.first_send_date or first))
-    save_tasks(target, [updated if item.id == task_id else item for item in existing])
+    with task_store_lock(target.parent):
+        existing = load_tasks(target)
+        task = next((task for task in existing if task.id == task_id), None)
+        if task is None:
+            raise ValueError('Úloha již neexistuje.')
+        require_current_revision(task, revision)
+        updated = replace(task, enabled=enabled)
+        if enabled and not task.enabled:
+            upcoming = next_send_at(updated, datetime.now())
+            first = upcoming.date().isoformat()
+            updated = replace(updated, first_send_date=max(first, task.first_send_date or first))
+        save_tasks(target, [updated if item.id == task_id else item for item in existing])
     return {'id': updated.id, 'enabled': updated.enabled}
 
 
@@ -185,7 +201,7 @@ def scheduler_status(path):
     return {'worker': observed_status(directory), 'service': service, 'notice': installation}
 
 
-def update_task(path, task_id, changes):
+def update_task(path, task_id, changes, revision=None):
     from datetime import datetime
     from services.collection_status import validate_task_history
     from services.web_daily_profiles import task_collection_status
@@ -198,17 +214,19 @@ def update_task(path, task_id, changes):
     configuration(path)
     directory = Path(path).parent
     target = task_file(directory)
-    existing = load_tasks(target)
-    original = next((item for item in existing if item.id == task_id), None)
-    if original is None:
-        raise ValueError('Úloha již neexistuje.')
-    updated = MailTask.from_dict({**original.to_dict(), **changes})
-    validate_task_history(updated, task_collection_status(directory, updated))
-    if updated.send_time != original.send_time:
-        next_run = next_send_at(replace(updated, enabled=True), datetime.now())
-        first = next_run.date().isoformat()
-        updated = replace(updated, first_send_date=max(first, original.first_send_date or first))
-    save_tasks(target, [updated if item.id == task_id else item for item in existing])
+    with task_store_lock(directory):
+        existing = load_tasks(target)
+        original = next((item for item in existing if item.id == task_id), None)
+        if original is None:
+            raise ValueError('Úloha již neexistuje.')
+        require_current_revision(original, revision)
+        updated = MailTask.from_dict({**original.to_dict(), **changes})
+        validate_task_history(updated, task_collection_status(directory, updated))
+        if updated.send_time != original.send_time:
+            next_run = next_send_at(replace(updated, enabled=True), datetime.now())
+            first = next_run.date().isoformat()
+            updated = replace(updated, first_send_date=max(first, original.first_send_date or first))
+        save_tasks(target, [updated if item.id == task_id else item for item in existing])
     return {'id':updated.id}
 
 

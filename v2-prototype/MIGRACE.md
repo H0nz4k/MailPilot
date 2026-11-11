@@ -22,4 +22,4 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 Nepovažovat simulované testy za ověření skutečného databázového připojení, odesílání nebo služby.
 
-Pozor: úložiště 1.4 nemá společný zámek pro souběžné editace z 1.4 a 2. Needitovat současně; před provozním nasazením vyřešit koordinaci zápisů.
+Úpravy z více instancí verze 2 používají společný zámek a kontrolu změny úlohy. Pozor: verze 1.4 tento zámek nezná; souběžné úpravy z 1.4 a 2 stále nejsou bezpečné a před provozním nasazením je nutná jejich koordinace.

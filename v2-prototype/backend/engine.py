@@ -31,10 +31,10 @@ class FixtureCursor:
 def handle(request):
     if request.get('action') == 'legacy_update_task':
         from legacy_bridge import update_task
-        return update_task(request.get('config_path'), request.get('task_id'), request.get('changes'))
+        return update_task(request.get('config_path'), request.get('task_id'), request.get('changes'), request.get('revision'))
     if request.get('action') == 'legacy_set_task_enabled':
         from legacy_bridge import set_task_enabled
-        return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'))
+        return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'), request.get('revision'))
     if request.get('action') == 'legacy_wizard_pdf':
         from legacy_bridge import preview_wizard
         return preview_wizard(request.get('config_path'), request.get('data', {}), request['output_dir'])

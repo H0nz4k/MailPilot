@@ -349,3 +349,46 @@ def test_wizard_preview_generates_pdf_without_saving_task(tmp_path,monkeypatch):
     text='\n'.join(page.extract_text() for page in PdfReader(result['pdf']).pages)
     assert 'Anna Nováková' in text and 'Jan Dvořák' in text
     assert not task_file(tmp_path).exists() and not profile_file(tmp_path).exists()
+
+
+def test_concurrent_v2_task_creation_keeps_all_tasks(tmp_path, monkeypatch):
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    from services.web_mail_task_store import load_tasks,task_file
+    from services.web_daily_profiles import load_profiles,profile_file
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'date':date.today().isoformat(),'category':'all','content':'names', 'mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path/'config.json')
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda i:legacy_bridge.save_task(path,{**data,'name':f'Úloha {i}'}),range(12)))
+    tasks=load_tasks(task_file(tmp_path))
+    profiles=load_profiles(profile_file(tmp_path))
+    assert len(tasks)==len(profiles)==12
+    assert {t.name for t in tasks} == {f'Úloha {i}' for i in range(12)}
+    assert {t.profile_id for t in tasks} == {p.id for p in profiles}
+
+
+def test_stale_task_revision_is_rejected(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'name':'Původní','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path/'config.json')
+    task_id=legacy_bridge.save_task(path,data)['task']['id']
+    revision=legacy_bridge.tasks(path)[0]['revision']
+    legacy_bridge.update_task(path,task_id,{'name':'Změněno'},revision)
+    with pytest.raises(ValueError,match='mezitím změnila'):
+        legacy_bridge.update_task(path,task_id,{'name':'Zastaralý návrh'},revision)
+    with pytest.raises(ValueError,match='mezitím změnila'):
+        legacy_bridge.set_task_enabled(path,task_id,True,revision)
+    assert legacy_bridge.tasks(path)[0]['name']=='Změněno'
