@@ -64,7 +64,7 @@ class DailyDesignMixin(ReportWizardMixin):
             self._wizard_cards.append(selection)
             with w.card().classes("w-full") as pdf:
                 ui.label("Co má být v PDF?").classes("app-heading")
-                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam", "collection": "Speciální: Odebraná / neodebraná strava"}, value="collection" if self.raw.get("odber_stravy") else "names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("ds-wizard-content w-full")
+                self.wizard_content = ui.radio({"counts": "Jen součty", "names": "Součty a jmenný seznam", "collection": "Odebraná/neodebraná"}, value="collection" if self.raw.get("odber_stravy") else "names" if self.raw.get("seznam_stravniku", True) else "counts").props("inline").classes("ds-wizard-content w-full")
                 self.collection_status_select = ui.select(COLLECTION_OPTIONS, value=self.raw.get("odber_stravy") or "both", label="Které odběry zobrazit?").props("outlined").classes("w-full").mark("collection-status")
                 self.collection_status_select.bind_visibility_from(self.wizard_content, "value", backward=lambda value: value == "collection")
                 with ui.column().classes("w-full gap-2") as history:

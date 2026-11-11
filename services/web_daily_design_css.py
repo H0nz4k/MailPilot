@@ -301,7 +301,7 @@ html.theme-tmave .ds-scheduler-notice--warning { background: #38280f; border-col
 .ds-wizard > .text-negative:empty { display: none; }
 .dataship-ui .ds-wizard .app-card { padding: 24px; border-radius: var(--ds-wizard-radius); gap: 18px; box-shadow: 0 4px 18px rgb(0 0 0 / 4%); }
 .ds-wizard .ui-help { line-height: 1.6; max-width: 72ch; }
-.ds-wizard-content { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ds-wizard-content { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .ds-wizard-content .q-radio { min-height: 80px; padding: 12px; gap: 6px; border: 1px solid var(--app-field-border); border-radius: 12px; align-items: center; margin: 0; }
 .ds-wizard-content .q-radio__label { font-weight: 600; line-height: 1.5; }
 .ds-wizard-content .q-radio:has(.q-radio__inner--truthy) { border: 2px solid var(--app-primary); background: var(--app-primary-soft); padding: 11px; }
