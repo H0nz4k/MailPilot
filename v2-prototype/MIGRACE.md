@@ -59,3 +59,5 @@ Výběr přehledu lze v odděleném prostoru uložit samostatně jako nový prof
 Uložený přehled lze také aktualizovat; uživatel je upozorněn na dopad na navázané úlohy, změna vyžaduje aktuální revizi a plné oprávnění ke kategoriím. Ověřeno izolovanými testy.
 
 Připojení přes skutečný načítač konfigurace bylo opraveno (datum DD.MM.RRRR). Připojení ke konfiguraci dostupné na tomto počítači načetlo 21 kategorií a vytvořilo PDF na dnešní den; výsledek měl 0 porcí, obsah sestavy proto zůstává neověřený. Akce používala pouze čtení a neodesílala e-mail.
+
+Sestava odběrů byla rovněž vytvořena čtením dostupné skutečné databáze pro 15. 10. 2026: 1 139 záznamů a platný PDF soubor; dataset vracel 0 odebraných a 1 139 neodebraných. Nejde o nezávislé ověření správnosti údajů v Jídelně ani o test odeslání.
