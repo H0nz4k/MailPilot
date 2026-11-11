@@ -122,6 +122,9 @@ def handle(request):
     if request.get('action') == 'legacy_scheduler_status':
         from legacy_bridge import scheduler_status
         return scheduler_status(request.get('config_path'))
+    if request.get('action') == 'save_report_files':
+        from legacy_bridge import save_report_files
+        return save_report_files(request.get('sources'), request.get('destination'), request['output_dir'])
     if request.get('action') == 'save_pdf':
         from legacy_bridge import save_pdf
         return save_pdf(request.get('source'), request.get('destination'), request['output_dir'])

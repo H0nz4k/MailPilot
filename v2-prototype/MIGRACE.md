@@ -7,7 +7,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Nový prázdný prostor lze založit bez verze 1.4, po testu připojení a nastavení systémových hesel; ověřeno s náhradami databáze a trezoru.
 - Volitelný import do odděleného prostoru verze 2 kopíruje konfiguraci, profily, šablony PDF a historii příjemců a úlohy převede jako pozastavené; nepřepisuje existující prostor ani staré soubory. Nová služba používá vlastní název. Ověřeno izolovaně.
 - Speciál Z 17-01: jednorázový podklad s výběrem povolených kategorií a mapováním řádků přes původní výpočet; ověřeno s náhradou výpočtu, nikoli na skutečných datech. Mapování lze v odděleném prostoru uložit s heslem administrace; kategorie mimo oprávněný rozsah zůstávají zachované.
-- Uzávěrka: generování FKSP, stravovacího archu a rekapitulace přes původní služby, do jedinečné dočasné složky bez odeslání e-mailu; ověřeno s náhradou výpočtu, nikoli na skutečných datech.
+- Uzávěrka: generování FKSP, stravovacího archu a rekapitulace přes původní služby, do jedinečné dočasné složky bez odeslání e-mailu, s následným uložením do nové cílové složky; ověřeno s náhradou výpočtu, nikoli na skutečných datech.
 - Jednorázové Odběry: po vytvoření lze PDF uložit pod novým názvem nebo odeslat podle nastavení SMTP/Resend bez vytvoření úlohy. Odeslání je testováno pouze s náhradním transportem.
 - Odběry za období: součty po strávnících v náhledu a PDF, výběr stavu, více kategorií a typů stravy/výdeje, volitelný souhrn kategorií a desktopové vytvoření ukázkového PDF.
 - Volitelné čtení konfigurace verze 1.4 a odběrů přes původní služby, s omezením na povolené kategorie. Připojení používá uložené heslo, ale heslo ani konfiguraci nepřepisuje. Ověřeno pouze testy s náhradou databáze; skutečná Jídelna a její výsledky zatím nejsou ověřeny.
@@ -29,7 +29,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 3. Dokončit průvodce: zbývající volby PDF a interaktivní náhled; ověřit běh přes skutečnou službu.
 4. Ověřit samostatný plánovač a jeho Windows službu v reálném prostředí; zabránit duplicitnímu odeslání při souběhu samostatných konfigurací. Nezapínat automatické odesílání při migraci bez jasného stavu a ověření.
 5. Jednorázové Odběry: doplnit zbývající původní volby a ověřit skutečné doručení a cílové uložení v desktopu.
-6. Dokončit uzávěrku včetně výstupního umístění a odeslání, dále ostatní sestavy, diagnostiku a návody.
+6. Dokončit uzávěrku včetně odeslání, dále ostatní sestavy, diagnostiku a návody.
 7. Přenos konfigurace bez ztráty údajů, kompatibilita pracovníků, Windows balíček, měření velikosti, integrační testy a ověření na skutečné databázi a cílovém počítači.
 
 Nepovažovat simulované testy za ověření skutečného databázového připojení, odesílání nebo služby.

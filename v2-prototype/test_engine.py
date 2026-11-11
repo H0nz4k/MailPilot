@@ -1083,3 +1083,23 @@ def test_save_special_mapping_preserves_categories_outside_scope(tmp_path,monkey
     raw=json.loads(config.read_text(encoding='utf-8'))
     assert raw['z17']['mapovani_kategorii']['0102']==['MIMO']
     assert raw['z17']['mapovani_kategorii']['0103']==['ZACI']
+
+
+def test_save_report_files_copies_only_one_generated_folder_without_overwrite(tmp_path):
+    import sys,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    root=tmp_path/'generated'
+    folder=root/'Uzaverka-2026-10-12345678'
+    folder.mkdir(parents=True)
+    pdf=folder/'report.pdf'; pdf.write_bytes(b'%PDF-test')
+    archive=folder/'report.zip'; archive.write_bytes(b'PK-test')
+    target=tmp_path/'saved'
+    result=legacy_bridge.save_report_files([str(pdf),str(archive)],str(target),str(root))
+    assert len(result['files'])==2 and (target/'report.pdf').read_bytes()==b'%PDF-test'
+    with pytest.raises(ValueError,match='již existuje'):
+        legacy_bridge.save_report_files([str(pdf)],str(target),str(root))
+    outsider=tmp_path/'other.pdf'; outsider.write_bytes(b'%PDF-other')
+    with pytest.raises(ValueError,match='jedné vytvořené sestavy'):
+        legacy_bridge.save_report_files([str(pdf),str(outsider)],str(tmp_path/'bad'),str(root))
+    assert not (tmp_path/'bad').exists()

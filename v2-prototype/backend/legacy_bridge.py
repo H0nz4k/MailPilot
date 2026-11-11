@@ -612,3 +612,36 @@ def pdf_templates(path):
     from services.pdf_templates import load_templates, template_file
     configuration(path)
     return [item.to_dict() for item in load_templates(template_file(Path(path).parent))]
+
+
+def save_report_files(sources, destination, output_dir):
+    """Copy generated PDFs/ZIPs into a new directory without overwriting files."""
+    import os
+    import shutil
+    import tempfile
+    if not isinstance(sources,list) or not sources or any(not isinstance(x,str) for x in sources):
+        raise ValueError('Nejsou vybrány žádné vytvořené soubory.')
+    root = Path(output_dir).resolve()
+    files = [Path(x).resolve() for x in sources]
+    directory = files[0].parent
+    if (directory.parent != root or any(p.parent != directory or p.suffix.casefold() not in ('.pdf','.zip')
+                                       or not p.is_file() for p in files)
+            or len({p.name.casefold() for p in files}) != len(files)):
+        raise ValueError('Lze uložit pouze soubory jedné vytvořené sestavy.')
+    target = Path(destination)
+    if not target.is_absolute():
+        raise ValueError('Zadejte úplnou cestu k nové výstupní složce.')
+    target = target.resolve()
+    if target.exists():
+        raise ValueError('Výstupní složka již existuje. Zvolte jiný název.')
+    if not target.parent.is_dir():
+        raise ValueError('Nadřazená složka neexistuje.')
+    with tempfile.TemporaryDirectory(prefix='.dataship2-save-',dir=target.parent) as tmp:
+        staging = Path(tmp)/'output'
+        staging.mkdir()
+        for source in files:
+            shutil.copyfile(source,staging/source.name)
+        if target.exists():
+            raise ValueError('Výstupní složka již existuje. Zvolte jiný název.')
+        os.rename(staging,target)
+    return {'directory':str(target),'files':[str(target/p.name) for p in files]}
