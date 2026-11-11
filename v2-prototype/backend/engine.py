@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -28,6 +29,12 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'legacy_info':
+        from legacy_bridge import info
+        return info(request.get('config_path'))
+    if request.get('action') in ('legacy_preview', 'legacy_pdf'):
+        from legacy_bridge import collection
+        return collection(request, request['output_dir'])
     start = date.fromisoformat(request['start'])
     end = date.fromisoformat(request['end'])
     status = request['status']
