@@ -1,4 +1,4 @@
-"""Read-only access to the 1.4 configuration and report services for DataShip 2."""
+"""Bridge from DataShip 2 to the configuration and services of DataShip 1.4."""
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -23,6 +23,14 @@ def info(path):
     categories = [{'code': code, 'name': name or code} for code, name in connection.categories
                   if not allowed or code in allowed]
     return {'subject': connection.subject_name or connection.database_name, 'categories': categories}
+
+
+def filter_options(path, report_date):
+    from stravovaci_sestava import available_meal_types, available_delivery_types
+    config = configuration(path)
+    selected_date = date.fromisoformat(report_date)
+    return {'meals': list(available_meal_types(config.database, selected_date)),
+            'deliveries': list(available_delivery_types(config.database))}
 
 
 def collection(request, output_dir):
@@ -75,8 +83,11 @@ def save_task(path, data):
 
     configuration(path)
     available = {c['code'] for c in info(path)['categories']}
-    category = data.get('category')
-    categories = sorted(available) if category == 'all' else [category]
+    selected_categories = data.get('categories')
+    category = data.get('category', 'all')
+    categories = (sorted(available) if category == 'all' else [category]) if selected_categories is None else selected_categories
+    if not isinstance(categories, list) or any(not isinstance(c, str) for c in categories):
+        raise ValueError('Neplatný výběr kategorií.')
     if not categories or any(c not in available for c in categories):
         raise ValueError('Vyberte alespoň jednu dostupnou a povolenou kategorii.')
     content = data.get('content')
@@ -97,11 +108,24 @@ def save_task(path, data):
         offsets[mode] = -days if mode == 'history' else days
     if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day'):
         raise ValueError('Neplatný den přehledu.')
-    if data.get('meal') != 'all':
-        raise ValueError('Výběr jednotlivého typu stravy zatím není připojen.')
+    selected_meals = data.get('meals')
+    selected_deliveries = data.get('deliveries')
+    if selected_meals is not None or selected_deliveries is not None:
+        options = filter_options(path, data['date'])
+        for selected, key in ((selected_meals, 'meals'), (selected_deliveries, 'deliveries')):
+            if selected is not None and (not isinstance(selected, list) or not selected or
+                    any(not isinstance(item, str) or item not in options[key] for item in selected)):
+                raise ValueError('Vyberte alespoň jednu dostupnou možnost filtru.')
     profile = DailyProfile.from_dict({'name':data.get('name'), 'categories':categories,
-                 'meal_type':None, 'show_diner_list':content != 'counts', 'collection_status':status,
-                 'category_separation':False, 'show_by_categories':True, 'show_by_norms':True})
+                 'meal_type':selected_meals, 'delivery_types':selected_deliveries or (), 'show_diner_list':content != 'counts', 'collection_status':status,
+                 'category_separation':data.get('category_separation', False),
+                 'show_by_categories':data.get('show_by_categories', True),
+                 'show_by_norms':data.get('show_by_norms', True),
+                 'show_delivery_summary':data.get('show_delivery_summary', False),
+                 'delivery_show_names':data.get('delivery_show_names', False),
+                 'delivery_page_per_type':data.get('delivery_page_per_type', False),
+                 'pdf_orientation':data.get('pdf_orientation'), 'pdf_bold':data.get('pdf_bold'),
+                 'pdf_compact_rows':data.get('pdf_compact_rows', False)})
     raw = {'name':data.get('name'), 'recipients':data.get('recipients', '').replace(';', ' ').replace(',', ' ').split(),
            'report':'daily', 'send_time':data.get('time'), 'enabled':data.get('enabled', False),
            'date_mode':'offset' if mode in offsets else mode, 'day_offset':offsets.get(mode, 0),

@@ -4,3 +4,5 @@
 .source-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.source-controls label{flex:1;min-width:240px}.filters + .filters{margin-top:16px}
 
 .task-list{margin-top:20px}.task-list p{margin-top:8px}.task-list ul{list-style:none;padding:0;margin:14px 0 0}.task-list li{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid #e6ecf2;padding:12px 0}.task-list li span{color:#62758d}
+
+.filter-choice{border:1px solid #cad6e2;border-radius:8px}.filter-choice summary{padding:12px;cursor:pointer;font-weight:600}.filter-choice-items{display:grid;gap:10px;max-height:220px;overflow:auto;padding:0 12px 14px}.filter-choice-items .check{min-height:26px}

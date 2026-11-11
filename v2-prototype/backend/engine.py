@@ -32,6 +32,9 @@ def handle(request):
     if request.get('action') == 'legacy_set_task_enabled':
         from legacy_bridge import set_task_enabled
         return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'))
+    if request.get('action') == 'legacy_options':
+        from legacy_bridge import filter_options
+        return filter_options(request.get('config_path'), request.get('date'))
     if request.get('action') == 'legacy_tasks':
         from legacy_bridge import tasks
         return tasks(request.get('config_path'))

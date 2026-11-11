@@ -205,3 +205,49 @@ def test_saved_pdf_task_produces_pdf_through_legacy_worker(tmp_path, monkeypatch
     pdf=tmp_path / f'Prehled_{(sent_on+timedelta(days=1)).isoformat()}.pdf'
     text='\n'.join(page.extract_text() for page in PdfReader(pdf).pages)
     assert 'Anna Nováková' in text and 'Jan Dvořák' in text
+
+
+def test_wizard_saves_multiple_actual_filters_and_rejects_stale_values(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import load_profiles, profile_file
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories':[{'code':'ZACI'},{'code':'HOST'},{'code':'ZAM'}]})
+    monkeypatch.setattr(legacy_bridge, 'filter_options', lambda path, day: {'meals':['Oběd','Večeře'], 'deliveries':['Rozvoz','Jídelna']})
+    data={'name':'Filtry','date':date.today().isoformat(),'categories':['ZACI','HOST'],
+          'meals':['Oběd','Večeře'],'deliveries':['Rozvoz'],'content':'names','mode':'today',
+          'output':'email','recipients':'test@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path / 'config.json')
+    legacy_bridge.save_task(path,data)
+    profile=load_profiles(profile_file(tmp_path))[0]
+    assert profile.categories == ('ZACI','HOST')
+    assert profile.meal_type == ('oběd','večeře') and profile.delivery_types == ('Rozvoz',)
+    with pytest.raises(ValueError,match='dostupnou možnost'):
+        legacy_bridge.save_task(path,{**data,'meals':['Smyšlený typ']})
+    with pytest.raises(ValueError,match='povolenou kategorii'):
+        legacy_bridge.save_task(path,{**data,'categories':['ZACI','NEPOVOLENA']})
+    with pytest.raises(ValueError,match='povolenou kategorii'):
+        legacy_bridge.save_task(path,{**data,'categories':[]})
+    assert len(load_profiles(profile_file(tmp_path))) == 1
+
+
+def test_wizard_persists_pdf_options_in_profile(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import load_profiles, profile_file
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'name':'PDF','date':date.today().isoformat(),'category':'all','meal':'all','content':'names',
+          'mode':'today','output':'email','recipients':'test@example.invalid','time':'08:00',
+          'enabled':False,'cooking':False,'category_separation':True,'show_by_categories':False,
+          'show_delivery_summary':True,'delivery_page_per_type':True,'pdf_orientation':'na_vysku','pdf_bold':True}
+    legacy_bridge.save_task(str(tmp_path/'config.json'),data)
+    profile=load_profiles(profile_file(tmp_path))[0]
+    assert profile.category_separation and not profile.show_by_categories
+    assert profile.show_delivery_summary and profile.delivery_page_per_type
+    assert profile.pdf_orientation=='na_vysku' and profile.pdf_bold is True
