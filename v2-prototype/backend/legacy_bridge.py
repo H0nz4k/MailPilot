@@ -178,6 +178,26 @@ def save_report_profile(path, workspace, data):
     return {'id': profile.id, 'name': profile.name}
 
 
+def update_report_profile(path, workspace, data, profile_id, revision):
+    """Update one saved report after checking its revision and category access."""
+    from services.web_daily_profiles import load_profiles, save_profile, profile_file
+    from settings_bridge import workspace_path
+    config_path = workspace_path(path, workspace)
+    updated = profile_for_wizard(str(config_path), data)
+    allowed = {item['code'] for item in info(str(config_path))['categories']}
+    with task_store_lock(config_path.parent):
+        original = next((p for p in load_profiles(profile_file(config_path.parent)) if p.id == profile_id), None)
+        if original is None:
+            raise ValueError('Uložený přehled již neexistuje.')
+        if not isinstance(revision, str) or revision != task_revision(original):
+            raise ValueError('Přehled se mezitím změnil. Načtěte jej znovu.')
+        if not set(original.categories).issubset(allowed):
+            raise ValueError('Přehled obsahuje nepovolené kategorie a nelze jej změnit.')
+        updated = replace(updated, id=original.id)
+        save_profile(profile_file(config_path.parent), updated)
+    return {'id': updated.id, 'name': updated.name, 'revision': task_revision(updated)}
+
+
 def saved_report_profiles(path):
     """Return reusable report settings; permissions are rechecked on save/preview."""
     from services.web_daily_profiles import load_profiles, profile_file
@@ -193,6 +213,7 @@ def saved_report_profiles(path):
         values.update({
             'categories': categories,
             'restricted': len(categories) != len(profile.categories),
+            'revision': task_revision(profile),
             'meals': list(meal_filter_values(profile.meal_type)) or None,
             'deliveries': list(profile.delivery_types) or None,
             'content': 'collection' if profile.collection_status else 'names' if profile.show_diner_list else 'counts',

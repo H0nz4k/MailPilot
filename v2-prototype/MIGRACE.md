@@ -55,3 +55,5 @@ Zápis úloh je na hranici enginu omezen na oddělený pracovní prostor DataShi
 Převod zkopíruje dostupný NSSM do odděleného prostoru a nastaví cestu na tuto kopii; pokud NSSM chybí, aplikace to oznámí. Ověřeno izolovaným testem bez instalace služby.
 
 Výběr přehledu lze v odděleném prostoru uložit samostatně jako nový profil bez založení úlohy. Ověřeno izolovaným testem.
+
+Uložený přehled lze také aktualizovat; uživatel je upozorněn na dopad na navázané úlohy, změna vyžaduje aktuální revizi a plné oprávnění ke kategoriím. Ověřeno izolovanými testy.

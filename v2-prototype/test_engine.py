@@ -1439,3 +1439,28 @@ def test_save_standalone_profile_requires_isolated_workspace_and_creates_no_task
     assert not task_file(workspace).exists()
     with pytest.raises(ValueError, match='odděleném prostoru'):
         legacy_bridge.save_report_profile(str(config), str(tmp_path / 'other'), data)
+
+def test_update_report_profile_checks_revision_and_category_permissions(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    import pytest
+    from dataclasses import replace
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import DailyProfile, load_profiles, profile_file, save_profile
+    workspace = tmp_path / 'workspace'; workspace.mkdir()
+    config = workspace / 'config.json'; config.write_text('{}', encoding='utf-8')
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories': [{'code': 'ZACI'}]})
+    profile = DailyProfile.from_dict({'id':'p', 'name':'Škola', 'categories':['ZACI']})
+    save_profile(profile_file(workspace), profile)
+    data = {'name':'Změněná škola', 'date':date.today().isoformat(), 'categories':['ZACI'], 'content':'counts'}
+    result = legacy_bridge.update_report_profile(str(config), str(workspace), data, 'p', legacy_bridge.task_revision(profile))
+    assert result['id'] == 'p' and load_profiles(profile_file(workspace))[0].show_diner_list is False
+    with pytest.raises(ValueError, match='mezitím změnil'):
+        legacy_bridge.update_report_profile(str(config), str(workspace), data, 'p', legacy_bridge.task_revision(profile))
+    restricted = replace(load_profiles(profile_file(workspace))[0], categories=('ZACI', 'HOST'))
+    save_profile(profile_file(workspace), restricted)
+    with pytest.raises(ValueError, match='nepovolené kategorie'):
+        legacy_bridge.update_report_profile(str(config), str(workspace), data, 'p', legacy_bridge.task_revision(restricted))
+    assert load_profiles(profile_file(workspace))[0] == restricted
