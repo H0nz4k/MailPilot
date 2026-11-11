@@ -480,3 +480,28 @@ def test_edit_preview_preserves_unexposed_pdf_options(tmp_path, monkeypatch):
     legacy_bridge.preview_wizard(path,request,tmp_path/'output')
     assert seen[0].pdf_data_font_size==11
     assert len(load_profiles(profile_file(tmp_path)))==1
+
+
+def test_delete_task_rejects_stale_revision_and_keeps_shared_profile(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import load_profiles, profile_file
+    from services.web_mail_task_store import load_tasks, task_file, save_tasks
+    from services.web_mail_tasks import MailTask
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'name':'První','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path/'config.json')
+    first=legacy_bridge.save_task(path,data)['task']
+    other=MailTask.from_dict({**first,'id':'other','name':'Druhá'})
+    save_tasks(task_file(tmp_path),load_tasks(task_file(tmp_path))+[other])
+    first_row=next(t for t in legacy_bridge.tasks(path) if t['id']==first['id'])
+    with pytest.raises(ValueError,match='mezitím změnila'):
+        legacy_bridge.delete_task(path,first['id'],'stale')
+    legacy_bridge.delete_task(path,first['id'],first_row['revision'])
+    assert [t.id for t in load_tasks(task_file(tmp_path))]==['other']
+    assert load_profiles(profile_file(tmp_path))[0].id==other.profile_id

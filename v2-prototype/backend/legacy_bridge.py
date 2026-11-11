@@ -347,3 +347,20 @@ def preview_wizard(path, data, output_dir):
     path = output / f'Náhled-přehledu-{uuid4().hex[:8]}.pdf'
     create_pdf(config, report, output_path=path)
     return {'pdf': str(path), 'portions': sum(item.portions for item in report.menus)}
+
+
+def delete_task(path, task_id, revision):
+    from services.web_mail_task_store import load_tasks, save_tasks, task_file
+    if not isinstance(task_id, str) or not isinstance(revision, str):
+        raise ValueError('Chybí verze úlohy. Obnovte seznam.')
+    configuration(path)
+    target = task_file(Path(path).parent)
+    with task_store_lock(target.parent):
+        existing = load_tasks(target)
+        task = next((item for item in existing if item.id == task_id), None)
+        if task is None:
+            raise ValueError('Úloha již neexistuje.')
+        require_current_revision(task, revision)
+        # Profiles may be shared with another task or used independently.
+        save_tasks(target, [item for item in existing if item.id != task_id])
+    return {'id':task_id}
