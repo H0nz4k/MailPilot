@@ -167,6 +167,17 @@ def profile_for_wizard(path, data):
     return profile
 
 
+def save_report_profile(path, workspace, data):
+    """Save a new standalone report without creating or modifying a task."""
+    from services.web_daily_profiles import save_profile, profile_file
+    from settings_bridge import workspace_path
+    config_path = workspace_path(path, workspace)
+    profile = profile_for_wizard(str(config_path), data)
+    with task_store_lock(config_path.parent):
+        save_profile(profile_file(config_path.parent), profile)
+    return {'id': profile.id, 'name': profile.name}
+
+
 def saved_report_profiles(path):
     """Return reusable report settings; permissions are rechecked on save/preview."""
     from services.web_daily_profiles import load_profiles, profile_file
@@ -768,7 +779,8 @@ def save_pdf_template(path, workspace, data, name):
         if task is None:
             raise ValueError('Úloha již neexistuje.')
         require_current_revision(task, data.get('revision'))
-        original = next((p for p in load_profiles(profile_file(config_path.parent)) if p.id == task.profile_id), None)
+        original = (next((p for p in load_profiles(profile_file(config_path.parent)) if p.id == task.profile_id), None)
+                    if task.profile_id else legacy_global_profile(str(config_path), task.name))
         if original is None:
             raise ValueError('Původní profil úlohy neexistuje.')
         profile = preserve_profile(original, profile, data.get('profile_revision'))

@@ -53,3 +53,5 @@ V běžném průvodci lze vytvořený PDF náhled uložit na novou cestu bez vyt
 Zápis úloh je na hranici enginu omezen na oddělený pracovní prostor DataShip 2; starou konfiguraci lze prohlížet a použít pro sestavy. Ověřeny všechny čtyři operace zápisu i povolení v izolovaném prostoru.
 
 Převod zkopíruje dostupný NSSM do odděleného prostoru a nastaví cestu na tuto kopii; pokud NSSM chybí, aplikace to oznámí. Ověřeno izolovaným testem bez instalace služby.
+
+Výběr přehledu lze v odděleném prostoru uložit samostatně jako nový profil bez založení úlohy. Ověřeno izolovaným testem.

@@ -1417,3 +1417,25 @@ def test_workspace_import_copies_nssm_without_old_installation_dependency(tmp_pa
     assert Path(load_settings(settings_path(target))['nssm_path']) == copied
     (old / 'nssm' / 'win64' / 'nssm.exe').unlink()
     assert Path(load_settings(settings_path(target))['nssm_path']).is_file()
+
+def test_save_standalone_profile_requires_isolated_workspace_and_creates_no_task(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import load_profiles, profile_file
+    from services.web_mail_task_store import task_file
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    config = workspace / 'config.json'
+    config.write_text('{}', encoding='utf-8')
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories': [{'code': 'ZACI'}]})
+    data = {'name': 'Škola', 'date': date.today().isoformat(), 'categories': ['ZACI'], 'content': 'names'}
+    result = legacy_bridge.save_report_profile(str(config), str(workspace), data)
+    profiles = load_profiles(profile_file(workspace))
+    assert len(profiles) == 1 and profiles[0].id == result['id']
+    assert not task_file(workspace).exists()
+    with pytest.raises(ValueError, match='odděleném prostoru'):
+        legacy_bridge.save_report_profile(str(config), str(tmp_path / 'other'), data)

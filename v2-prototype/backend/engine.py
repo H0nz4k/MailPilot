@@ -110,6 +110,9 @@ def handle(request):
     if request.get('action') == 'legacy_cooking_calendars':
         from legacy_bridge import cooking_calendars
         return cooking_calendars(request.get('config_path'))
+    if request.get('action') == 'save_report_profile':
+        from legacy_bridge import save_report_profile
+        return save_report_profile(request.get('config_path'), request['workspace_dir'], request.get('data', {}))
     if request.get('action') == 'legacy_saved_profiles':
         from legacy_bridge import saved_report_profiles
         return saved_report_profiles(request.get('config_path'))
