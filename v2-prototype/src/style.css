@@ -12,3 +12,5 @@
 .task-actions{display:flex;gap:8px;flex-wrap:wrap}.task-edit{display:grid;gap:14px;margin-top:16px;padding-top:18px;border-top:1px solid #dce4ee}.task-edit label{max-width:720px}
 
 .period-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}.period-filters .check,.period-filters p{grid-column:1/-1}@media(max-width:700px){.period-filters{grid-template-columns:1fr}}
+
+textarea{font:inherit;width:100%;padding:11px;border:1px solid #bdcbdc;border-radius:7px;color:inherit;resize:vertical}textarea:focus-visible{outline:3px solid #65aaf5;outline-offset:2px}

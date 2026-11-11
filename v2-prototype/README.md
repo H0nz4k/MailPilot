@@ -24,3 +24,5 @@ Při přímém použití konfigurace 1.4 neupravujte úlohy současně v DataShi
 Příkaz „Převést do DataShip 2“ vytvoří oddělený uživatelský prostor, zachová původní soubory a převede úlohy jako pozastavené. Při tomto převodu se služba neinstaluje ani nespouští. Opakovaný import existující prostor nepřepíše. Pro samostatné plánování lze nainstalovat službu DataShip2Scheduler (vyžaduje práva správce a dostupné NSSM); instalace ji nespustí. Skutečná instalace a běh služby zatím nebyly ověřeny na cílovém počítači.
 
 Odběry lze po připojení jednorázově vytvořit a odeslat podle existujícího nastavení SMTP/Resend; plánovaná úloha se tím nevytváří. Vytvořené PDF lze zkopírovat na uvedenou úplnou cestu, pokud cílový soubor dosud neexistuje. Skutečné odesílání nebylo ověřeno.
+
+Nastavení e-mailu v samostatném prostoru vyžaduje existující heslo administrace DataShipu. Klíč Resend se při importu nekopíruje; lze jej zadat v Nastavení. Heslo SMTP se používá z prostředí služby. Změna připojení k databázi ve verzi 2 zatím není dokončena.

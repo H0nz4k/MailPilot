@@ -34,6 +34,12 @@ def handle(request):
         from legacy_bridge import configuration
         configuration(request.get('config_path'))
         return import_workspace(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'read_settings':
+        from settings_bridge import read_settings
+        return read_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))
+    if request.get('action') == 'save_mail_settings':
+        from settings_bridge import save_mail
+        return save_mail(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('changes'), request.get('resend_key'))
     if request.get('action') == 'workspace_status':
         path = Path(request['workspace_dir']) / 'config.json'
         return {'exists': path.is_file(), 'config_path': str(path) if path.is_file() else None}

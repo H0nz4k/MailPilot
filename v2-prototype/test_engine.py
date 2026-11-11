@@ -833,3 +833,64 @@ def test_wizard_applies_template_and_preserves_hidden_pdf_settings(tmp_path,monk
     assert profile.pdf_orientation=='na_sirku' and profile.pdf_bold is True
     with pytest.raises(ValueError,match='Šablona PDF již neexistuje'):
         legacy_bridge.save_task(path,{**data,'pdf_template_id':'missing'})
+
+
+def test_settings_requires_admin_and_never_returns_secret_values(tmp_path,monkeypatch):
+    import sys,json,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge, credential_store, env_store
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text(json.dumps({'databaze':{'host':'localhost','port':5432,'dbname':'db','user':'user'}}),encoding='utf-8')
+    (workspace/'web_mail_settings.json').write_text(json.dumps({'smtp_password':'not-real-secret'}),encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'heslo')
+    monkeypatch.setattr(env_store,'get_resend_api_key',lambda:'not-real-key')
+    with pytest.raises(ValueError,match='Nesprávné heslo'):
+        settings_bridge.read_settings(str(config),str(workspace),'bad')
+    result=settings_bridge.read_settings(str(config),str(workspace),'heslo')
+    assert result['resend_key_present'] is True
+    assert 'not-real-secret' not in str(result) and 'not-real-key' not in str(result)
+    with pytest.raises(ValueError,match='odděleném prostoru'):
+        settings_bridge.read_settings(str(config),str(tmp_path/'other'),'heslo')
+
+
+def test_mail_settings_validates_and_never_serializes_api_key(tmp_path,monkeypatch):
+    import sys,json,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge, credential_store, env_store
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text('{}',encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'heslo')
+    keys=[]
+    monkeypatch.setattr(env_store,'set_resend_api_key',lambda key:keys.append(key))
+    changes={'transport':'resend','from_email':'test@example.invalid','smtp_port':587,'smtp_security':'starttls'}
+    settings_bridge.save_mail(str(config),str(workspace),'heslo',changes,'not-real-key')
+    raw=(workspace/'web_mail_settings.json').read_text(encoding='utf-8')
+    assert 'not-real-key' not in raw and keys==['not-real-key']
+    assert json.loads(raw)['service_name']=='DataShip2Scheduler'
+    with pytest.raises(ValueError,match='STARTTLS'):
+        settings_bridge.save_mail(str(config),str(workspace),'heslo',{**changes,'transport':'smtp','smtp_security':'none'})
+    with pytest.raises(ValueError,match='Neplatné nastavení'):
+        settings_bridge.save_mail(str(config),str(workspace),'heslo',{'service_name':'Other'})
+
+
+def test_settings_unset_admin_and_key_failure_are_explicit(tmp_path,monkeypatch):
+    import sys,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge,credential_store,env_store
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text('{}',encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:None)
+    with pytest.raises(ValueError,match='nastavené'):
+        settings_bridge.read_settings(str(config),str(workspace),'anything')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'heslo')
+    def fail_key(value): raise env_store.EnvStoreError('detail')
+    monkeypatch.setattr(env_store,'set_resend_api_key',fail_key)
+    with pytest.raises(ValueError,match='uloženo, ale API klíč'):
+        settings_bridge.save_mail(str(config),str(workspace),'heslo',{'transport':'resend'},'not-real-key')
+    assert (workspace/'web_mail_settings.json').exists()
