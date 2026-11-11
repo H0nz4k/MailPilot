@@ -29,6 +29,9 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'legacy_wizard_edit':
+        from legacy_bridge import wizard_edit_data
+        return wizard_edit_data(request.get('config_path'), request.get('task_id'))
     if request.get('action') == 'legacy_update_task':
         from legacy_bridge import update_task
         return update_task(request.get('config_path'), request.get('task_id'), request.get('changes'), request.get('revision'))

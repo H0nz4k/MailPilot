@@ -392,3 +392,91 @@ def test_stale_task_revision_is_rejected(tmp_path, monkeypatch):
     with pytest.raises(ValueError,match='mezitím změnila'):
         legacy_bridge.set_task_enabled(path,task_id,True,revision)
     assert legacy_bridge.tasks(path)[0]['name']=='Změněno'
+
+
+def test_edit_wizard_preserves_other_tasks_and_unexposed_profile_settings(tmp_path, monkeypatch):
+    import sys
+    from dataclasses import replace
+    from types import SimpleNamespace
+    import pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import load_profiles, profile_file, save_profile
+    from services.web_mail_task_store import load_tasks, save_tasks, task_file
+    from services.web_mail_tasks import MailTask
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'},{'code':'HOST'}]})
+    monkeypatch.setattr(legacy_bridge,'filter_options',lambda path,day:{'meals':['Oběd'],'deliveries':['Rozvoz']})
+    data={'name':'Původní','date':date.today().isoformat(),'categories':['ZACI'],'meals':['Oběd'],
+          'deliveries':['Rozvoz'],'content':'names','mode':'today','output':'email',
+          'recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path/'config.json')
+    task=legacy_bridge.save_task(path,data)['task']
+    old=load_profiles(profile_file(tmp_path))[0]
+    save_profile(profile_file(tmp_path),replace(old,pdf_data_font_size=11,pdf_label_font_size=10,language='česky'))
+    other=MailTask.from_dict({**task,'id':'shared-other','name':'Druhá úloha'})
+    save_tasks(task_file(tmp_path),load_tasks(task_file(tmp_path))+[other])
+    edit=legacy_bridge.wizard_edit_data(path,task['id'])
+    update={**edit['data'],'name':'Upravený','categories':['HOST'],'edit_id':edit['id'],
+            'revision':edit['revision'],'profile_revision':edit['profile_revision']}
+    legacy_bridge.save_task(path,update)
+    tasks=load_tasks(task_file(tmp_path))
+    changed=next(t for t in tasks if t.id==task['id'])
+    assert changed.name=='Upravený' and changed.profile_id!=old.id
+    assert next(t for t in tasks if t.id==other.id).profile_id==old.id
+    new=next(p for p in load_profiles(profile_file(tmp_path)) if p.id==changed.profile_id)
+    assert new.categories==('HOST',) and new.pdf_data_font_size==11 and new.pdf_label_font_size==10
+    assert new.language=='česky' and new.delivery_types==('Rozvoz',)
+    with pytest.raises(ValueError,match='mezitím změnila'):
+        legacy_bridge.save_task(path,update)
+
+
+def test_edit_wizard_rejects_profile_changed_since_load(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from dataclasses import replace
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import load_profiles,profile_file,save_profile
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    monkeypatch.setattr(legacy_bridge,'filter_options',lambda path,day:{'meals':[], 'deliveries':[]})
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path/'config.json')
+    task=legacy_bridge.save_task(path,data)['task']
+    edit=legacy_bridge.wizard_edit_data(path,task['id'])
+    profile=load_profiles(profile_file(tmp_path))[0]
+    save_profile(profile_file(tmp_path),replace(profile,pdf_data_font_size=12))
+    with pytest.raises(ValueError,match='Profil úlohy se mezitím změnil'):
+        legacy_bridge.save_task(path,{**edit['data'],'edit_id':edit['id'],'revision':edit['revision'], 'profile_revision':edit['profile_revision']})
+
+
+def test_edit_preview_preserves_unexposed_pdf_options(tmp_path, monkeypatch):
+    import sys
+    from dataclasses import replace
+    import automaticky_export
+    from stravovaci_sestava import AppConfig
+    from services.web_daily_profiles import load_profiles,profile_file,save_profile
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    cfg=AppConfig(database={},report_date=date.today(),categories=('ZACI',),language='česky',menu_list_number=1)
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:cfg)
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    monkeypatch.setattr(legacy_bridge,'filter_options',lambda path,day:{'meals':[],'deliveries':[]})
+    monkeypatch.setattr(automaticky_export,'read_saved_settings',lambda path:{'povolene_kategorie':['ZACI']})
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','content':'collection','collection':'both',
+          'mode':'today','output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    path=str(tmp_path/'config.json')
+    task=legacy_bridge.save_task(path,data)['task']
+    profile=load_profiles(profile_file(tmp_path))[0]
+    save_profile(profile_file(tmp_path),replace(profile,pdf_data_font_size=11))
+    edit=legacy_bridge.wizard_edit_data(path,task['id'])
+    sample=engine.fetch_collection_period(engine.FixtureCursor(),replace(cfg,collection_status='both'),('ZACI',),'Test')
+    seen=[]
+    monkeypatch.setattr(legacy_bridge,'fetch_report',lambda actual:seen.append(actual) or sample)
+    request={**edit['data'],'edit_id':edit['id'],'revision':edit['revision'],'profile_revision':edit['profile_revision']}
+    legacy_bridge.preview_wizard(path,request,tmp_path/'output')
+    assert seen[0].pdf_data_font_size==11
+    assert len(load_profiles(profile_file(tmp_path)))==1

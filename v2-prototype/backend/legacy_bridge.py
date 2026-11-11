@@ -125,6 +125,55 @@ def profile_for_wizard(path, data):
     return profile
 
 
+def wizard_edit_data(path, task_id):
+    from services.web_daily_profiles import load_profiles, profile_file
+    from services.web_mail_task_store import load_tasks, task_file
+    from services.web_meal_types import meal_filter_values
+    configuration(path)
+    directory = Path(path).parent
+    task = next((t for t in load_tasks(task_file(directory)) if t.id == task_id), None)
+    if task is None:
+        raise ValueError('Úloha již neexistuje.')
+    if task.report != 'daily' or not task.profile_id:
+        raise ValueError('Tato starší úloha nemá uložený profil; upravte ji zatím v DataShip 1.4.')
+    profile = next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
+    if profile is None:
+        raise ValueError('Uložený profil úlohy neexistuje.')
+    options = filter_options(path, date.today().isoformat())
+    meal_names = {name.casefold(): name for name in options['meals']}
+    meals = [meal_names.get(value.casefold(), value) for value in meal_filter_values(profile.meal_type)]
+    mode = task.date_mode
+    days = abs(task.day_offset)
+    if mode == 'offset' and task.day_offset < 0:
+        mode = 'history'
+    values = {'name': task.name, 'date': date.today().isoformat(), 'categories': list(profile.categories),
+              'meals': meals or None, 'deliveries': list(profile.delivery_types) or None,
+              'content': 'collection' if profile.collection_status else 'names' if profile.show_diner_list else 'counts',
+              'collection':profile.collection_status or 'both', 'mode':mode, 'days':str(days),
+              'fixed_date':task.fixed_date or '', 'output':task.output_mode,
+              'recipients':', '.join(task.recipients), 'directory':task.output_directory or '',
+              'filename':task.output_filename, 'time':task.send_time, 'enabled':task.enabled,
+              'cooking':task.only_cooking_days}
+    for field in ('category_separation','show_by_categories','show_by_norms','show_delivery_summary',
+                  'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows'):
+        values[field] = getattr(profile, field)
+    return {'data':values, 'id':task.id, 'revision':task_revision(task), 'profile_revision':task_revision(profile)}
+
+
+def preserve_profile(original, profile, revision):
+    from services.web_daily_profiles import DailyProfile
+    if revision != task_revision(original):
+        raise ValueError('Profil úlohy se mezitím změnil. Obnovte seznam a úpravu zopakujte.')
+    fields = ('name','categories','meal_type','delivery_types','show_diner_list','collection_status',
+              'category_separation','show_by_categories','show_by_norms','show_delivery_summary',
+              'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows')
+    values = original.to_dict()
+    changed = profile.to_dict()
+    values.update({key:changed[key] for key in fields})
+    values['id'] = profile.id
+    return DailyProfile.from_dict(values)
+
+
 def save_task(path, data):
     from datetime import datetime
     from services.collection_status import validate_task_history
@@ -144,11 +193,12 @@ def save_task(path, data):
         if str(days) != str(data['days']) or not (1 if mode == 'history' else 0) <= days <= 370:
             raise ValueError('Zadejte platný počet dní.')
         offsets[mode] = -days if mode == 'history' else days
-    if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day'):
+    if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day', 'fixed'):
         raise ValueError('Neplatný den přehledu.')
     raw = {'name':data.get('name'), 'recipients':data.get('recipients', '').replace(';', ' ').replace(',', ' ').split(),
            'report':'daily', 'send_time':data.get('time'), 'enabled':data.get('enabled', False),
            'date_mode':'offset' if mode in offsets else mode, 'day_offset':offsets.get(mode, 0),
+           'fixed_date':data.get('fixed_date') if mode == 'fixed' else None,
            'profile_id':profile.id, 'only_cooking_days':data.get('cooking', False),
            'output_mode':data.get('output'), 'output_directory':data.get('directory'),
            'output_filename':data.get('filename')}
@@ -160,8 +210,27 @@ def save_task(path, data):
     directory = Path(path).parent
     with task_store_lock(directory):
         existing = load_tasks(task_file(directory))
-        save_profile(profile_file(directory), profile)
-        save_tasks(task_file(directory), existing + [task])
+        edit_id = data.get('edit_id')
+        if edit_id:
+            from services.web_daily_profiles import load_profiles
+            original = next((item for item in existing if item.id == edit_id), None)
+            if original is None:
+                raise ValueError('Úloha již neexistuje.')
+            if not isinstance(data.get('revision'), str):
+                raise ValueError('Chybí verze upravované úlohy. Obnovte seznam.')
+            require_current_revision(original, data['revision'])
+            original_profile = next((item for item in load_profiles(profile_file(directory)) if item.id == original.profile_id), None)
+            if original_profile is None or original.report != 'daily':
+                raise ValueError('Původní profil úlohy neexistuje nebo jej nelze upravit.')
+            profile = preserve_profile(original_profile, profile, data.get('profile_revision'))
+            first_send = (original.first_send_date if original.enabled and task.enabled and original.send_time == task.send_time
+                          else max(task.first_send_date, original.first_send_date or task.first_send_date))
+            task = replace(task, id=original.id, cooking_meal_type=original.cooking_meal_type, first_send_date=first_send)
+            save_profile(profile_file(directory), profile)
+            save_tasks(task_file(directory), [task if item.id == edit_id else item for item in existing])
+        else:
+            save_profile(profile_file(directory), profile)
+            save_tasks(task_file(directory), existing + [task])
     from services.web_worker_status import observed_status
     return {'task':task.to_dict(), 'status':observed_status(directory, task), 'next_run':upcoming.isoformat()}
 
@@ -258,6 +327,18 @@ def preview_wizard(path, data, output_dir):
     from services.web_daily_profiles import apply_profile
     config = configuration(path)
     profile = profile_for_wizard(path, data)
+    if data.get('edit_id'):
+        from services.web_daily_profiles import load_profiles, profile_file
+        from services.web_mail_task_store import load_tasks, task_file
+        directory = Path(path).parent
+        task = next((t for t in load_tasks(task_file(directory)) if t.id == data['edit_id']), None)
+        if task is None:
+            raise ValueError('Úloha již neexistuje.')
+        require_current_revision(task, data.get('revision'))
+        original = next((p for p in load_profiles(profile_file(directory)) if p.id == task.profile_id), None)
+        if original is None:
+            raise ValueError('Původní profil úlohy neexistuje.')
+        profile = preserve_profile(original, profile, data.get('profile_revision'))
     raw = read_saved_settings(Path(path))
     config = apply_profile(replace(config, report_date=date.fromisoformat(data['date']), report_end_date=None), profile, raw)
     report = fetch_report(config)
