@@ -81,3 +81,95 @@ def test_legacy_collection_reuses_fetch_and_rejects_unpermitted_category(monkeyp
     import pytest
     with pytest.raises(ValueError, match='není povolená'):
         legacy_bridge.collection({**req,'category':'HOST'}, tmp_path)
+
+
+def test_wizard_saves_legacy_profile_and_paused_task(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_mail_task_store import load_tasks, task_file
+    from services.web_daily_profiles import load_profiles, profile_file
+    from services.web_mail_worker import tick
+    from datetime import datetime
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories':[{'code':'ZACI'},{'code':'HOST'}]})
+    data = {'name':'Včerejší odběry','date':date.today().isoformat(),'category':'ZACI','meal':'all',
+            'content':'collection','collection':'uncollected','mode':'yesterday','days':'2',
+            'output':'email','recipients':'test@example.invalid','time':'08:00','enabled':False,'cooking':True}
+    config_path = tmp_path / 'config.json'
+    result = legacy_bridge.save_task(str(config_path), data)
+    task = load_tasks(task_file(tmp_path))[0]
+    profile = load_profiles(profile_file(tmp_path))[0]
+    assert not task.enabled and task.profile_id == profile.id
+    assert task.day_offset == -1 and task.only_cooking_days
+    assert profile.categories == ('ZACI',) and profile.collection_status == 'uncollected'
+    assert result['status'] == 'Pozastaveno'
+    assert legacy_bridge.tasks(str(config_path))[0]['name'] == data['name']
+    calls = []
+    monkeypatch.setattr('services.web_mail_worker.dispatch', lambda *args: calls.append(args))
+    tick(config_path, datetime.now().replace(hour=23, minute=59))
+    assert not calls
+
+
+def test_wizard_rejects_invalid_values_before_writing(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    import pytest
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories':[{'code':'ZACI'}]})
+    data = {'name':'Test','date':date.today().isoformat(),'category':'HOST','meal':'all',
+            'content':'names','mode':'today','output':'email','recipients':'test@example.invalid','time':'08:00','enabled':False,'cooking':False}
+    with pytest.raises(ValueError, match='povolenou kategorii'):
+        legacy_bridge.save_task(str(tmp_path / 'config.json'), data)
+    assert not list(tmp_path.iterdir())
+    data['category'] = 'ZACI'
+    data['mode'] = 'yesterday'
+    with pytest.raises(ValueError, match='Dny zpět'):
+        legacy_bridge.save_task(str(tmp_path / 'config.json'), data)
+    assert not list(tmp_path.iterdir())
+
+
+def test_wizard_enabling_task_does_not_trigger_catchup(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from datetime import datetime
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_mail_task_store import load_tasks, task_file
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories':[{'code':'ZACI'}]})
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','meal':'all',
+          'content':'names','mode':'today','output':'email','recipients':'test@example.invalid',
+          'time':'00:00','enabled':False,'cooking':False}
+    path=str(tmp_path / 'config.json')
+    task_id=legacy_bridge.save_task(path, data)['task']['id']
+    assert legacy_bridge.set_task_enabled(path,task_id,True)['enabled']
+    task=load_tasks(task_file(tmp_path))[0]
+    assert task.enabled and date.fromisoformat(task.first_send_date)>date.today()
+    assert legacy_bridge.set_task_enabled(path,task_id,False)['enabled'] is False
+
+
+def test_saved_enabled_task_is_seen_once_per_day_by_legacy_worker(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from datetime import datetime, timedelta
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_mail_worker import tick
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories':[{'code':'ZACI'}]})
+    data={'name':'Test','date':date.today().isoformat(),'category':'all','meal':'all',
+          'content':'names','mode':'tomorrow','output':'pdf','directory':str(tmp_path),
+          'filename':'Prehled_{date}.pdf','time':'00:00','enabled':True,'cooking':False}
+    path=tmp_path / 'config.json'
+    task=legacy_bridge.save_task(str(path),data)['task']
+    calls=[]
+    monkeypatch.setattr('services.web_mail_worker.dispatch', lambda *args: calls.append(args))
+    next_day=datetime.combine(date.today()+timedelta(days=1),datetime.min.time()).replace(hour=8)
+    tick(path,next_day)
+    tick(path,next_day)
+    assert len(calls)==1 and calls[0][1].id==task['id']
+    assert calls[0][1].output_mode=='pdf'

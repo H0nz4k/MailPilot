@@ -29,6 +29,15 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'legacy_set_task_enabled':
+        from legacy_bridge import set_task_enabled
+        return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'))
+    if request.get('action') == 'legacy_tasks':
+        from legacy_bridge import tasks
+        return tasks(request.get('config_path'))
+    if request.get('action') == 'legacy_save_task':
+        from legacy_bridge import save_task
+        return save_task(request.get('config_path'), request.get('data', {}))
     if request.get('action') == 'legacy_info':
         from legacy_bridge import info
         return info(request.get('config_path'))
