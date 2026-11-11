@@ -63,3 +63,5 @@ Připojení přes skutečný načítač konfigurace bylo opraveno (datum DD.MM.R
 Sestava odběrů byla rovněž vytvořena čtením dostupné skutečné databáze pro 15. 10. 2026: 1 139 záznamů a platný PDF soubor; dataset vracel 0 odebraných a 1 139 neodebraných. Nejde o nezávislé ověření správnosti údajů v Jídelně ani o test odeslání.
 
 Import zachovává také původní soubor desktopového plánovače planovac.json, včetně dalších polí, a úlohy v kopii pozastaví. Nový plánovač je zatím nespouští: převod akcí uzávěrky, speciálních sestav, vlastních příkazů a hodinových/intervalových plánů zůstává nedokončený.
+
+Na dostupné skutečné databázi byly načteny i typy stravy, výdeje a kalendáře. V dočasném odděleném prostoru byl uložen a spuštěn testovací plán pro výstup PDF: vytvořil jeden PDF a druhý průchod jej neopakoval; žádný e-mail nebyl odeslán. Zabalený engine vytvořil skutečný přehled odběrů a vykreslil jeho první stránku; desktopový autotest vytvořil ukázkové PDF. Skutečná služba zatím nebyla instalována ani testována, běžící relace nemá práva správce Windows.
