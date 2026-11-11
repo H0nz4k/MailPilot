@@ -1378,3 +1378,25 @@ def test_wizard_calendar_choice_is_saved_edited_and_validated(tmp_path, monkeypa
     update.update(calendar_mode='all', calendars=[])
     legacy_bridge.save_task(path, update)
     assert load_tasks(task_file(tmp_path))[0].cooking_meal_type == '*'
+
+def test_engine_forbids_task_mutations_in_legacy_workspace(tmp_path, monkeypatch):
+    import pytest
+    import engine
+    import legacy_bridge
+    old = tmp_path / 'old'
+    isolated = tmp_path / 'isolated'
+    old.mkdir(); isolated.mkdir()
+    (old / 'config.json').write_text('{}', encoding='utf-8')
+    (isolated / 'config.json').write_text('{}', encoding='utf-8')
+    calls = []
+    for name in ('save_task', 'delete_task', 'update_task', 'set_task_enabled'):
+        monkeypatch.setattr(legacy_bridge, name, lambda *args: calls.append(args) or {'ok': True})
+    actions = ('legacy_save_task', 'legacy_delete_task', 'legacy_update_task', 'legacy_set_task_enabled')
+    for index, action in enumerate(actions):
+        request = {'action': action, 'config_path': str(old / 'config.json'), 'workspace_dir': str(isolated)}
+        with pytest.raises(ValueError, match='odděleném prostoru'):
+            engine.handle(request)
+        assert len(calls) == index
+        request['config_path'] = str(isolated / 'config.json')
+        assert engine.handle(request) == {'ok': True}
+    assert len(calls) == 4

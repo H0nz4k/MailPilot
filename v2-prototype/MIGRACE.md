@@ -22,7 +22,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Nastavení e-mailu a NSSM v odděleném prostoru je chráněné existujícím heslem administrace; klíč Resend se při importu nekopíruje. Ověřeno simulovanými přihlašovacími údaji.
 - Administrace umožňuje načíst posledních 200 událostí workeru po ověření hesla; ověřeno izolovaně.
 - Samostatný worker verze 2 používá zámek proti dalšímu workeru nad stejnou konfigurací. Službu lze nainstalovat, spustit, zastavit, opravit a odstranit; akce služby jsou ověřené pouze náhradami, nikoli skutečnou službou.
-- Čtyřkrokový průvodce při připojení uloží profil a úlohu do úložiště 1.4; umí vypsat úlohy, pozastavit, zapnout, odstranit a upravit je krokovým průvodcem. Při změně vytváří nový profil a chrání ostatní úlohy sdílející původní profil. Zobrazuje diagnostický stav původní služby a workeru; existující službu umí spustit a zastavit po ověření workeru a konfigurace. Nové úlohy jsou výchozím stavem pozastavené. Ověřeno izolovaně s náhradou databáze, ne reálnou službou nebo odesláním.
+- Čtyřkrokový průvodce v odděleném prostoru uloží profil a úlohu; umí vypsat úlohy, pozastavit, zapnout, odstranit a upravit je krokovým průvodcem. Při změně vytváří nový profil a chrání ostatní úlohy sdílející původní profil. Zobrazuje diagnostický stav původní služby a workeru; existující službu umí spustit a zastavit po ověření workeru a konfigurace. Nové úlohy jsou výchozím stavem pozastavené. Ověřeno izolovaně s náhradou databáze, ne reálnou službou nebo odesláním.
 
 ## K převodu a ověření
 
@@ -36,7 +36,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 Nepovažovat simulované testy za ověření skutečného databázového připojení, odesílání nebo služby.
 
-Úpravy z více instancí verze 2 používají společný zámek a kontrolu změny úlohy. Oddělený import umožňuje pracovat s vlastními kopiemi. Pozor: verze 1.4 tento zámek nezná; souběžné úpravy z 1.4 a 2 stále nejsou bezpečné a před provozním nasazením je nutná jejich koordinace.
+Úpravy z více instancí verze 2 používají společný zámek a kontrolu změny úlohy. Oddělený import umožňuje pracovat s vlastními kopiemi. Verze 1.4 tento zámek nezná, proto DataShip 2 odmítá zápis úloh do úložiště 1.4. Import provádějte během klidu, bez současných změn původních souborů.
 
 Jednorázové odesílání uzávěrky a Z 17-01 používá nakonfigurovaný transport SMTP/Resend, ale nebylo ověřeno skutečným e-mailem.
 
@@ -49,3 +49,5 @@ Starší denní úlohu bez vlastního profilu lze otevřít v průvodci; při ul
 Průvodce umožňuje zvolit kalendář podle typu přehledu, všechny kalendáře nebo konkrétní kalendáře z databáze. Výběr se při uložení i náhledu ověřuje; původní explicitní výběr lze upravit. Ověřeno testy s náhradou databáze a zobrazením ukázkového průvodce.
 
 V běžném průvodci lze vytvořený PDF náhled uložit na novou cestu bez vytvoření úlohy; existující soubor se nepřepisuje. Backend ukládání pokrývají izolované testy.
+
+Zápis úloh je na hranici enginu omezen na oddělený pracovní prostor DataShip 2; starou konfiguraci lze prohlížet a použít pro sestavy. Ověřeny všechny čtyři operace zápisu i povolení v izolovaném prostoru.

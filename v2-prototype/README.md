@@ -1,6 +1,6 @@
 # DataShip 2 — prototyp Odběrů
 
-Oddělený experiment vycházející z DataShip 1.4.0. Odběry lze zobrazit pomocí ukázkových dat nebo po zadání cesty ke konfiguraci DataShip 1.4 načíst ze skutečné Jídelny. Ukázkový režim používá testovací náhradu databázového kurzoru; připojený režim využívá původní výpočty a generátor PDF. Připojení používá systémově uložené heslo. Při přímém připojení k 1.4 se úlohy ukládají do jejího úložiště a může je zpracovat běžící plánovač 1.4. Alternativou je import do samostatného prostoru verze 2.
+Oddělený experiment vycházející z DataShip 1.4.0. Odběry lze zobrazit pomocí ukázkových dat nebo po zadání cesty ke konfiguraci DataShip 1.4 načíst ze skutečné Jídelny. Ukázkový režim používá testovací náhradu databázového kurzoru; připojený režim využívá původní výpočty a generátor PDF. Připojení používá systémově uložené heslo. Při přímém připojení k 1.4 jsou její úlohy pouze pro čtení. Pro jejich úpravu je nejprve převeďte do samostatného prostoru verze 2.
 
 Záměr: prověřit nový vzhled, samostatné okno Tauri, propojení s Pythonem a velikost celé aplikace včetně výpočetního EXE. Verze 1.4 zůstává samostatná. Čtyřkrokový průvodce po připojení ukládá profily a úlohy kompatibilní s plánovačem 1.4. Nové úlohy jsou ve výchozím stavu pozastavené. Zachování všech možností a ověření služby na skutečném počítači zůstává další prací. Obrázek `concept.png` je generovaný návrh, vlastní UI je implementované v Reactu a upravené podle požadavku na střídmost.
 
@@ -19,7 +19,7 @@ Rozbalte ZIP do vlastní složky a spusťte `DataShip-2-Prototyp.exe`. Soubor `d
 
 Sestavený prototyp lze spustit s argumentem `--self-test-pdf`. Izolovaný autotest aktivuje stejné tlačítko PDF ve WebView, použije smyšlená data a zapíše výsledek do dočasné složky systému; nepoužívá databázi ani e-mail.
 
-Při přímém použití konfigurace 1.4 neupravujte úlohy současně v DataShip 1.4 a 2: jejich sdílené soubory zatím nemají společné zamykání a souběžné změny by se mohly přepsat. Ověření na skutečné Jídelně a se službou zatím chybí.
+DataShip 2 nepovoluje zápis úloh do prostoru verze 1.4, která nepoužívá zámky verze 2. Import provádějte v době, kdy se původní nastavení a úlohy nemění. Ověření na skutečné Jídelně a se službou zatím chybí.
 
 Příkaz „Převést do DataShip 2“ vytvoří oddělený uživatelský prostor, zachová původní soubory a převede úlohy jako pozastavené. Při tomto převodu se služba neinstaluje ani nespouští. Opakovaný import existující prostor nepřepíše. Pro samostatné plánování lze nainstalovat službu DataShip2Scheduler (vyžaduje práva správce a dostupné NSSM); instalace ji nespustí. Skutečná instalace a běh služby zatím nebyly ověřeny na cílovém počítači.
 

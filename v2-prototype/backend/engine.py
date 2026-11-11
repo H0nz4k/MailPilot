@@ -29,6 +29,12 @@ class FixtureCursor:
 
 
 def handle(request):
+    # Version 1.4 does not participate in v2's interprocess lock. Never mutate
+    # its task/profile store, even if a caller bypasses the user interface.
+    if request.get('action') in {'legacy_save_task', 'legacy_delete_task',
+                                 'legacy_update_task', 'legacy_set_task_enabled'}:
+        from settings_bridge import workspace_path
+        workspace_path(request.get('config_path'), request['workspace_dir'])
     if request.get('action') == 'bulk_options':
         from bulk_bridge import options
         return options(request.get('config_path'))
