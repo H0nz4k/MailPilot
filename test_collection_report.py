@@ -119,7 +119,7 @@ def test_collection_pdf_contains_identified_people_and_status(tmp_path, orientat
     text = "\n".join(p.extract_text() for p in PdfReader(create_pdf(cfg, report)).pages)
     assert "Odebraná / neodebraná strava" in text
     assert "Alena Černá" in text and "Jan Novák" in text
-    assert "Odebraná: 1" in text and "Neodebraná: 1" in text
+    assert "Odebráno: 1" in text and "Neodebráno: 1" in text
     assert "3.A" in text and "Večeře" in text and "45" in text
     assert "Jídelníček a počty porcí" not in text
 
@@ -134,13 +134,25 @@ def test_empty_collection_pdf_is_explicit(tmp_path):
 def test_large_collection_starts_on_first_page_and_continues(tmp_path):
     rows = [(f"Testovací osoba {i:04}", "1", "Žáci", "Oběd", 1, "A", i, "3.A", True)
             for i in range(787)]
-    cfg = replace(config(), collection_status="collected", category_separation=True,
+    cfg = replace(config(), collection_status="collected", category_separation=True, show_by_categories=False,
                   pdf_orientation="na_vysku", pdf_output=tmp_path / "dlouhy.pdf")
     report = fetch_collection_report(Cursor(rows), cfg, cfg.categories, "Testovací jídelna")
     pages = PdfReader(create_pdf(cfg, report)).pages
     assert len(pages) > 1
     assert "Testovací osoba 0000" in pages[0].extract_text()
     assert "Testovací osoba 0786" in "\n".join(page.extract_text() for page in pages)
+
+
+@pytest.mark.parametrize("status,shown,hidden", [("collected", "Odebráno: 1", "Neodebráno:"),
+                                                ("uncollected", "Neodebráno: 1", "Odebráno:")])
+def test_collection_totals_and_categories_follow_filter(tmp_path, status, shown, hidden):
+    cfg = replace(config(), collection_status=status, show_by_categories=True,
+                  pdf_output=tmp_path / "souhrn.pdf")
+    row = ROWS[0] if status == "collected" else ROWS[1]
+    report = fetch_collection_report(Cursor([row]), cfg, cfg.categories, None)
+    text = "\n".join(page.extract_text() for page in PdfReader(create_pdf(cfg, report)).pages)
+    assert shown in text and hidden not in text
+    assert "Počty podle kategorií" in text
 
 
 def test_worker_only_dispatches_historical_collection_profiles(tmp_path):

@@ -86,15 +86,44 @@ def fetch_collection_report(cursor, config, active_categories, subject_name):
 
 def collection_pdf_story(config, report, *, table, body_style, section_style, width):
     """Use the shared PDF styles/header; one row is one specific meal order."""
-    from reportlab.platypus import CondPageBreak, Paragraph, Spacer
+    from reportlab.platypus import CondPageBreak, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from xml.sax.saxutils import escape
     collected = sum(row.collected is True for row in report.diners)
     missing = sum(row.collected is False for row in report.diners)
     heading = ParagraphStyle("CollectionHeading", parent=section_style, keepWithNext=False)
-    story = [Paragraph(f"Odebraná: {collected} · Neodebraná: {missing}", body_style),
-             CondPageBreak(35 * mm), Paragraph("Seznam strávníků a odběrů", heading)]
+    primary = ParagraphStyle("CollectionTotal", parent=section_style, keepWithNext=False,
+                             spaceBefore=0, spaceAfter=0, fontSize=max(14, section_style.fontSize),
+                             leading=max(18, section_style.leading))
+    totals = []
+    if config.collection_status in ("both", "collected"):
+        totals.append(f"Odebráno: {collected}")
+    if config.collection_status in ("both", "uncollected"):
+        totals.append(f"Neodebráno: {missing}")
+    box = Table([[Paragraph(" · ".join(totals), primary)]], colWidths=[width], hAlign="LEFT")
+    box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#213B57")),
+                             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EAF2F8")),
+                             ("LEFTPADDING", (0, 0), (-1, -1), 4 * mm),
+                             ("RIGHTPADDING", (0, 0), (-1, -1), 4 * mm),
+                             ("TOPPADDING", (0, 0), (-1, -1), 3 * mm),
+                             ("BOTTOMPADDING", (0, 0), (-1, -1), 3 * mm)]))
+    story = [box, Spacer(1, 2 * mm)]
+    if config.show_by_categories:
+        status_columns = ([True, False] if config.collection_status == "both"
+                          else [config.collection_status == "collected"])
+        counts = Counter((row.category_code, row.collected) for row in report.diners)
+        labels = {row.category_code: row.category_name or row.category_code for row in report.diners}
+        categories = [code for code in report.active_categories if code in labels]
+        headers = ("Kategorie",) + tuple("Odebráno" if status else "Neodebráno" for status in status_columns)
+        rows = [(f"{code} – {labels[code]}", *(counts[code, status] for status in status_columns))
+                for code in categories]
+        if rows:
+            story.extend([CondPageBreak(35 * mm), Paragraph("Počty podle kategorií", heading),
+                          table(headers, rows, [width * .6] + [width * .4 / len(status_columns)] * len(status_columns),
+                                centered_columns=set(range(1, len(headers)))), Spacer(1, 2 * mm)])
+    story.extend([CondPageBreak(35 * mm), Paragraph("Seznam strávníků a odběrů", heading)])
     if not report.diners:
         story.append(Paragraph("Pro zvolený den a filtry nebyly nalezeny žádné objednávky odpovídající výběru.", body_style))
     else:
