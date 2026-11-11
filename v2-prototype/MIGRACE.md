@@ -51,3 +51,5 @@ Průvodce umožňuje zvolit kalendář podle typu přehledu, všechny kalendář
 V běžném průvodci lze vytvořený PDF náhled uložit na novou cestu bez vytvoření úlohy; existující soubor se nepřepisuje. Backend ukládání pokrývají izolované testy.
 
 Zápis úloh je na hranici enginu omezen na oddělený pracovní prostor DataShip 2; starou konfiguraci lze prohlížet a použít pro sestavy. Ověřeny všechny čtyři operace zápisu i povolení v izolovaném prostoru.
+
+Převod zkopíruje dostupný NSSM do odděleného prostoru a nastaví cestu na tuto kopii; pokud NSSM chybí, aplikace to oznámí. Ověřeno izolovaným testem bez instalace služby.

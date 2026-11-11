@@ -1400,3 +1400,20 @@ def test_engine_forbids_task_mutations_in_legacy_workspace(tmp_path, monkeypatch
         request['config_path'] = str(isolated / 'config.json')
         assert engine.handle(request) == {'ok': True}
     assert len(calls) == 4
+
+def test_workspace_import_copies_nssm_without_old_installation_dependency(tmp_path):
+    import json, sys
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import workspace_import
+    from services.web_mail_settings import load_settings, settings_path
+    old = tmp_path / 'old'
+    (old / 'nssm' / 'win64').mkdir(parents=True)
+    (old / 'config.json').write_text('{}', encoding='utf-8')
+    (old / 'nssm' / 'win64' / 'nssm.exe').write_bytes(b'fixture-nssm')
+    target = tmp_path / 'v2' / 'workspace'
+    result = workspace_import.import_workspace(str(old / 'config.json'), target)
+    copied = target / 'nssm' / 'nssm.exe'
+    assert result['nssm_copied'] is True and copied.read_bytes() == b'fixture-nssm'
+    assert Path(load_settings(settings_path(target))['nssm_path']) == copied
+    (old / 'nssm' / 'win64' / 'nssm.exe').unlink()
+    assert Path(load_settings(settings_path(target))['nssm_path']).is_file()

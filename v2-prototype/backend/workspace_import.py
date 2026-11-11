@@ -1,6 +1,7 @@
 """Create an isolated v2 workspace from a 1.4 installation, without starting tasks."""
 import json
 import os
+import shutil
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -37,7 +38,10 @@ def import_workspace(source_config, destination):
         raise ValueError('Některé úlohy odkazují na chybějící profil. Import nebyl proveden.')
     settings = load_settings(settings_path(source.parent))
     settings['service_name'] = 'DataShip2Scheduler'
-    settings['nssm_path'] = str(source.parent / 'nssm' / 'win64' / 'nssm.exe') if (source.parent / 'nssm' / 'win64' / 'nssm.exe').is_file() else settings['nssm_path']
+    bundled = source.parent / 'nssm' / 'win64' / 'nssm.exe'
+    nssm = bundled if bundled.is_file() else Path(settings['nssm_path'])
+    has_nssm = nssm.is_file()
+    settings['nssm_path'] = str(target / 'nssm' / 'nssm.exe') if has_nssm else ''
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.dataship2-import-', dir=target.parent) as temp:
         staging = Path(temp) / 'workspace'
@@ -50,12 +54,15 @@ def import_workspace(source_config, destination):
         if recipients:
             save_recipient_history(staging, recipients)
         save_tasks(task_file(staging), [replace(task, enabled=False) for task in tasks])
+        if has_nssm:
+            (staging / 'nssm').mkdir()
+            shutil.copyfile(nssm, staging / 'nssm' / 'nssm.exe')
         save_settings(settings_path(staging), settings)
         # Windows refuses to replace an existing nonempty destination directory.
         if target.exists():
             raise ValueError('Prostor DataShip 2 již existuje; import jej nepřepíše.')
         os.rename(staging, target)
-    return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles), 'templates':len(templates)}
+    return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles), 'templates':len(templates), 'nssm_copied':has_nssm}
 
 
 def create_workspace(destination, database_values, database_password, admin_password, admin_repeat):
