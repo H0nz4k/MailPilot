@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from credential_store import sanitize_config
+from planovac import load_jobs, scheduler_config_path
 from services.web_daily_profiles import load_profiles, profile_file
 from services.web_mail_settings import load_settings, save_settings, settings_path
 from services.web_mail_task_store import load_tasks, save_tasks, task_file
@@ -31,6 +32,11 @@ def import_workspace(source_config, destination):
         raise ValueError('Neplatná konfigurace.')
     profiles = load_profiles(profile_file(source.parent))
     tasks = load_tasks(task_file(source.parent))
+    legacy_path = scheduler_config_path(source.parent)
+    legacy_jobs = load_jobs(legacy_path, source.parent)
+    legacy_payload = json.loads(legacy_path.read_text(encoding='utf-8')) if legacy_path.exists() else None
+    if legacy_payload is not None and any(not isinstance(job, dict) for job in legacy_payload.get('jobs', [])):
+        raise ValueError('Starý plánovač obsahuje neplatnou úlohu; import nebyl proveden.')
     templates = load_templates(template_file(source.parent))
     recipients = load_recipient_history(source.parent)
     ids = {p.id for p in profiles}
@@ -54,6 +60,9 @@ def import_workspace(source_config, destination):
         if recipients:
             save_recipient_history(staging, recipients)
         save_tasks(task_file(staging), [replace(task, enabled=False) for task in tasks])
+        if legacy_payload is not None:
+            legacy_payload['jobs'] = [{**job, 'enabled': False} for job in legacy_payload.get('jobs', [])]
+            scheduler_config_path(staging).write_text(json.dumps(legacy_payload, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
         if has_nssm:
             (staging / 'nssm').mkdir()
             shutil.copyfile(nssm, staging / 'nssm' / 'nssm.exe')
@@ -62,7 +71,7 @@ def import_workspace(source_config, destination):
         if target.exists():
             raise ValueError('Prostor DataShip 2 již existuje; import jej nepřepíše.')
         os.rename(staging, target)
-    return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles), 'templates':len(templates), 'nssm_copied':has_nssm}
+    return {'config_path':str(target / 'config.json'), 'tasks':len(tasks), 'profiles':len(profiles), 'templates':len(templates), 'nssm_copied':has_nssm, 'legacy_jobs':len(legacy_jobs)}
 
 
 def create_workspace(destination, database_values, database_password, admin_password, admin_repeat):

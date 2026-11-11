@@ -1474,3 +1474,20 @@ def test_bridge_configuration_uses_actual_legacy_date_format(tmp_path, monkeypat
     monkeypatch.setattr(stravovaci_sestava, 'get_password', lambda database: 'test-password')
     loaded = legacy_bridge.configuration(str(config))
     assert loaded.report_date == date.today()
+
+def test_import_preserves_legacy_scheduler_jobs_as_disabled(tmp_path):
+    import json, sys
+    from planovac import load_jobs
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import workspace_import
+    source = tmp_path / 'old'; source.mkdir()
+    (source / 'config.json').write_text('{}', encoding='utf-8')
+    original = {'jobs': [{'name':'Uzávěrka', 'action':'uzaverka', 'path':'C:/DataShip/run.bat',
+                          'schedule':{'type':'daily','time':'08:30'}, 'enabled':True}]}
+    (source / 'planovac.json').write_text(json.dumps(original), encoding='utf-8')
+    target = tmp_path / 'v2' / 'workspace'
+    result = workspace_import.import_workspace(str(source / 'config.json'), target)
+    jobs = load_jobs(target / 'planovac.json', target)
+    assert result['legacy_jobs'] == 1 and len(jobs) == 1
+    assert jobs[0].name == 'Uzávěrka' and jobs[0].action == 'uzaverka' and not jobs[0].enabled
+    assert json.loads((source / 'planovac.json').read_text(encoding='utf-8')) == original

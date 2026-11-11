@@ -61,3 +61,5 @@ Uložený přehled lze také aktualizovat; uživatel je upozorněn na dopad na n
 Připojení přes skutečný načítač konfigurace bylo opraveno (datum DD.MM.RRRR). Připojení ke konfiguraci dostupné na tomto počítači načetlo 21 kategorií a vytvořilo PDF na dnešní den; výsledek měl 0 porcí, obsah sestavy proto zůstává neověřený. Akce používala pouze čtení a neodesílala e-mail.
 
 Sestava odběrů byla rovněž vytvořena čtením dostupné skutečné databáze pro 15. 10. 2026: 1 139 záznamů a platný PDF soubor; dataset vracel 0 odebraných a 1 139 neodebraných. Nejde o nezávislé ověření správnosti údajů v Jídelně ani o test odeslání.
+
+Import zachovává také původní soubor desktopového plánovače planovac.json, včetně dalších polí, a úlohy v kopii pozastaví. Nový plánovač je zatím nespouští: převod akcí uzávěrky, speciálních sestav, vlastních příkazů a hodinových/intervalových plánů zůstává nedokončený.

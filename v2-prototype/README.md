@@ -32,3 +32,5 @@ Pro novou instalaci bez verze 1.4 zvolte „Vytvořit nové nastavení“. Aplik
 Průvodce umožňuje po vytvoření PDF procházet jeho stránky přímo v aplikaci. Pro sestavení enginu s tímto náhledem nainstalujte závislosti projektu včetně `pypdfium2` a spusťte z adresáře `backend` příkaz `python -m PyInstaller --noconfirm engine.spec`.
 
 Při importu se dostupný NSSM zkopíruje do odděleného prostoru, aby služba nebyla závislá na původní instalaci. Pokud nebyl nalezen, nastavte jeho cestu ručně.
+
+Úlohy původního desktopového plánovače se při importu zachovají jako pozastavené definice v planovac.json, ale plánovač verze 2 je zatím nespouští.
