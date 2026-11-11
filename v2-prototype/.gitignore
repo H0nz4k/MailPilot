@@ -1,0 +1,10 @@
+node_modules/
+.npm-cache/
+dist/
+src-tauri/target/
+backend/build/
+backend/dist/
+backend/*.spec
+src-tauri/gen/
+portable/
+DataShip-2-Prototyp.zip

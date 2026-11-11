@@ -1,0 +1,42 @@
+import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {invoke} from '@tauri-apps/api/core';
+import {Anchor, CalendarDays, FileDown, LayoutGrid, Settings, ChevronRight, ListChecks, Info} from 'lucide-react';
+import './style.css';
+
+const categories = {all:'Všechny kategorie',ZACI:'Žáci',ZAM:'Zaměstnanci',HOST:'Hosté'};
+const people = [
+ ['Anna Nováková',1001,'Žáci',1,true], ['Jan Dvořák',1002,'Žáci',2,false],
+ ['Eva Veselá',2001,'Zaměstnanci',1,true], ['Petr Černý',3001,'Hosté',1,false],
+];
+const today = new Date().toLocaleDateString('en-CA');
+function browserPreview(form) {
+ const first = new Date(form.start+'T12:00:00'), last = new Date(form.end+'T12:00:00');
+ const days = Math.round((last-first)/86400000);
+ if (!Number.isFinite(days) || days < 0 || days > 365) throw Error('Zadejte správné období nejvýše 366 dnů.');
+ const rows=[];
+ for(let i=0;i<=days;i++) {let d=new Date(first);d.setDate(first.getDate()+i);let day=d.toLocaleDateString('en-CA');
+  for(const [name,number,category,menu,collected] of people)
+   if((form.category==='all'||categories[form.category]===category)&&(form.status==='both'||collected===(form.status==='collected'))) rows.push({date:day,name,number,category,meal:'Oběd',menu,collected}); }
+ return {rows,collected:rows.filter(r=>r.collected).length,uncollected:rows.filter(r=>!r.collected).length};
+}
+const isDesktop = !!window.__TAURI_INTERNALS__;
+function App(){
+ const [form,setForm]=useState({start:today,end:today,status:'both',category:'all'});
+ const [data,setData]=useState(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[pdf,setPdf]=useState('');
+ function set(name,value){setForm(f=>({...f,[name]:value}));setData(null);setPdf('');setMessage('');}
+ async function run(action){setBusy(true);setMessage('');setPdf('');try{
+  if(!form.start || !form.end) throw Error('Vyplňte obě data.');
+  if(!isDesktop && action==='pdf') throw Error('PDF je dostupné v desktopovém prototypu.');
+  let result=isDesktop?await invoke('report',{request:{...form,action}}):browserPreview(form);
+  setData(result);if(result.pdf){setPdf(result.pdf);setMessage('Ukázkové PDF bylo vytvořeno.');}
+ }catch(e){setMessage(String(e));}finally{setBusy(false);}}
+ return <div className="shell"><aside className="sidebar"><div className="brand"><span className="brandmark"><Anchor size={21}/></span><span>DataShip <b>2</b></span></div><p className="brand-sub">Přehledně. Každý den.</p><nav aria-label="Hlavní nabídka"><div className="nav-caption">PRACOVNÍ PLOCHA</div><span className="nav-muted"><LayoutGrid size={18}/> Přehledy <small>Připravujeme</small></span><span className="nav-active"><ListChecks size={18}/> Odběry <ChevronRight size={16}/></span><span className="nav-muted"><Settings size={18}/> Nastavení <small>Připravujeme</small></span></nav><div className="side-note"><Info size={16}/><span>Prototyp pracuje pouze s ukázkovými daty.</span></div></aside>
+ <main><div className="topline"><span>DataShip / <strong>Odběry</strong></span><span className="demo-label"><span/> Ukázková data</span></div><div className="content"><header><div><h1>Odběry</h1><p>Přehled odebrané a neodebrané stravy za zvolené období.</p></div><button className="primary" onClick={()=>run('pdf')} disabled={busy||!isDesktop}><FileDown size={18}/> Vytvořit PDF</button></header>
+ <section className="panel filters"><div className="section-head"><div><h2>Výběr odběrů</h2><p>Vyberte období a rozsah přehledu.</p></div><CalendarDays size={20}/></div><div className="filter-grid"><label>Datum od<input type="date" value={form.start} onChange={e=>set('start',e.target.value)}/></label><label>Datum do<input type="date" value={form.end} onChange={e=>set('end',e.target.value)}/></label><label>Kategorie<select value={form.category} onChange={e=>set('category',e.target.value)}>{Object.entries(categories).map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label></div><div className="filter-bottom"><fieldset><legend>Stav odběru</legend><div className="segments">{[['both','Všechny'],['collected','Odebrané'],['uncollected','Neodebrané']].map(([v,label])=><button key={v} type="button" aria-pressed={form.status===v} className={form.status===v?'selected':''} onClick={()=>set('status',v)}>{label}</button>)}</div></fieldset><button className="primary show" onClick={()=>run('preview')} disabled={busy}>{busy?'Načítám…':'Zobrazit přehled'}</button></div></section>
+ {message && <div className={pdf?'notice success':'notice'} role="status">{message}{pdf&&<div className="path">{pdf}</div>}</div>}
+ {data ? <><section className="summary" aria-label="Souhrn odběrů"><div><h2>Souhrn odběrů</h2><p>Za zvolené období</p></div>{form.status!=='uncollected'&&<div className="metric"><span>Odebráno</span><strong>{data.collected}</strong></div>}{form.status!=='collected'&&<div className="metric"><span>Neodebráno</span><strong>{data.uncollected}</strong></div>}<div className="metric total"><span>Celkem záznamů</span><strong>{data.rows.length}</strong></div></section><section className="panel table-panel"><div className="table-heading"><div><h2>Seznam odběrů</h2><p>Jednotlivé objednávky · ukázková data</p></div><span>{data.rows.length} záznamů</span></div><div className="table-wrap"><table><thead><tr><th>Datum</th><th>Strávník</th><th>Kategorie</th><th>Strava</th><th>Menu</th><th>Odběr</th></tr></thead><tbody>{data.rows.slice(0,100).map((r,i)=><tr key={i}><td>{r.date.split('-').reverse().join('. ')}</td><td><strong>{r.name}</strong><small>č. {r.number}</small></td><td>{r.category}</td><td>{r.meal}</td><td>Menu {r.menu}</td><td><span className={r.collected?'badge done':'badge waiting'}>{r.collected?'Odebráno':'Neodebráno'}</span></td></tr>)}</tbody></table>{data.rows.length===0&&<p className="empty">Pro vybraný rozsah nejsou žádné záznamy.</p>}</div>{data.rows.length>100&&<p className="table-foot">Zobrazeno prvních 100 záznamů. PDF obsahuje všechny.</p>}</section></> : <section className="empty-state"><div className="empty-icon"><ListChecks size={24}/></div><div><h2>Připravte si přehled</h2><p>Zvolte období a stav odběru, potom klikněte na „Zobrazit přehled“.</p></div></section>}
+ <footer>Prototyp DataShip 2 · bez připojení k Jídelně a bez odesílání e-mailů</footer></div></main></div>
+}
+
+createRoot(document.getElementById('root')).render(<App/>);
