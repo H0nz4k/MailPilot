@@ -73,13 +73,9 @@ def tasks(path):
              'output': task.output_mode} for task in load_tasks(task_file(directory))]
 
 
-def save_task(path, data):
-    from datetime import datetime
-    from services.collection_status import validate_report_history, validate_task_history
-    from services.web_daily_profiles import DailyProfile, profile_file, save_profile
-    from services.web_mail_tasks import MailTask, next_send_at
-    from services.web_mail_task_store import load_tasks, save_tasks, task_file
-
+def profile_for_wizard(path, data):
+    from services.collection_status import validate_report_history
+    from services.web_daily_profiles import DailyProfile
     configuration(path)
     available = {c['code'] for c in info(path)['categories']}
     selected_categories = data.get('categories')
@@ -95,18 +91,6 @@ def save_task(path, data):
     status = data.get('collection') if content == 'collection' else None
     preview_date = date.fromisoformat(data['date'])
     validate_report_history(preview_date, status)
-    mode = data.get('mode')
-    offsets = {'after_tomorrow': 2, 'yesterday': -1}
-    if mode in ('offset', 'history'):
-        try:
-            days = int(data['days'])
-        except (KeyError, ValueError, TypeError) as exc:
-            raise ValueError('Zadejte platný počet dní.') from exc
-        if str(days) != str(data['days']) or not (1 if mode == 'history' else 0) <= days <= 370:
-            raise ValueError('Zadejte platný počet dní.')
-        offsets[mode] = -days if mode == 'history' else days
-    if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day'):
-        raise ValueError('Neplatný den přehledu.')
     selected_meals = data.get('meals')
     selected_deliveries = data.get('deliveries')
     if selected_meals is not None or selected_deliveries is not None:
@@ -125,6 +109,30 @@ def save_task(path, data):
                  'delivery_page_per_type':data.get('delivery_page_per_type', False),
                  'pdf_orientation':data.get('pdf_orientation'), 'pdf_bold':data.get('pdf_bold'),
                  'pdf_compact_rows':data.get('pdf_compact_rows', False)})
+    return profile
+
+
+def save_task(path, data):
+    from datetime import datetime
+    from services.collection_status import validate_task_history
+    from services.web_daily_profiles import profile_file, save_profile
+    from services.web_mail_tasks import MailTask, next_send_at
+    from services.web_mail_task_store import load_tasks, save_tasks, task_file
+
+    profile = profile_for_wizard(path, data)
+    status = profile.collection_status
+    mode = data.get('mode')
+    offsets = {'after_tomorrow': 2, 'yesterday': -1}
+    if mode in ('offset', 'history'):
+        try:
+            days = int(data['days'])
+        except (KeyError, ValueError, TypeError) as exc:
+            raise ValueError('Zadejte platný počet dní.') from exc
+        if str(days) != str(data['days']) or not (1 if mode == 'history' else 0) <= days <= 370:
+            raise ValueError('Zadejte platný počet dní.')
+        offsets[mode] = -days if mode == 'history' else days
+    if mode not in ('today', 'tomorrow', 'after_tomorrow', 'offset', 'yesterday', 'history', 'next_cooking_day'):
+        raise ValueError('Neplatný den přehledu.')
     raw = {'name':data.get('name'), 'recipients':data.get('recipients', '').replace(';', ' ').replace(',', ' ').split(),
            'report':'daily', 'send_time':data.get('time'), 'enabled':data.get('enabled', False),
            'date_mode':'offset' if mode in offsets else mode, 'day_offset':offsets.get(mode, 0),
@@ -225,3 +233,18 @@ def control_scheduler(path, action):
         raise ValueError('Služba používá jinou konfiguraci; zůstala beze změny.')
     require_service_rights(action)
     return {'message': service_command(config_path.parent, action)}
+
+
+def preview_wizard(path, data, output_dir):
+    from automaticky_export import read_saved_settings
+    from services.web_daily_profiles import apply_profile
+    config = configuration(path)
+    profile = profile_for_wizard(path, data)
+    raw = read_saved_settings(Path(path))
+    config = apply_profile(replace(config, report_date=date.fromisoformat(data['date']), report_end_date=None), profile, raw)
+    report = fetch_report(config)
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    path = output / f'Náhled-přehledu-{uuid4().hex[:8]}.pdf'
+    create_pdf(config, report, output_path=path)
+    return {'pdf': str(path), 'portions': sum(item.portions for item in report.menus)}

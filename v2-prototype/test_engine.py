@@ -324,3 +324,28 @@ def test_scheduler_control_checks_worker_and_config_before_action(tmp_path, monk
     assert changes==['start']
     with pytest.raises(ValueError,match='Neznámá'):
         legacy_bridge.control_scheduler(str(path),'install')
+
+
+def test_wizard_preview_generates_pdf_without_saving_task(tmp_path,monkeypatch):
+    import sys
+    from dataclasses import replace
+    from pypdf import PdfReader
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import automaticky_export
+    from stravovaci_sestava import AppConfig
+    from services.web_mail_task_store import task_file
+    from services.web_daily_profiles import profile_file
+    config=AppConfig(database={},report_date=date.today(),categories=('ZACI',),language='česky',menu_list_number=1)
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:config)
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    monkeypatch.setattr(automaticky_export,'read_saved_settings',lambda path:{'povolene_kategorie':['ZACI']})
+    sample=engine.fetch_collection_period(engine.FixtureCursor(),replace(config,collection_status='both'),('ZACI',),'Test')
+    seen=[]
+    monkeypatch.setattr(legacy_bridge,'fetch_report',lambda c:seen.append(c) or sample)
+    data={'name':'Náhled','date':date.today().isoformat(),'category':'all','content':'collection','collection':'both','show_by_categories':False}
+    result=legacy_bridge.preview_wizard(str(tmp_path/'config.json'),data,tmp_path/'output')
+    assert result['portions']==2 and seen[0].collection_status=='both' and not seen[0].show_by_categories
+    text='\n'.join(page.extract_text() for page in PdfReader(result['pdf']).pages)
+    assert 'Anna Nováková' in text and 'Jan Dvořák' in text
+    assert not task_file(tmp_path).exists() and not profile_file(tmp_path).exists()

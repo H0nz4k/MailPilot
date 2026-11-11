@@ -6,6 +6,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 - Odběry za období: součty po strávnících v náhledu a PDF, výběr stavu a kategorie, desktopové vytvoření ukázkového PDF.
 - Volitelné čtení konfigurace verze 1.4 a odběrů přes původní služby, s omezením na povolené kategorie. Připojení používá uložené heslo, ale heslo ani konfiguraci nepřepisuje. Ověřeno pouze testy s náhradou databáze; skutečná Jídelna a její výsledky zatím nejsou ověřeny.
+- Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
 - Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
 - Čtyřkrokový průvodce při připojení uloží profil a úlohu do úložiště 1.4; umí vypsat úlohy, pozastavit a zapnout je a upravit název, čas a doručení. Zobrazuje diagnostický stav původní služby a workeru; existující službu umí spustit a zastavit po ověření workeru a konfigurace. Nové úlohy jsou výchozím stavem pozastavené. Ověřeno izolovaně s náhradou databáze, ne reálnou službou nebo odesláním.
 
@@ -13,7 +14,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 1. Nastavení připojení, správa oprávnění a bezpečné ukládání hesel, výběr kategorií a typů stravy/výdeje podle skutečných dat.
 2. Přehledy a PDF včetně všech voleb z 1.4, hromadných strávníků, šablon a uložených profilů.
-3. Dokončit průvodce: zbývající volby PDF, úplné úpravy úloh a náhled; ověřit běh přes skutečnou službu.
+3. Dokončit průvodce: zbývající volby PDF, úplné úpravy úloh a interaktivní náhled; ověřit běh přes skutečnou službu.
 4. Plánovač/Windows služba, instalace a odinstalace; zabránit souběhu starého a nového plánovače. Nezapínat automatické odesílání při migraci bez jasného stavu a ověření.
 5. Jednorázové Odběry: cílové uložení a odeslání, všechny původní filtry a volby.
 6. Ostatní dostupné sestavy a uzávěrky, konfigurace, ochrana heslem, diagnostika a návody.
