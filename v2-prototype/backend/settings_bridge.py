@@ -87,3 +87,38 @@ def save_connection(config_path, workspace, password, values, new_database_passw
             raise ValueError('Heslo databáze bylo uloženo, ale konfiguraci se nepodařilo zapsat.') from exc
         raise
     return {'saved':True, 'subject':connection.subject_name or connection.database_name}
+
+
+def category_settings(config_path, workspace, password):
+    from services.config_io import load_raw_config
+    from services.database import probe_connection
+    from pocty_nastaveni import all_client_categories, peek_client_categories
+    from legacy_bridge import configuration
+    authorize(password)
+    path = workspace_path(config_path, workspace)
+    config = configuration(str(path))
+    db = dict(config.database)
+    secret = db.pop('password')
+    info = probe_connection(db, secret, remember=False)
+    raw = load_raw_config(path)
+    return {'all':all_client_categories(raw), 'selected':peek_client_categories(raw),
+            'available':[{'code':code,'name':name or code} for code,name in info.categories]}
+
+
+def save_category_settings(config_path, workspace, password, use_all, selected):
+    from services.config_io import load_raw_config, save_raw_config
+    authorize(password)
+    path = workspace_path(config_path, workspace)
+    if not isinstance(use_all, bool) or not isinstance(selected, list) or any(not isinstance(c,str) or not c for c in selected):
+        raise ValueError('Neplatný výběr kategorií.')
+    options = category_settings(str(path), workspace, password)
+    available = {item['code'] for item in options['available']}
+    if not use_all and (not selected or not set(selected).issubset(available)):
+        raise ValueError('Vyberte alespoň jednu dostupnou kategorii.')
+    raw = load_raw_config(path)
+    block = raw.get('poctyemailem') or {}
+    if not isinstance(block, dict):
+        raise ValueError('Neplatné nastavení kategorií.')
+    raw['poctyemailem'] = {**block,'vsechny_kategorie':use_all,'povolene_kategorie':list(dict.fromkeys(selected))}
+    save_raw_config(path, raw)
+    return {'saved':True}

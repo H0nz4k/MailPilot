@@ -12,6 +12,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
 - Průvodce načítá uložené šablony PDF a zachovává jejich rozložení i velikosti písma.
 - Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
+- Administrace umožňuje vybrat povolené kategorie ze skutečné Jídelny; ověřeno s náhradou databáze.
 - Nastavení databázového připojení se před uložením ověřuje a používá systémové úložiště hesel; ověřeno náhradou databáze.
 - Nastavení e-mailu a NSSM v odděleném prostoru je chráněné existujícím heslem administrace; klíč Resend se při importu nekopíruje. Ověřeno simulovanými přihlašovacími údaji.
 - Samostatný worker verze 2 používá zámek proti dalšímu workeru nad stejnou konfigurací. Službu lze nainstalovat, spustit, zastavit, opravit a odstranit; akce služby jsou ověřené pouze náhradami, nikoli skutečnou službou.
@@ -19,7 +20,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 ## K převodu a ověření
 
-1. Založení a změna hesla administrace, správa oprávnění a ověření nastavení připojení na skutečné Jídelně.
+1. Založení a změna hesla administrace a ověření nastavení připojení a oprávnění na skutečné Jídelně.
 2. Přehledy a PDF včetně všech voleb z 1.4, hromadných strávníků, šablon a uložených profilů.
 3. Dokončit průvodce: zbývající volby PDF a interaktivní náhled; ověřit běh přes skutečnou službu.
 4. Ověřit samostatný plánovač a jeho Windows službu v reálném prostředí; zabránit duplicitnímu odeslání při souběhu samostatných konfigurací. Nezapínat automatické odesílání při migraci bez jasného stavu a ověření.

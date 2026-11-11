@@ -937,3 +937,28 @@ def test_database_settings_connection_failure_never_writes(tmp_path,monkeypatch)
     with pytest.raises(ValueError,match='Připojení selhalo'):
         settings_bridge.save_connection(str(config),str(workspace),'admin',{'host':'new','port':5432,'dbname':'db','user':'user'},'not-real')
     assert config.read_text(encoding='utf-8')==original
+
+
+def test_category_permissions_are_saved_and_unknown_codes_rejected(tmp_path,monkeypatch):
+    import sys,json,pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge,legacy_bridge,credential_store
+    import services.database as database_service
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.write_text(json.dumps({'databaze':{},'poctyemailem':{'untouched':123}}),encoding='utf-8')
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'admin')
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace(database={'password':'not-real'}))
+    monkeypatch.setattr(database_service,'probe_connection',lambda db,pwd,remember:SimpleNamespace(categories=(('ZACI','Žáci'),('HOST','Hosté'))))
+    options=settings_bridge.category_settings(str(config),str(workspace),'admin')
+    assert options['all'] and len(options['available'])==2
+    settings_bridge.save_category_settings(str(config),str(workspace),'admin',False,['ZACI'])
+    raw=json.loads(config.read_text(encoding='utf-8'))
+    assert raw['poctyemailem']=={'untouched':123,'vsechny_kategorie':False,'povolene_kategorie':['ZACI']}
+    with pytest.raises(ValueError,match='dostupnou kategorii'):
+        settings_bridge.save_category_settings(str(config),str(workspace),'admin',False,['UNKNOWN'])
+    with pytest.raises(ValueError,match='dostupnou kategorii'):
+        settings_bridge.save_category_settings(str(config),str(workspace),'admin',False,[])
+    assert json.loads(config.read_text(encoding='utf-8'))==raw

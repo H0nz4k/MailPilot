@@ -34,6 +34,12 @@ def handle(request):
         from legacy_bridge import configuration
         configuration(request.get('config_path'))
         return import_workspace(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'read_category_settings':
+        from settings_bridge import category_settings
+        return category_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))
+    if request.get('action') == 'save_category_settings':
+        from settings_bridge import save_category_settings
+        return save_category_settings(request.get('config_path'), request['workspace_dir'], request.get('password'), request.get('all'), request.get('selected'))
     if request.get('action') == 'read_settings':
         from settings_bridge import read_settings
         return read_settings(request.get('config_path'), request['workspace_dir'], request.get('password'))
