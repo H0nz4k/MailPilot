@@ -151,3 +151,10 @@ def change_admin_password(config_path, workspace, password, new_password, repeat
         raise ValueError('Zadejte shodné nové heslo o délce alespoň 4 znaky.')
     set_admin_password(new_password.strip())
     return {'changed':True}
+
+
+def read_activity(config_path, workspace, password):
+    from services.web_activity import read_events
+    authorize(password)
+    path = workspace_path(config_path, workspace)
+    return read_events(path.parent, limit=200)

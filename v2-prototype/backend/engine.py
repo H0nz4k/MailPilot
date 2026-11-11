@@ -68,6 +68,9 @@ def handle(request):
         from legacy_bridge import configuration
         configuration(request.get('config_path'))
         return import_workspace(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'read_activity':
+        from settings_bridge import read_activity
+        return read_activity(request.get('config_path'), request['workspace_dir'], request.get('password'))
     if request.get('action') == 'admin_password_status':
         from settings_bridge import admin_password_status
         return admin_password_status(request.get('config_path'), request['workspace_dir'])

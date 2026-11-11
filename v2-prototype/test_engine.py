@@ -1230,3 +1230,20 @@ def test_save_pdf_template_inherits_global_values_without_copying_filters(tmp_pa
     assert result['template']['id']==saved.id
     assert saved.settings['pdf_data_font_size']==10 and saved.settings['pdf_label_font_size']==9
     assert saved.settings['category_separation'] and 'categories' not in saved.settings
+
+
+def test_activity_requires_admin_and_reads_only_workspace(tmp_path,monkeypatch):
+    import sys,pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import settings_bridge,credential_store
+    from services.web_activity import record_event
+    workspace=tmp_path/'workspace';workspace.mkdir()
+    config=workspace/'config.json';config.touch()
+    monkeypatch.setattr(credential_store,'get_admin_password',lambda:'admin')
+    record_event(workspace,'error','Testovací chyba',task_name='Úloha')
+    with pytest.raises(ValueError,match='Nesprávné'):
+        settings_bridge.read_activity(str(config),str(workspace),'wrong')
+    rows=settings_bridge.read_activity(str(config),str(workspace),'admin')
+    assert len(rows)==1 and rows[0]['message']=='Testovací chyba'
+    with pytest.raises(ValueError,match='odděleném prostoru'):
+        settings_bridge.read_activity(str(config),str(tmp_path/'other'),'admin')
