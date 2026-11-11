@@ -1210,3 +1210,23 @@ def test_wizard_pdf_typography_and_menu_are_saved_and_restored(tmp_path,monkeypa
     assert (profile.pdf_data_font_size,profile.pdf_label_font_size,profile.language,profile.menu_list_number)==(9.5,10,'česky',2)
     edit=legacy_bridge.wizard_edit_data(path,task['id'])['data']
     assert (edit['pdf_data_font_size'],edit['pdf_label_font_size'],edit['language'],edit['menu_list_number'])==(9.5,10,'česky',2)
+
+
+def test_save_pdf_template_inherits_global_values_without_copying_filters(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    from services.pdf_templates import load_templates,template_file
+    workspace=tmp_path/'workspace';workspace.mkdir()
+    config=workspace/'config.json';config.touch()
+    base=SimpleNamespace(pdf_orientation='na_vysku',pdf_data_font_size=8.5,pdf_label_font_size=9,pdf_bold=False)
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:base)
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    data={'name':'Sestava','date':date.today().isoformat(),'category':'all','content':'names',
+          'pdf_data_font_size':10,'category_separation':True}
+    result=legacy_bridge.save_pdf_template(str(config),str(workspace),data,'Kuchyně')
+    saved=load_templates(template_file(workspace))[0]
+    assert result['template']['id']==saved.id
+    assert saved.settings['pdf_data_font_size']==10 and saved.settings['pdf_label_font_size']==9
+    assert saved.settings['category_separation'] and 'categories' not in saved.settings

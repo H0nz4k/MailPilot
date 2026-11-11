@@ -682,3 +682,44 @@ def send_report_files(config_path, sources, recipients, report_type, period, out
     else:
         raise ValueError('Neznámý způsob odesílání.')
     return {'sent':len(recipients)}
+
+
+def save_pdf_template(path, workspace, data, name):
+    from services.pdf_templates import PdfTemplate, DEFAULT_SETTINGS, load_templates, save_template, template_file
+    from settings_bridge import workspace_path
+    # Template editing is a normal report-design operation, not administration.
+    config_path = workspace_path(path, workspace)
+    config = configuration(str(config_path))
+    profile = profile_for_wizard(str(config_path), data)
+    if data.get('edit_id'):
+        from services.web_daily_profiles import load_profiles, profile_file
+        from services.web_mail_task_store import load_tasks, task_file
+        task = next((t for t in load_tasks(task_file(config_path.parent)) if t.id == data['edit_id']), None)
+        if task is None:
+            raise ValueError('Úloha již neexistuje.')
+        require_current_revision(task, data.get('revision'))
+        original = next((p for p in load_profiles(profile_file(config_path.parent)) if p.id == task.profile_id), None)
+        if original is None:
+            raise ValueError('Původní profil úlohy neexistuje.')
+        profile = preserve_profile(original, profile, data.get('profile_revision'), use_template=bool(data.get('pdf_template_id')))
+    values = dict(DEFAULT_SETTINGS)
+    if data.get('edit_id'):
+        values['pdf_layout'] = profile.pdf_layout
+        values['pdf_page_breaks'] = profile.pdf_page_breaks
+    source_id = data.get('pdf_template_id')
+    if source_id:
+        source = next((t for t in load_templates(template_file(config_path.parent)) if t.id == source_id), None)
+        if source is None:
+            raise ValueError('Šablona PDF již neexistuje.')
+        values.update(source.settings)
+    for key in ('category_separation','show_by_categories','show_by_norms','show_diner_list',
+                'show_delivery_summary','delivery_show_names','delivery_page_per_type',
+                'pdf_compact_rows'):
+        values[key] = getattr(profile,key)
+    for key in ('pdf_orientation','pdf_data_font_size','pdf_label_font_size','pdf_bold'):
+        value = getattr(profile,key)
+        values[key] = value if value is not None else getattr(config,key)
+    template = PdfTemplate.from_dict({'name':name,'settings':values})
+    with task_store_lock(config_path.parent):
+        saved = save_template(template_file(config_path.parent),template)
+    return {'template':template.to_dict(), 'count':len(saved)}
