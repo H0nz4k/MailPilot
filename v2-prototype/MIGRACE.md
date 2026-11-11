@@ -28,7 +28,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 
 1. Ověření administrace, připojení a oprávnění na skutečném počítači a Jídelně.
 2. Přehledy a PDF včetně všech voleb z 1.4, hromadných strávníků, šablon a uložených profilů.
-3. Dokončit interaktivní stránkový náhled PDF a ověřit průvodce a plánování přes skutečnou službu.
+3. Ověřit průvodce a plánování přes skutečnou službu a stránkový náhled na skutečných datech.
 4. Ověřit samostatný plánovač a jeho Windows službu v reálném prostředí; zabránit duplicitnímu odeslání při souběhu samostatných konfigurací. Nezapínat automatické odesílání při migraci bez jasného stavu a ověření.
 5. Jednorázové Odběry: doplnit zbývající původní volby a ověřit skutečné doručení a cílové uložení v desktopu.
 6. Ověřit uzávěrku a odeslání na reálném prostředí; doplnit ostatní sestavy, diagnostiku a návody.
@@ -39,3 +39,5 @@ Nepovažovat simulované testy za ověření skutečného databázového připoj
 Úpravy z více instancí verze 2 používají společný zámek a kontrolu změny úlohy. Oddělený import umožňuje pracovat s vlastními kopiemi. Pozor: verze 1.4 tento zámek nezná; souběžné úpravy z 1.4 a 2 stále nejsou bezpečné a před provozním nasazením je nutná jejich koordinace.
 
 Jednorázové odesílání uzávěrky a Z 17-01 používá nakonfigurovaný transport SMTP/Resend, ale nebylo ověřeno skutečným e-mailem.
+
+Průvodce zobrazuje jednotlivé stránky vytvořeného PDF přímo v aplikaci. Vykreslení bylo ověřeno na ukázkovém PDF i v zabaleném enginu; skutečná databáze dosud ověřena nebyla.

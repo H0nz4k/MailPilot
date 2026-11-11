@@ -110,6 +110,9 @@ def handle(request):
     if request.get('action') == 'legacy_set_task_enabled':
         from legacy_bridge import set_task_enabled
         return set_task_enabled(request.get('config_path'), request.get('task_id'), request.get('enabled'), request.get('revision'))
+    if request.get('action') == 'render_pdf_page':
+        from legacy_bridge import render_pdf_page
+        return render_pdf_page(request.get('source'), request.get('page'), request['output_dir'])
     if request.get('action') == 'save_pdf_template':
         from legacy_bridge import save_pdf_template
         return save_pdf_template(request.get('config_path'), request['workspace_dir'], request.get('data', {}), request.get('name'))

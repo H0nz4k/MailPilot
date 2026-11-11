@@ -722,3 +722,13 @@ def save_pdf_template(path, workspace, data, name):
     with task_store_lock(config_path.parent):
         saved = save_template(template_file(config_path.parent),template)
     return {'template':template.to_dict(), 'count':len(saved)}
+
+
+def render_pdf_page(source, page_index, output_dir):
+    import base64
+    from services.pdf_preview import render_preview_page
+    path = Path(source).resolve()
+    if path.parent != Path(output_dir).resolve() or path.suffix.casefold() != '.pdf' or not path.is_file():
+        raise ValueError('Náhled je dostupný jen pro vytvořené PDF.')
+    image, count = render_preview_page(path.read_bytes(),page_index)
+    return {'image':base64.b64encode(image).decode('ascii'),'pages':count,'page':page_index}

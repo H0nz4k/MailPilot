@@ -28,3 +28,5 @@ Odběry lze po připojení jednorázově vytvořit a odeslat podle existujícíh
 Nastavení v samostatném prostoru vyžaduje heslo administrace DataShipu. Pokud zatím neexistuje, lze jej při prvním vstupu vytvořit. Klíč Resend se při importu nekopíruje; lze jej zadat v Nastavení. Heslo SMTP se používá z prostředí služby. Připojení k databázi se před uložením ověřuje; heslo se ukládá do systémového úložiště, které může používat i verze 1.4.
 
 Pro novou instalaci bez verze 1.4 zvolte „Vytvořit nové nastavení“. Aplikace ověří databázové připojení a uloží hesla do systémového úložiště; úlohy ani službu automaticky nespustí. Tato cesta byla zatím ověřena pouze s náhradami databáze a trezoru.
+
+Průvodce umožňuje po vytvoření PDF procházet jeho stránky přímo v aplikaci. Pro sestavení enginu s tímto náhledem nainstalujte závislosti projektu včetně `pypdfium2` a spusťte z adresáře `backend` příkaz `python -m PyInstaller --noconfirm engine.spec`.

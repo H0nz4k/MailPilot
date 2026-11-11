@@ -1273,3 +1273,16 @@ def test_wizard_layout_is_saved_and_template_uses_current_layout(tmp_path,monkey
     invalid={**data,'delivery_page_per_type':True,'pdf_layout':[['menus','delivery']]}
     with pytest.raises(ValueError,match='vlastní řádek'):
         legacy_bridge.save_task(str(path),invalid)
+
+
+def test_render_generated_pdf_page_and_reject_outside_file(tmp_path):
+    import sys,pytest,base64
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    result=engine.handle({'start':'2026-11-10','end':'2026-11-12','status':'both','category':'all','action':'pdf','output_dir':str(tmp_path)})
+    page=legacy_bridge.render_pdf_page(result['pdf'],0,str(tmp_path))
+    assert page['pages']>=1 and page['page']==0 and base64.b64decode(page['image']).startswith(b'\x89PNG')
+    with pytest.raises(ValueError,match='Neplatná stránka'):
+        legacy_bridge.render_pdf_page(result['pdf'],page['pages'],str(tmp_path))
+    with pytest.raises(ValueError,match='vytvořené PDF'):
+        legacy_bridge.render_pdf_page(result['pdf'],0,str(tmp_path/'other'))
