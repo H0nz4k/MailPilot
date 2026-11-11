@@ -5,6 +5,8 @@ An absent mark/row is uncollected, but only an existing order is listed.
 Bulk orders have no per-person collection evidence and are not mixed in.
 """
 from collections import Counter
+from dataclasses import replace
+from datetime import timedelta
 
 from services.web_meal_types import meal_filter_values
 from stravovaci_sestava import (
@@ -84,6 +86,34 @@ def fetch_collection_report(cursor, config, active_categories, subject_name):
     return report
 
 
+def fetch_collection_period(cursor, config, active_categories, subject_name):
+    """Collect daily orders in one connection; range is inclusive and bounded."""
+    end = config.report_end_date or config.report_date
+    days = (end - config.report_date).days
+    if days < 0 or days > 365:
+        raise ValueError("Období musí být od nejvýše 366 dnů a datum do nesmí předcházet datu od.")
+    if config.report_end_date is None:
+        return fetch_collection_report(cursor, config, active_categories, subject_name)
+    reports = []
+    for offset in range(days + 1):
+        day = config.report_date + timedelta(days=offset)
+        report = fetch_collection_report(cursor, replace(config, report_date=day, report_end_date=None),
+                                         active_categories, subject_name)
+        reports.append(replace(report, diners=tuple(replace(row, order_date=day) for row in report.diners)))
+    diners = tuple(row for report in reports for row in report.diners)
+    menus = Counter((row.meal_type, row.menu) for row in diners)
+    norms = Counter((row.meal_type, row.norm, row.menu) for row in diners)
+    categories = Counter(row.category_code for row in diners)
+    details = {row.category_code: row for row in diners}
+    return ReportData(
+        menus=tuple(MenuSummary(meal, menu, count, None) for (meal, menu), count in menus.items()),
+        categories=tuple(CategorySummary(code, details[code].category_name, details[code].norm, categories[code])
+                         for code in active_categories if code in details),
+        norms=tuple(NormMenuSummary(meal, norm, menu, count) for (meal, norm, menu), count in norms.items()),
+        diners=diners, subject_name=subject_name, active_categories=active_categories,
+    )
+
+
 def collection_pdf_story(config, report, *, table, body_style, section_style, width):
     """Use the shared PDF styles/header; one row is one specific meal order."""
     from reportlab.platypus import CondPageBreak, Paragraph, Spacer, Table, TableStyle
@@ -140,9 +170,16 @@ def collection_pdf_story(config, report, *, table, body_style, section_style, wi
                      row.category_code, row.meal_type, f"Menu {row.menu}",
                      "Odebraná" if row.collected else "Neodebraná")
                     for row in sorted(diners, key=lambda r: ((r.name or "").casefold(), r.diner_number or 0, r.meal_type, r.menu))]
-            story.append(table(("Číslo", "Jméno", "Třída", "Kategorie", "Typ stravy", "Menu", "Odběr"),
-                               rows, [width * ratio for ratio in (.09, .25, .08, .12, .17, .1, .19)],
-                               centered_columns={0, 2, 3, 5}))
+            headers = ("Číslo", "Jméno", "Třída", "Kategorie", "Typ stravy", "Menu", "Odběr")
+            ratios = (.09, .25, .08, .12, .17, .1, .19)
+            if config.report_end_date is not None:
+                ordered = sorted(diners, key=lambda r: ((r.name or "").casefold(), r.diner_number or 0, r.meal_type, r.menu))
+                rows = [(d.order_date.strftime("%d.%m.%Y") if d.order_date else "", *row)
+                        for d, row in zip(ordered, rows)]
+                headers = ("Datum", *headers)
+                ratios = (.13, .08, .20, .08, .12, .14, .09, .16)
+            story.append(table(headers, rows, [width * ratio for ratio in ratios],
+                               centered_columns={0, 2, 3, 5} if config.report_end_date is None else {0, 1, 3, 4, 6}))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph("Zahrnuty jsou jednotlivé objednávky stravy. Hromadné přihlášky se zde nevykazují.", body_style))
     return story

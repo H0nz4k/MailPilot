@@ -11,7 +11,7 @@ from pypdf import PdfReader
 from services.collection_status import (
     normalize_collection_status, validate_report_history, validate_task_history,
 )
-from services.collection_report import fetch_collection_report
+from services.collection_report import fetch_collection_report, fetch_collection_period
 from services.web_daily_profiles import (
     DailyProfile, apply_profile, save_profile, load_profiles, profile_file, task_report_config,
 )
@@ -70,6 +70,27 @@ def test_collection_delivery_filter_preserves_status_and_uses_historical_rate_da
     assert report.diners[0].collected is True
     assert sum(m.portions for m in report.menus) == 1
     assert cursor.calls[1][1] == (["1", "2"], date(2025, 12, 31), date(2025, 12, 31))
+
+
+def test_period_crosses_year_and_pdf_identifies_each_day(tmp_path):
+    cfg = replace(config(), report_date=date(2025, 12, 31), report_end_date=date(2026, 1, 1),
+                  pdf_output=tmp_path / "period.pdf", show_by_categories=True)
+    cursor = Cursor([ROWS[0]], [ROWS[1]])
+    report = fetch_collection_period(cursor, cfg, cfg.categories, "Jídelna")
+    assert [call[1][:2] for call in cursor.calls] == [(2025, 12), (2026, 1)]
+    assert [row.order_date for row in report.diners] == [date(2025, 12, 31), date(2026, 1, 1)]
+    assert sum(item.portions for item in report.menus) == 2
+    text = "\n".join(page.extract_text() for page in PdfReader(create_pdf(cfg, report)).pages)
+    assert "31.12.2025" in text and "01.01.2026" in text
+    assert "Alena Černá" in text and "Jan Novák" in text
+    assert "Odebráno: 1" in text and "Neodebráno: 1" in text
+
+
+@pytest.mark.parametrize("end", [date(2025, 12, 30), date(2027, 1, 2)])
+def test_period_rejects_reversed_and_too_long_dates(end):
+    cfg = replace(config(), report_date=date(2025, 12, 31), report_end_date=end)
+    with pytest.raises(ValueError, match="Období"):
+        fetch_collection_period(Cursor([]), cfg, cfg.categories, None)
 
 
 @pytest.mark.parametrize("status", ["both", "collected", "uncollected"])

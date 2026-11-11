@@ -267,6 +267,7 @@ class AppConfig:
     pdf_compact_rows: bool = False
     pdf_layout: tuple[tuple[str, ...], ...] = ()
     pdf_page_breaks: tuple[str, ...] = ("diners",)
+    report_end_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -306,6 +307,7 @@ class DinerOrder:
     diner_number: int | None = None
     classroom: str | None = None
     collected: bool | None = None
+    order_date: date | None = None
 
     @property
     def application_label(self) -> str:
@@ -820,8 +822,8 @@ def fetch_report(config: AppConfig) -> ReportData:
             subject_name = subject_row[0] if subject_row else None
 
             if config.collection_status is not None:
-                from services.collection_report import fetch_collection_report
-                return fetch_collection_report(cursor, config, active_categories, subject_name)
+                from services.collection_report import fetch_collection_period
+                return fetch_collection_period(cursor, config, active_categories, subject_name)
 
             cursor.execute(
                 summary_query,
@@ -1420,6 +1422,8 @@ def create_pdf(
 
     subject = report.subject_name or "Stravovací provoz"
     date_text = config.report_date.strftime(DATE_FORMAT)
+    if config.report_end_date and config.report_end_date != config.report_date:
+        date_text += " – " + config.report_end_date.strftime(DATE_FORMAT)
     document_title = (
         "Seznam strávníků" if config.show_diner_list
         else "Souhrn objednané stravy"

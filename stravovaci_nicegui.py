@@ -599,6 +599,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
             "app-nav"
         ) as self.tabs:
             self.daily_tab = ui.tab("daily", label="Přehledy", icon="today")
+            self.collections_tab = ui.tab("collections", label="Odběry", icon="fact_check")
             self.mail_tasks_tab = ui.tab("mail_tasks", label="Plánovač", icon="schedule_send")
             self.closing_tab = ui.tab("closing", label="Uzávěrka", icon="print")
             self.special_tab = ui.tab("special", label="Speciál", icon="assignment")
@@ -618,6 +619,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         ):
             with ui.tab_panel("daily"):
                 self._build_daily_panel()
+            with ui.tab_panel("collections"):
+                from services.web_collection_window import build_collection_panel
+                build_collection_panel(self)
             with ui.tab_panel("closing"):
                 self._build_closing_panel()
             with ui.tab_panel("special"):
@@ -2561,6 +2565,12 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                 code for code in self.z17_selected_categories if code in known
             }
         self.render_categories()
+        if hasattr(self, "collection_categories"):
+            options = {code: f"{code} – {name or code}" for code, name in self.categories if code in self.allowed_categories}
+            selected = ([code for code in self.collection_categories.value or [] if code in options]
+                        if getattr(self, "_collection_categories_initialized", False) else list(options))
+            self.collection_categories.set_options(options, value=selected)
+            self._collection_categories_initialized = True
         if hasattr(self, "daily_profile_choices"):
             self._render_daily_profile_choices()
         self.render_z17_categories()
