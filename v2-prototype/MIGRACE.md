@@ -41,3 +41,5 @@ Nepovažovat simulované testy za ověření skutečného databázového připoj
 Jednorázové odesílání uzávěrky a Z 17-01 používá nakonfigurovaný transport SMTP/Resend, ale nebylo ověřeno skutečným e-mailem.
 
 Průvodce zobrazuje jednotlivé stránky vytvořeného PDF přímo v aplikaci. Vykreslení bylo ověřeno na ukázkovém PDF i v zabaleném enginu; skutečná databáze dosud ověřena nebyla.
+
+Uložené přehledy lze načíst jako kopii v průvodci. Výběr kategorií se omezí na aktuální oprávnění a změna se nepromítá do původního profilu; ověřeno izolovaně.

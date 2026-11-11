@@ -101,6 +101,9 @@ def handle(request):
     if request.get('action') == 'legacy_delete_task':
         from legacy_bridge import delete_task
         return delete_task(request.get('config_path'), request.get('task_id'), request.get('revision'))
+    if request.get('action') == 'legacy_saved_profiles':
+        from legacy_bridge import saved_report_profiles
+        return saved_report_profiles(request.get('config_path'))
     if request.get('action') == 'legacy_wizard_edit':
         from legacy_bridge import wizard_edit_data
         return wizard_edit_data(request.get('config_path'), request.get('task_id'))

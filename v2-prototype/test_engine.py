@@ -1286,3 +1286,23 @@ def test_render_generated_pdf_page_and_reject_outside_file(tmp_path):
         legacy_bridge.render_pdf_page(result['pdf'],page['pages'],str(tmp_path))
     with pytest.raises(ValueError,match='vytvořené PDF'):
         legacy_bridge.render_pdf_page(result['pdf'],0,str(tmp_path/'other'))
+
+def test_saved_profiles_are_reusable_without_expanding_permissions(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services.web_daily_profiles import DailyProfile, save_profile, profile_file
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories': [{'code': 'ZACI'}]})
+    profile = DailyProfile.from_dict({'id': 'a', 'name': 'Obědy', 'categories': ['ZACI', 'HOST'],
+                                     'meal_type': ['Oběd'], 'delivery_types': ['Rozvoz'],
+                                     'collection_status': 'both', 'show_diner_list': True})
+    save_profile(profile_file(tmp_path), profile)
+    save_profile(profile_file(tmp_path), DailyProfile.from_dict({'id': 'b', 'name': 'Hosté', 'categories': ['HOST']}))
+    profiles = legacy_bridge.saved_report_profiles(str(tmp_path / 'config.json'))
+    assert len(profiles) == 1
+    assert profiles[0]['categories'] == ['ZACI'] and profiles[0]['restricted']
+    assert profiles[0]['content'] == 'collection' and profiles[0]['collection'] == 'both'
+    assert profiles[0]['meals'] == ['oběd'] and profiles[0]['deliveries'] == ['Rozvoz']
+    assert profile.categories == ('ZACI', 'HOST')

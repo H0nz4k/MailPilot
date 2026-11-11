@@ -167,6 +167,30 @@ def profile_for_wizard(path, data):
     return profile
 
 
+def saved_report_profiles(path):
+    """Return reusable report settings; permissions are rechecked on save/preview."""
+    from services.web_daily_profiles import load_profiles, profile_file
+    from services.web_meal_types import meal_filter_values
+    configuration(path)
+    allowed = {item['code'] for item in info(path)['categories']}
+    results = []
+    for profile in load_profiles(profile_file(Path(path).parent)):
+        categories = [code for code in profile.categories if code in allowed]
+        if not categories:
+            continue
+        values = profile.to_dict()
+        values.update({
+            'categories': categories,
+            'restricted': len(categories) != len(profile.categories),
+            'meals': list(meal_filter_values(profile.meal_type)) or None,
+            'deliveries': list(profile.delivery_types) or None,
+            'content': 'collection' if profile.collection_status else 'names' if profile.show_diner_list else 'counts',
+            'collection': profile.collection_status or 'both',
+        })
+        results.append(values)
+    return results
+
+
 def wizard_edit_data(path, task_id):
     from services.web_daily_profiles import load_profiles, profile_file
     from services.web_mail_task_store import load_tasks, task_file
