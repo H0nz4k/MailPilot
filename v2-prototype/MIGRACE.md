@@ -47,3 +47,5 @@ Uložené přehledy lze načíst jako kopii v průvodci. Výběr kategorií se o
 Starší denní úlohu bez vlastního profilu lze otevřít v průvodci; při uložení se její tehdejší společné nastavení převede na samostatný profil a před uložením se kontroluje jeho změna. Ověřeno izolovaně; automatické změny globálního nastavení se po převedení již do úlohy nepřenášejí.
 
 Průvodce umožňuje zvolit kalendář podle typu přehledu, všechny kalendáře nebo konkrétní kalendáře z databáze. Výběr se při uložení i náhledu ověřuje; původní explicitní výběr lze upravit. Ověřeno testy s náhradou databáze a zobrazením ukázkového průvodce.
+
+V běžném průvodci lze vytvořený PDF náhled uložit na novou cestu bez vytvoření úlohy; existující soubor se nepřepisuje. Backend ukládání pokrývají izolované testy.
