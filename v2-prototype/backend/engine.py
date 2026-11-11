@@ -52,6 +52,15 @@ def handle(request):
     if request.get('action') == 'legacy_wizard_pdf':
         from legacy_bridge import preview_wizard
         return preview_wizard(request.get('config_path'), request.get('data', {}), request['output_dir'])
+    if request.get('action') == 'repair_scheduler':
+        from legacy_bridge import repair_scheduler
+        return repair_scheduler(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'remove_scheduler':
+        from legacy_bridge import remove_scheduler
+        return remove_scheduler(request.get('config_path'), request['workspace_dir'])
+    if request.get('action') == 'install_scheduler':
+        from legacy_bridge import install_scheduler
+        return install_scheduler(request.get('config_path'), request['workspace_dir'])
     if request.get('action') == 'legacy_control_scheduler':
         from legacy_bridge import control_scheduler
         return control_scheduler(request.get('config_path'), request.get('operation'))
@@ -98,6 +107,20 @@ def handle(request):
     return result
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--worker':
+        from task_lock import task_store_lock
+        from services.web_mail_worker import main
+        sys.argv.pop(1)
+        try:
+            config_index = sys.argv.index('--config')
+            config_dir = Path(sys.argv[config_index + 1]).resolve().parent
+        except (ValueError, IndexError):
+            raise SystemExit('Pro worker je nutné uvést --config a cestu ke konfiguraci.')
+        try:
+            with task_store_lock(config_dir, timeout=0, name='.dataship-v2-worker.lock'):
+                raise SystemExit(main())
+        except TimeoutError:
+            raise SystemExit('Pro tuto konfiguraci již běží jiný worker DataShip 2.')
     sys.stdin.reconfigure(encoding='utf-8')
     sys.stdout.reconfigure(encoding='utf-8')
     try:

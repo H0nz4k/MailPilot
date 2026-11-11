@@ -299,27 +299,39 @@ def update_task(path, task_id, changes, revision=None):
     return {'id':updated.id}
 
 
-def control_scheduler(path, action):
-    """Control only an existing 1.4 worker bound to the selected configuration."""
+def registered_scheduler(path, *, allow_moved=False):
+    """Verify the worker and configuration before changing a service."""
     import shlex
     from pathlib import PureWindowsPath
     from services.web_branding import WORKER_EXE_NAME
-    from services.web_mail_nssm import _service_setup, _run_nssm, require_service_rights, service_command
-    if action not in ('start', 'stop'):
-        raise ValueError('Neznámá operace služby.')
+    from services.web_mail_nssm import _service_setup, _run_nssm
     config_path = Path(path).resolve()
     configuration(path)
     nssm, name = _service_setup(config_path.parent)
     base = [str(nssm)]
     program = _run_nssm(base + ['get', name, 'Application']).strip().strip('"')
-    if PureWindowsPath(program).name.casefold() != WORKER_EXE_NAME.casefold():
+    program_name = PureWindowsPath(program).name.casefold()
+    if program_name not in (WORKER_EXE_NAME.casefold(), 'dataship-v2-engine.exe'):
         raise ValueError('Služba nepoužívá worker DataShipu; zůstala beze změny.')
+    if program_name == 'dataship-v2-engine.exe':
+        import sys
+        if not getattr(sys, 'frozen', False) or (not allow_moved and PureWindowsPath(program) != PureWindowsPath(str(Path(sys.executable).resolve()))):
+            raise ValueError('Služba odkazuje na jinou instalaci DataShip 2; zůstala beze změny.')
     parameters = _run_nssm(base + ['get', name, 'AppParameters'])
     args = [part.strip('"') for part in shlex.split(parameters, posix=False)]
-    if len(args) != 2 or args[0] != '--config' or PureWindowsPath(args[1]) != PureWindowsPath(str(config_path)):
+    prefix = ['--worker'] if program_name == 'dataship-v2-engine.exe' else []
+    if len(args) != len(prefix)+2 or args[:len(prefix)] != prefix or args[-2] != '--config' or PureWindowsPath(args[-1]) != PureWindowsPath(str(config_path)):
         raise ValueError('Služba používá jinou konfiguraci; zůstala beze změny.')
+    return nssm, name, program_name
+
+
+def control_scheduler(path, action):
+    from services.web_mail_nssm import require_service_rights, service_command
+    if action not in ('start', 'stop'):
+        raise ValueError('Neznámá operace služby.')
+    registered_scheduler(path)
     require_service_rights(action)
-    return {'message': service_command(config_path.parent, action)}
+    return {'message': service_command(Path(path).resolve().parent, action)}
 
 
 def preview_wizard(path, data, output_dir):
@@ -364,3 +376,82 @@ def delete_task(path, task_id, revision):
         # Profiles may be shared with another task or used independently.
         save_tasks(target, [item for item in existing if item.id != task_id])
     return {'id':task_id}
+
+
+def install_scheduler(path, workspace):
+    """Install a separate stopped v2 service; never replace or start an existing service."""
+    import sys
+    from services.web_mail_nssm import _service_setup, _run_nssm, require_service_rights
+    config_path = Path(path).resolve()
+    if config_path != (Path(workspace).resolve() / 'config.json'):
+        raise ValueError('Samostatnou službu lze instalovat pouze pro oddělený prostor DataShip 2.')
+    configuration(path)
+    if not getattr(sys, 'frozen', False) or Path(sys.executable).name.casefold() != 'dataship-v2-engine.exe':
+        raise ValueError('Instalace vyžaduje sestavenou desktopovou aplikaci DataShip 2.')
+    nssm, name = _service_setup(config_path.parent)
+    if name != 'DataShip2Scheduler':
+        raise ValueError('Název služby musí být DataShip2Scheduler; nastavení služby nebylo změněno.')
+    require_service_rights('install')
+    base = [str(nssm)]
+    commands = [base + ['install', name, str(Path(sys.executable).resolve()), '--worker', '--config', str(config_path)],
+                base + ['set', name, 'AppDirectory', str(config_path.parent)],
+                base + ['set', name, 'Start', 'SERVICE_AUTO_START'],
+                base + ['set', name, 'AppExit', 'Default', 'Restart'],
+                base + ['set', name, 'AppRestartDelay', '10000']]
+    installed = False
+    try:
+        for command in commands:
+            _run_nssm(command)
+            installed = True
+    except RuntimeError as exc:
+        if installed:
+            raise RuntimeError('Služba byla vytvořena, ale její nastavení není dokončené. ' + str(exc)) from exc
+        raise
+    return {'message':'Služba byla nainstalována a zůstává zastavená.'}
+
+
+def remove_scheduler(path, workspace):
+    from services.web_mail_nssm import _run_nssm, require_service_rights
+    config_path = Path(path).resolve()
+    if config_path != Path(workspace).resolve() / 'config.json':
+        raise ValueError('Odstranit lze pouze službu odděleného prostoru DataShip 2.')
+    nssm, name, program_name = registered_scheduler(path)
+    if name != 'DataShip2Scheduler' or program_name != 'dataship-v2-engine.exe':
+        raise ValueError('Neodpovídá název služby; služba nebyla změněna.')
+    require_service_rights('remove')
+    base = [str(nssm)]
+    if _run_nssm(base + ['status', name]).strip() != 'SERVICE_STOPPED':
+        _run_nssm(base + ['stop', name])
+        if _run_nssm(base + ['status', name]).strip() != 'SERVICE_STOPPED':
+            raise ValueError('Službu se nepodařilo zastavit; nebyla odstraněna.')
+    _run_nssm(base + ['remove', name, 'confirm'])
+    return {'message':'Služba DataShip 2 byla odstraněna; úlohy a nastavení zůstaly zachovány.'}
+
+
+def repair_scheduler(path, workspace):
+    import os
+    import subprocess
+    import sys
+    from services.web_mail_nssm import _run_nssm, require_service_rights
+    config_path = Path(path).resolve()
+    if config_path != Path(workspace).resolve() / 'config.json':
+        raise ValueError('Opravit lze pouze službu odděleného prostoru DataShip 2.')
+    nssm, name, program_name = registered_scheduler(path, allow_moved=True)
+    worker = Path(sys.executable).resolve()
+    if name != 'DataShip2Scheduler' or program_name != 'dataship-v2-engine.exe' or worker.name.casefold() != 'dataship-v2-engine.exe':
+        raise ValueError('Neodpovídá služba DataShip 2; služba nebyla změněna.')
+    require_service_rights('repair')
+    base = [str(nssm)]
+    if _run_nssm(base + ['status', name]).strip() != 'SERVICE_STOPPED':
+        raise ValueError('Před opravou službu zastavte.')
+    sc = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' / 'sc.exe'
+    commands = [[str(sc), 'config', name, 'binPath=', f'"{nssm.resolve()}"'],
+                base + ['set', name, 'Application', str(worker)],
+                base + ['set', name, 'AppParameters', subprocess.list2cmdline(['--worker','--config',str(config_path)])],
+                base + ['set', name, 'AppDirectory', str(config_path.parent)]]
+    try:
+        for command in commands:
+            _run_nssm(command)
+    except RuntimeError as exc:
+        raise RuntimeError('Oprava služby není dokončena. ' + str(exc)) from exc
+    return {'message':'Cesty služby byly opraveny. Služba zůstává zastavená.'}

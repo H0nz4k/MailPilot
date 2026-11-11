@@ -6,10 +6,10 @@ import time
 
 
 @contextmanager
-def task_store_lock(directory, timeout=10):
+def task_store_lock(directory, timeout=10, name='.dataship-v2-tasks.lock'):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / '.dataship-v2-tasks.lock'
+    path = directory / name
     with path.open('a+b') as stream:
         stream.seek(0, os.SEEK_END)
         if stream.tell() == 0:

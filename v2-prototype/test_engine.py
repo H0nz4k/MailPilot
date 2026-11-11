@@ -562,3 +562,92 @@ def test_workspace_import_refuses_missing_profile_without_creating_destination(t
     with pytest.raises(ValueError,match='chybějící profil'):
         workspace_import.import_workspace(str(config),target)
     assert not target.exists()
+
+
+def test_install_v2_scheduler_is_stopped_and_restricted_to_workspace(tmp_path,monkeypatch):
+    import sys
+    import pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import services.web_mail_nssm as nssm
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.touch()
+    worker=tmp_path/'dataship-v2-engine.exe'
+    worker.touch()
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(sys,'frozen',True,raising=False)
+    monkeypatch.setattr(sys,'executable',str(worker))
+    monkeypatch.setattr(nssm,'_service_setup',lambda path:(tmp_path/'nssm.exe','DataShip2Scheduler'))
+    monkeypatch.setattr(nssm,'require_service_rights',lambda action:None)
+    commands=[]
+    monkeypatch.setattr(nssm,'_run_nssm',lambda command:commands.append(command) or '')
+    result=legacy_bridge.install_scheduler(str(config),str(workspace))
+    assert 'zůstává zastavená' in result['message']
+    assert commands[0]==[str(tmp_path/'nssm.exe'),'install','DataShip2Scheduler',str(worker),'--worker','--config',str(config)]
+    assert not any(c[1]=='start' for c in commands)
+    with pytest.raises(ValueError,match='oddělený prostor'):
+        legacy_bridge.install_scheduler(str(tmp_path/'other'/'config.json'),str(workspace))
+
+
+def test_v2_worker_lock_blocks_second_worker_process(tmp_path):
+    import sys, subprocess, os
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    from task_lock import task_store_lock
+    script=Path(__file__).parent/'backend'/'engine.py'
+    with task_store_lock(tmp_path, name='.dataship-v2-worker.lock'):
+        result=subprocess.run([sys.executable,str(script),'--worker','--config',str(tmp_path/'config.json')],
+                              capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30,
+                              env={**os.environ,'PYTHONIOENCODING':'utf-8'})
+    assert result.returncode != 0 and 'již běží jiný worker' in result.stderr
+
+
+def test_remove_scheduler_only_verified_v2_and_preserves_files(tmp_path,monkeypatch):
+    import sys
+    import pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import services.web_mail_nssm as nssm
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.touch()
+    monkeypatch.setattr(legacy_bridge,'registered_scheduler',lambda path:(tmp_path/'nssm.exe','DataShip2Scheduler','dataship-v2-engine.exe'))
+    monkeypatch.setattr(nssm,'require_service_rights',lambda action:None)
+    commands=[]
+    monkeypatch.setattr(nssm,'_run_nssm',lambda cmd:commands.append(cmd) or ('SERVICE_STOPPED' if cmd[1]=='status' else ''))
+    assert 'úlohy a nastavení zůstaly' in legacy_bridge.remove_scheduler(str(config),str(workspace))['message']
+    assert [c[1] for c in commands]==['status','remove'] and config.exists()
+    monkeypatch.setattr(legacy_bridge,'registered_scheduler',lambda path:(tmp_path/'nssm.exe','DataShip2Scheduler','dataship-worker.exe'))
+    with pytest.raises(ValueError,match='nebyla změněna'):
+        legacy_bridge.remove_scheduler(str(config),str(workspace))
+    assert len(commands)==2
+
+
+def test_repair_scheduler_requires_stopped_v2_and_does_not_start(tmp_path,monkeypatch):
+    import sys
+    import pytest
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    import services.web_mail_nssm as nssm
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=workspace/'config.json'
+    config.touch()
+    worker=tmp_path/'dataship-v2-engine.exe'
+    worker.touch()
+    monkeypatch.setattr(sys,'executable',str(worker))
+    monkeypatch.setattr(legacy_bridge,'registered_scheduler',lambda path,allow_moved:(tmp_path/'nssm.exe','DataShip2Scheduler','dataship-v2-engine.exe'))
+    monkeypatch.setattr(nssm,'require_service_rights',lambda action:None)
+    commands=[]
+    monkeypatch.setattr(nssm,'_run_nssm',lambda cmd:commands.append(cmd) or ('SERVICE_STOPPED' if cmd[1]=='status' else ''))
+    assert 'zůstává zastavená' in legacy_bridge.repair_scheduler(str(config),str(workspace))['message']
+    assert [c[1] for c in commands]==['status','config','set','set','set']
+    assert all(c[1] not in ('start','stop','remove','install') for c in commands)
+    commands.clear()
+    monkeypatch.setattr(nssm,'_run_nssm',lambda cmd:commands.append(cmd) or 'SERVICE_RUNNING')
+    with pytest.raises(ValueError,match='zastavte'):
+        legacy_bridge.repair_scheduler(str(config),str(workspace))
+    assert [c[1] for c in commands]==['status']
