@@ -173,3 +173,35 @@ def test_saved_enabled_task_is_seen_once_per_day_by_legacy_worker(tmp_path, monk
     tick(path,next_day)
     assert len(calls)==1 and calls[0][1].id==task['id']
     assert calls[0][1].output_mode=='pdf'
+
+
+def test_saved_pdf_task_produces_pdf_through_legacy_worker(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from dataclasses import replace
+    from datetime import datetime, timedelta
+    from pypdf import PdfReader
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    from services import web_mail_worker as worker
+    from stravovaci_sestava import AppConfig
+    monkeypatch.setattr(legacy_bridge, 'configuration', lambda path: SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge, 'info', lambda path: {'categories':[{'code':'ZACI'}]})
+    data={'name':'Test PDF','date':date.today().isoformat(),'category':'all','meal':'all',
+          'content':'collection','collection':'both','mode':'tomorrow','output':'pdf',
+          'directory':str(tmp_path),'filename':'Prehled_{date}.pdf','time':'00:00','enabled':True,'cooking':False}
+    path=tmp_path / 'config.json'
+    legacy_bridge.save_task(str(path),data)
+    cfg=AppConfig(database={}, report_date=date.today(), categories=('ZACI',), language='česky', menu_list_number=1)
+    monkeypatch.setattr(worker,'load_config',lambda *args,**kwargs:cfg)
+    monkeypatch.setattr(worker,'read_saved_settings',lambda path:{'povolene_kategorie':['ZACI']})
+    report=engine.fetch_collection_period(engine.FixtureCursor(),replace(cfg,collection_status='both'),('ZACI',),'Test')
+    def fetch(actual):
+        assert actual.categories==('ZACI',) and actual.collection_status=='both'
+        return report
+    monkeypatch.setattr(worker,'fetch_report',fetch)
+    sent_on=date.today()+timedelta(days=1)
+    worker.tick(path, datetime.combine(sent_on,datetime.min.time()).replace(hour=8))
+    pdf=tmp_path / f'Prehled_{(sent_on+timedelta(days=1)).isoformat()}.pdf'
+    text='\n'.join(page.extract_text() for page in PdfReader(pdf).pages)
+    assert 'Anna Nováková' in text and 'Jan Dvořák' in text
