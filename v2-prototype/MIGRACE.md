@@ -15,7 +15,7 @@ Vývojová větev `feature/dataship-v2-prototype`; verze 1.4 zůstává provozn�
 - Průvodce umí vypočítat příští den spuštění a den sestavy včetně kalendáře varných dnů (ověřeno náhradou databáze).
 - Průvodce může vytvořit PDF náhledu z vybraného profilu bez uložení úlohy; ověřeno izolovaně.
 - Průvodce načítá uložené šablony PDF a zachovává jejich rozložení i velikosti písma.
-- Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
+- Průvodce podporuje výběr více kategorií, skutečných typů stravy a výdeje a základní volby PDF, velikosti písma, jazyk a číslo jídelníčku; backend ověřuje jejich dostupnost. Ověřeno na náhradách databáze.
 - Administrace umožňuje vytvořit nebo změnit heslo v systémovém úložišti (sdíleném s původním DataShipem); ověřeno testovacími náhradami trezoru.
 - Administrace umožňuje vybrat povolené kategorie ze skutečné Jídelny; ověřeno s náhradou databáze.
 - Nastavení databázového připojení se před uložením ověřuje a používá systémové úložiště hesel; ověřeno náhradou databáze.

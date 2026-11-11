@@ -160,7 +160,8 @@ def profile_for_wizard(path, data):
                  'delivery_show_names':data.get('delivery_show_names', False),
                  'delivery_page_per_type':data.get('delivery_page_per_type', False),
                  'pdf_orientation':data.get('pdf_orientation'), 'pdf_bold':data.get('pdf_bold'),
-                 'pdf_compact_rows':data.get('pdf_compact_rows', False)})
+                 'pdf_compact_rows':data.get('pdf_compact_rows', False),
+                 **{key:data[key] for key in ('pdf_data_font_size','pdf_label_font_size','language','menu_list_number') if key in data}})
     return profile
 
 
@@ -194,7 +195,8 @@ def wizard_edit_data(path, task_id):
               'filename':task.output_filename, 'time':task.send_time, 'enabled':task.enabled,
               'cooking':task.only_cooking_days}
     for field in ('category_separation','show_by_categories','show_by_norms','show_delivery_summary',
-                  'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows'):
+                  'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
+                  'pdf_data_font_size','pdf_label_font_size','language','menu_list_number'):
         values[field] = getattr(profile, field)
     return {'data':values, 'id':task.id, 'revision':task_revision(task), 'profile_revision':task_revision(profile)}
 
@@ -205,9 +207,10 @@ def preserve_profile(original, profile, revision, *, use_template=False):
         raise ValueError('Profil úlohy se mezitím změnil. Obnovte seznam a úpravu zopakujte.')
     fields = ('name','categories','meal_type','delivery_types','show_diner_list','collection_status',
               'category_separation','show_by_categories','show_by_norms','show_delivery_summary',
-              'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows')
+              'delivery_show_names','delivery_page_per_type','pdf_orientation','pdf_bold','pdf_compact_rows',
+              'pdf_data_font_size','pdf_label_font_size','language','menu_list_number')
     if use_template:
-        fields += ('pdf_data_font_size', 'pdf_label_font_size', 'pdf_layout', 'pdf_page_breaks')
+        fields += ('pdf_layout', 'pdf_page_breaks')
     values = original.to_dict()
     changed = profile.to_dict()
     values.update({key:changed[key] for key in fields})

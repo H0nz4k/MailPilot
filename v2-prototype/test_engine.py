@@ -1190,3 +1190,23 @@ def test_bulk_preview_shows_missing_addresses_without_sending(tmp_path,monkeypat
     monkeypatch.setattr(bulk_bridge,'load_bulk_data',lambda db,pwd:BulkData(classes=(('3.A',''),),categories=(),diners=(BulkDiner(1,'Jan',None,'3.A','ZACI'),)))
     preview=bulk_bridge.preview_message(str(tmp_path/'config.json'),{'filter_type':'trida','values':['3.A'],'subject':'','body':''})
     assert preview['missing']==1 and preview['recipients']==0
+
+
+def test_wizard_pdf_typography_and_menu_are_saved_and_restored(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from services.web_daily_profiles import load_profiles,profile_file
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import legacy_bridge
+    monkeypatch.setattr(legacy_bridge,'configuration',lambda path:SimpleNamespace())
+    monkeypatch.setattr(legacy_bridge,'info',lambda path:{'categories':[{'code':'ZACI'}]})
+    monkeypatch.setattr(legacy_bridge,'filter_options',lambda path,day:{'meals':[],'deliveries':[]})
+    data={'name':'Tisk','date':date.today().isoformat(),'category':'all','content':'names','mode':'today',
+          'output':'email','recipients':'a@example.invalid','time':'08:00','enabled':False,'cooking':False,
+          'pdf_data_font_size':9.5,'pdf_label_font_size':10,'language':'česky','menu_list_number':2}
+    path=str(tmp_path/'config.json')
+    task=legacy_bridge.save_task(path,data)['task']
+    profile=load_profiles(profile_file(tmp_path))[0]
+    assert (profile.pdf_data_font_size,profile.pdf_label_font_size,profile.language,profile.menu_list_number)==(9.5,10,'česky',2)
+    edit=legacy_bridge.wizard_edit_data(path,task['id'])['data']
+    assert (edit['pdf_data_font_size'],edit['pdf_label_font_size'],edit['language'],edit['menu_list_number'])==(9.5,10,'česky',2)
