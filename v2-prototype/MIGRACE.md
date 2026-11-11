@@ -65,3 +65,5 @@ Sestava odběrů byla rovněž vytvořena čtením dostupné skutečné databáz
 Import zachovává také původní soubor desktopového plánovače planovac.json, včetně dalších polí, a úlohy v kopii pozastaví. Nový plánovač je zatím nespouští: převod akcí uzávěrky, speciálních sestav, vlastních příkazů a hodinových/intervalových plánů zůstává nedokončený.
 
 Na dostupné skutečné databázi byly načteny i typy stravy, výdeje a kalendáře. V dočasném odděleném prostoru byl uložen a spuštěn testovací plán pro výstup PDF: vytvořil jeden PDF a druhý průchod jej neopakoval; žádný e-mail nebyl odeslán. Zabalený engine vytvořil skutečný přehled odběrů a vykreslil jeho první stránku; desktopový autotest vytvořil ukázkové PDF. Skutečná služba zatím nebyla instalována ani testována, běžící relace nemá práva správce Windows.
+
+Zachované úlohy staršího plánovače jsou v Přehledech viditelné s typem a původním plánem; zůstávají neaktivní a nejsou spouštěny workerem DataShip 2.

@@ -176,6 +176,9 @@ def handle(request):
     if request.get('action') == 'legacy_options':
         from legacy_bridge import filter_options
         return filter_options(request.get('config_path'), request.get('date'))
+    if request.get('action') == 'imported_scheduler_jobs':
+        from legacy_bridge import imported_scheduler_jobs
+        return imported_scheduler_jobs(request.get('config_path'), request['workspace_dir'])
     if request.get('action') == 'legacy_tasks':
         from legacy_bridge import tasks
         return tasks(request.get('config_path'))

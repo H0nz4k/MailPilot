@@ -109,6 +109,15 @@ def require_current_revision(task, revision):
         raise ValueError('Úloha se mezitím změnila. Obnovte seznam a úpravu zopakujte.')
 
 
+def imported_scheduler_jobs(path, workspace):
+    """Expose preserved legacy jobs without executing their launchers."""
+    from settings_bridge import workspace_path
+    from planovac import ACTION_LABELS, format_schedule, load_jobs, scheduler_config_path
+    config_path = workspace_path(path, workspace)
+    return [{'name': job.name, 'action': ACTION_LABELS[job.action], 'schedule': format_schedule(replace(job, enabled=True))}
+            for job in load_jobs(scheduler_config_path(config_path.parent), config_path.parent)]
+
+
 def tasks(path):
     from services.web_mail_task_store import load_tasks, task_file
     from services.web_worker_status import observed_status

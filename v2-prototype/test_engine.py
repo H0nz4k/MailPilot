@@ -1491,3 +1491,20 @@ def test_import_preserves_legacy_scheduler_jobs_as_disabled(tmp_path):
     assert result['legacy_jobs'] == 1 and len(jobs) == 1
     assert jobs[0].name == 'Uzávěrka' and jobs[0].action == 'uzaverka' and not jobs[0].enabled
     assert json.loads((source / 'planovac.json').read_text(encoding='utf-8')) == original
+
+def test_imported_scheduler_jobs_are_read_only_and_visible(tmp_path):
+    import json, sys
+    import pytest
+    sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+    import legacy_bridge
+    workspace = tmp_path / 'workspace'; workspace.mkdir()
+    config = workspace / 'config.json'; config.write_text('{}', encoding='utf-8')
+    jobfile = workspace / 'planovac.json'
+    jobfile.write_text(json.dumps({'jobs':[{'name':'Uzávěrka', 'action':'uzaverka', 'path':'C:/DataShip/run.bat',
+                                            'schedule':{'type':'daily','time':'08:30'}, 'enabled':False}]}), encoding='utf-8')
+    before = jobfile.read_bytes()
+    jobs = legacy_bridge.imported_scheduler_jobs(str(config),str(workspace))
+    assert jobs == [{'name':'Uzávěrka','action':'Uzávěrka','schedule':'Denně v 08:30'}]
+    assert jobfile.read_bytes() == before
+    with pytest.raises(ValueError,match='odděleném prostoru'):
+        legacy_bridge.imported_scheduler_jobs(str(config),str(tmp_path/'other'))
