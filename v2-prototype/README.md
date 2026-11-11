@@ -2,7 +2,7 @@
 
 Oddělený experiment vycházející z DataShip 1.4.0. Obrazovka pracuje výhradně se smyšlenými záznamy. Počítačový výpočet používá existující `fetch_collection_period` a generátor PDF, s testovací náhradou databázového kurzoru. Nečte nastavení ani data Jídelny, nevytváří plánovací úlohy a neposílá e-maily.
 
-Záměr: prověřit nový vzhled, samostatné okno Tauri, propojení s Pythonem a velikost celé aplikace včetně výpočetního EXE. Verze 1.4 zůstává samostatná. Stávající krokový průvodce vytváření úloh má zůstat zachovaný při budoucím převodu; zatím není ve verzi 2 implementovaný. Obrázek `concept.png` je generovaný návrh, vlastní UI je implementované v Reactu a upravené podle požadavku na střídmost.
+Záměr: prověřit nový vzhled, samostatné okno Tauri, propojení s Pythonem a velikost celé aplikace včetně výpočetního EXE. Verze 1.4 zůstává samostatná. Čtyřkrokový průvodce je dostupný jako interaktivní návrh; návrh zůstává jen v paměti okna a není připojen k plánovači. Zachování všech možností a skutečného ukládání z verze 1.4 zůstává další prací. Obrázek `concept.png` je generovaný návrh, vlastní UI je implementované v Reactu a upravené podle požadavku na střídmost.
 
 ## Spuštění při vývoji
 
@@ -13,4 +13,8 @@ PDF je testovací, vytváří se v dočasné složce systému s jedinečným ná
 
 ## Vyzkoušení hotového prototypu
 
-Rozbalte ZIP do vlastní složky a spusťte `DataShip-2-Prototyp.exe`. Soubor `dataship-v2-engine.exe` musí zůstat vedle něj. Aplikace potřebuje Microsoft Edge WebView2 Runtime. Vytvořené PDF se uloží do dočasné složky uvedené v aplikaci. Prototyp nepřebuje nastavení ani databázi verze 1.4.
+Rozbalte ZIP do vlastní složky a spusťte `DataShip-2-Prototyp.exe`. Soubor `dataship-v2-engine.exe` musí zůstat vedle něj. Aplikace potřebuje Microsoft Edge WebView2 Runtime. Vytvořené PDF se uloží do dočasné složky uvedené v aplikaci. Prototyp nepotřebuje nastavení ani databázi verze 1.4.
+
+## Ověření desktopového PDF
+
+Sestavený prototyp lze spustit s argumentem `--self-test-pdf`. Izolovaný autotest aktivuje stejné tlačítko PDF ve WebView, použije smyšlená data a zapíše výsledek do dočasné složky systému; nepoužívá databázi ani e-mail.

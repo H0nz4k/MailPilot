@@ -4,6 +4,20 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 #[tauri::command]
+fn self_test_enabled() -> bool {
+    std::env::args().any(|arg| arg == "--self-test-pdf")
+}
+
+#[tauri::command]
+fn self_test_complete(app: tauri::AppHandle, result: serde_json::Value) -> Result<(), String> {
+    if !self_test_enabled() { return Err("Test není povolen".into()); }
+    let path = std::env::temp_dir().join("dataship-v2-pdf-selftest.json");
+    std::fs::write(path, result.to_string()).map_err(|e| e.to_string())?;
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
 async fn report(mut request: serde_json::Value) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let engine = std::env::current_exe().map_err(|e| e.to_string())?
@@ -27,6 +41,6 @@ fn main() {
         let path = std::env::temp_dir().join("dataship-v2-prototype-error.txt");
         let _ = std::fs::write(path, info.to_string());
     }));
-    tauri::Builder::default().invoke_handler(tauri::generate_handler![report])
+    tauri::Builder::default().invoke_handler(tauri::generate_handler![report, self_test_enabled, self_test_complete])
         .run(tauri::generate_context!()).expect("Chyba spuštění DataShip 2");
 }
