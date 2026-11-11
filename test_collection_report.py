@@ -131,6 +131,18 @@ def test_empty_collection_pdf_is_explicit(tmp_path):
     assert "nebyly nalezeny žádné objednávky" in text
 
 
+def test_large_collection_starts_on_first_page_and_continues(tmp_path):
+    rows = [(f"Testovací osoba {i:04}", "1", "Žáci", "Oběd", 1, "A", i, "3.A", True)
+            for i in range(787)]
+    cfg = replace(config(), collection_status="collected", category_separation=True,
+                  pdf_orientation="na_vysku", pdf_output=tmp_path / "dlouhy.pdf")
+    report = fetch_collection_report(Cursor(rows), cfg, cfg.categories, "Testovací jídelna")
+    pages = PdfReader(create_pdf(cfg, report)).pages
+    assert len(pages) > 1
+    assert "Testovací osoba 0000" in pages[0].extract_text()
+    assert "Testovací osoba 0786" in "\n".join(page.extract_text() for page in pages)
+
+
 def test_worker_only_dispatches_historical_collection_profiles(tmp_path):
     from services import web_mail_worker as worker
     from services.web_mail_tasks import MailTask

@@ -86,13 +86,15 @@ def fetch_collection_report(cursor, config, active_categories, subject_name):
 
 def collection_pdf_story(config, report, *, table, body_style, section_style, width):
     """Use the shared PDF styles/header; one row is one specific meal order."""
-    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.platypus import CondPageBreak, Paragraph, Spacer
+    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from xml.sax.saxutils import escape
     collected = sum(row.collected is True for row in report.diners)
     missing = sum(row.collected is False for row in report.diners)
+    heading = ParagraphStyle("CollectionHeading", parent=section_style, keepWithNext=False)
     story = [Paragraph(f"Odebraná: {collected} · Neodebraná: {missing}", body_style),
-             Paragraph("Seznam strávníků a odběrů", section_style)]
+             CondPageBreak(35 * mm), Paragraph("Seznam strávníků a odběrů", heading)]
     if not report.diners:
         story.append(Paragraph("Pro zvolený den a filtry nebyly nalezeny žádné objednávky odpovídající výběru.", body_style))
     else:
@@ -103,7 +105,8 @@ def collection_pdf_story(config, report, *, table, body_style, section_style, wi
             if not diners:
                 continue
             if code is not None:
-                story.append(Paragraph(escape(code + " – " + (diners[0].category_name or code)), section_style))
+                story.append(CondPageBreak(25 * mm))
+                story.append(Paragraph(escape(code + " – " + (diners[0].category_name or code)), heading))
             rows = [(row.diner_number, row.name or "[bez jména]", row.classroom or "",
                      row.category_code, row.meal_type, f"Menu {row.menu}",
                      "Odebraná" if row.collected else "Neodebraná")
