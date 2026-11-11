@@ -1037,3 +1037,28 @@ def test_closing_generation_forces_no_mail_and_preserves_source(tmp_path,monkeyp
     assert seen[0]['uzaverka']['odeslat_mail'] is False
     assert seen[0]['uzaverka']['vsechny_kategorie'] is False
     assert source.read_bytes()==original
+
+
+def test_special_report_restricts_categories_and_keeps_mapping_without_writes(tmp_path,monkeypatch):
+    import sys,json,pytest
+    from types import SimpleNamespace
+    sys.path.insert(0,str(Path(__file__).parent/'backend'))
+    import special_bridge
+    config=tmp_path/'config.json'
+    config.write_text(json.dumps({'databaze':{},'z17':{'mapovani_kategorii':{'0102':['ZACI']}}}),encoding='utf-8')
+    before=config.read_bytes()
+    monkeypatch.setattr(special_bridge,'info',lambda path:{'categories':[{'code':'ZACI','name':'Žáci'}]})
+    seen=[]
+    def run(path,*,year):
+        raw=json.loads(path.read_text(encoding='utf-8'))
+        seen.append(raw)
+        return SimpleNamespace(year=year,files=(Path(raw['z17']['vystup'])/'report.pdf',),detail='OK')
+    monkeypatch.setattr(special_bridge,'run_special',run)
+    form=special_bridge.special_defaults(str(config))
+    assert form['mapping']['0102']==['ZACI']
+    result=special_bridge.generate_special(str(config),form,tmp_path/'output')
+    assert result['year']==form['year'] and seen[0]['z17']['vsechny_kategorie'] is False
+    assert seen[0]['z17']['povolene_kategorie']==['ZACI'] and config.read_bytes()==before
+    with pytest.raises(ValueError,match='nepovolenou kategorii'):
+        special_bridge.generate_special(str(config),{**form,'mapping':{'0102':['NEPOVOLENA']}},tmp_path/'output')
+    assert len(seen)==1

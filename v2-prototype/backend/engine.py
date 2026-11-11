@@ -29,6 +29,12 @@ class FixtureCursor:
 
 
 def handle(request):
+    if request.get('action') == 'special_defaults':
+        from special_bridge import special_defaults
+        return special_defaults(request.get('config_path'))
+    if request.get('action') == 'generate_special':
+        from special_bridge import generate_special
+        return generate_special(request.get('config_path'), request.get('data', {}), request['output_dir'])
     if request.get('action') == 'closing_defaults':
         from closing_bridge import closing_defaults
         from legacy_bridge import configuration
