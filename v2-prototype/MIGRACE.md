@@ -69,3 +69,5 @@ Na dostupné skutečné databázi byly načteny i typy stravy, výdeje a kalend�
 Zachované úlohy staršího plánovače jsou v Přehledech viditelné s typem a původním plánem; zůstávají neaktivní a nejsou spouštěny workerem DataShip 2.
 
 Úpravy připojení, oprávnění kategorií, Z 17-01 a e-mailu používají společný zámek prostoru. Současný zápis databáze a kategorií je ověřen testem; zápisy navíc kontrolují revizi části nastavení, takže zastaralý formulář nepřepíše novější hodnotu.
+
+Jeden testovací e-mail se smyšleným PDF odeslal zabalený engine přes Resend na adresu určenou uživatelem. Uživatel potvrdil doručení a otevření přílohy. Test nepoužil osobní údaje z databáze a netestoval automatické odeslání službou.
