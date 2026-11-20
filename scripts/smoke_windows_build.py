@@ -29,7 +29,42 @@ def stop(process):
         process.kill()
 
 
-def smoke_service(app: Path, tmp: Path) -> None:
+def smoke_update(app: Path, config: Path, test_output: Path | None) -> None:
+    """Exercise real binaries and service in an isolated, test-signed transaction."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from dataship_updater import Scheduler, probe
+    from scripts.package_dataship_update import package
+    from services.dataship_update_package import stage_package
+    from services.dataship_update_transaction import WORKSPACE, apply_update, preserve_backup, update_lock
+    from services.web_branding import WEB_VERSION
+
+    before = config.read_bytes()
+    workspace = app / WORKSPACE
+    workspace.mkdir()
+    archive = workspace / 'smoke-update.zip'
+    key = Ed25519PrivateKey.generate()
+    package(app, archive, WEB_VERSION, key)
+    candidate = stage_package(archive, workspace / 'stage', key.public_key().public_bytes_raw(), '0.0.0')
+    service = Scheduler(app, config)
+    with update_lock(app):
+        apply_update(app, workspace, service, candidate,
+                     lambda version: probe(app, workspace / 'version.txt', version), lambda: None, print)
+        assert preserve_backup(app, workspace).is_dir()
+    assert service.state() == 'running'
+    assert config.read_bytes() == before
+    if test_output is not None:
+        test_output.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(archive, test_output / f'DataShip-{WEB_VERSION}-Windows-x64-Update-TEST.zip')
+        (test_output / 'dataship-update-public-key.bin').write_bytes(key.public_key().public_bytes_raw())
+        (test_output / 'README.txt').write_text(
+            'Windows smoke-test package with an ephemeral test signing key. Use only in an isolated test installation.\n',
+            encoding='utf-8')
+    shutil.rmtree(workspace)
+    print('Verified actual Windows signed payload, NSSM drain, binary replacement and restart.')
+
+
+def smoke_service(app: Path, tmp: Path, test_update_output: Path | None = None) -> None:
     from services.web_mail_nssm import _run_nssm, require_service_rights
     from services import web_mail_nssm as service_api
     from services.web_mail_settings import DEFAULTS, save_settings, settings_path
@@ -90,6 +125,7 @@ def smoke_service(app: Path, tmp: Path) -> None:
                 raise RuntimeError('Repaired NSSM service did not start in 90 seconds.')
             time.sleep(0.5)
         assert _run_nssm(base + ['status', name]).strip() == 'SERVICE_RUNNING'
+        smoke_update(app, config, test_update_output)
     finally:
         if installed:
             try:
@@ -103,6 +139,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, default=ROOT / 'dist-web/DataShip')
     parser.add_argument('--service', action='store_true', help='Also install/start/remove an isolated temporary service; administrator required.')
+    parser.add_argument('--test-update-output', type=Path)
     args = parser.parse_args()
     app = args.app.resolve()
     verify(app)
@@ -168,7 +205,9 @@ def main():
             finally:
                 stop(worker)
         if args.service:
-            smoke_service(app, tmp)
+            isolated = tmp / 'isolated-app'
+            shutil.copytree(app, isolated)
+            smoke_service(isolated, tmp, args.test_update_output)
     print('Frozen GUI HTTP, worker startup and both version checks passed. No mail/tasks used.')
 
 

@@ -39,7 +39,12 @@ jobs:
       - name: Build Windows EXEs (isolated web environment)
         run: bash scripts/build_web_windows.sh
       - name: Smoke-test actual frozen GUI and worker
-        run: .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
+        run: |
+          if [[ "$GITHUB_REF_NAME" == "feat/dataship-m6" ]]; then
+            .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service --test-update-output build/test-update
+          else
+            .venv-web/Scripts/python.exe scripts/smoke_windows_build.py --service
+          fi
       - name: Package clean portable and NSSM distributions
         run: .venv-web/Scripts/python.exe scripts/package_web_release.py --commit "$GITHUB_SHA"
       - name: Upload verified Windows packages
@@ -49,6 +54,14 @@ jobs:
           path: release-dist/**/*
           if-no-files-found: error
           retention-days: 30
+      - name: Upload isolated test update
+        if: github.ref_name == 'feat/dataship-m6'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DataShip-Update-TEST-${{ github.sha }}
+          path: build/test-update/
+          if-no-files-found: error
+          retention-days: 14
       - name: Publish versioned DataShip prerelease
         if: startsWith(github.ref, 'refs/heads/release/dataship-') || startsWith(github.ref, 'refs/tags/dataship-v')
         run: |

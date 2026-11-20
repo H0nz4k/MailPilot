@@ -2992,6 +2992,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Kontrola PDF selhala: {exc}", file=sys.stderr)
             return 2
         return 0
+    if getattr(sys, 'frozen', False):
+        from services.dataship_update_transaction import JOURNAL, WORKSPACE
+        if (application_directory() / WORKSPACE / JOURNAL).exists():
+            print('Probíhá nebo byla přerušena aktualizace DataShipu. Vyčkejte na dokončení nebo použijte DataShip-Updater.exe --recover.',
+                  file=sys.stderr)
+            return 2
     if args.export_report is not None or args.export_report_id is not None:
         from services.web_saved_report_cli import run_saved_report_export
         return run_saved_report_export(args)

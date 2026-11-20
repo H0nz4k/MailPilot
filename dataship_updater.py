@@ -119,10 +119,27 @@ def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path 
                 return
         elif recover:
             return
+        if archive is not None and workspace in archive.resolve().parents:
+            raise ValueError('Aktualizační ZIP musí být mimo pracovní složku aktualizátoru.')
         if workspace.exists():
             shutil.rmtree(workspace)
         workspace.mkdir()
         try:
+            installed = probe(app, workspace / 'version.txt')
+            print('Ověřuji podpis a integritu aktualizačního balíčku.', flush=True)
+            expected_version = None
+            if archive is None:
+                github = GitHubReleases(repository, authenticated=private)
+                release = github.latest(installed, tag=tag)
+                if release is None:
+                    print('Novější podepsaná aktualizace není dostupná.')
+                    return
+                expected_version = release.version
+                archive = workspace / 'download.zip'
+                github.download(release, archive)
+            version = stage_package(archive, workspace / 'stage', public_key, installed)
+            if expected_version and version != expected_version:
+                raise ValueError('Podepsaný balíček má jinou verzi než vydání na GitHubu.')
             if wait_for_gui:
                 print('Čekám na zavření DataShipu.', flush=True)
                 deadline = time.monotonic() + 180
@@ -137,20 +154,6 @@ def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path 
             check_executable(app / 'DataShip.exe')
             if query_service(config.parent).state != 'running':
                 check_executable(app / 'DataShip-Worker.exe')
-            installed = probe(app, workspace / 'version.txt')
-            expected_version = None
-            if archive is None:
-                github = GitHubReleases(repository, authenticated=private)
-                release = github.latest(installed, tag=tag)
-                if release is None:
-                    print('Novější podepsaná aktualizace není dostupná.')
-                    return
-                expected_version = release.version
-                archive = workspace / 'download.zip'
-                github.download(release, archive)
-            version = stage_package(archive, workspace / 'stage', public_key, installed)
-            if expected_version and version != expected_version:
-                raise ValueError('Podepsaný balíček má jinou verzi než vydání na GitHubu.')
             service = Scheduler(app, config)
             apply_update(app, workspace, service, version,
                          lambda value: probe(app, workspace / 'version.txt', value),
@@ -187,7 +190,7 @@ def main() -> int:
         print(f'{datetime.now():%Y-%m-%d %H:%M:%S} · DataShip Updater', flush=True)
         app = args.installation.resolve()
         config = (args.config or app / 'config.json').resolve()
-        if config.name.casefold() != 'config.json':
+        if config.name.casefold() != 'config.json' or app / '_internal' in config.parents:
             raise ValueError('Aktualizace vyžaduje konfigurační soubor config.json.')
         run_update(app, config, args.public_key.read_bytes() if args.public_key else None,
                    args.zip, args.repository, args.private, args.recover, args.wait_for_gui, args.tag)

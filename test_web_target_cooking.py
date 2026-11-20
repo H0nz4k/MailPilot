@@ -73,7 +73,8 @@ class TargetCookingTests(unittest.TestCase):
               'validate_task_history': validate_task_history,
               'deliver_daily': Mock(), 'record_event': Mock(), 'LOG': Mock(),
               'state_path': lambda p: p, 'load_state': lambda p: {},
-              'save_state': Mock(), 'task_file': lambda p: p, 'runtime_status': Mock()}
+              'save_state': Mock(), 'task_file': lambda p: p, 'runtime_status': Mock(),
+              'STOP': False, 'pause_request': lambda _path: ''}
         exec(compile(ast.Module(body=body, type_ignores=[]), '<worker>', 'exec'), ns)
         return ns
 
