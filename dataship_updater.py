@@ -187,6 +187,10 @@ def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path 
 
 
 def main() -> int:
+    # A redirected Windows console inherits the system code page by default.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and not stream.isatty():
+            stream.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path, default=application_directory())
     parser.add_argument('--config', type=Path)
