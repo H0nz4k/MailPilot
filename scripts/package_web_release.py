@@ -25,7 +25,7 @@ NSSM_SHA256 = '99f5045fffbffb745d67fe3a065a953c4a3d9c253b868892d9b685b0ee7d07b8'
 NSSM_FALLBACK_ASSET = 'repos/H0nz4k/MailPilot/releases/assets/666037948'
 NSSM_FALLBACK_SHA256 = '6cc4eb73e25a8a43d28fbd865918136459db586a48bb52eb1ca50d49d02feaa9'
 NSSM_RC8_SHA256 = '0c36e63cea5b8f9f6f96d497c4fc324909a76ab927c7683fafb45d71e1a8243a'
-REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'START_WEB.cmd', 'START_WORKER_MANUAL.cmd')
+REQUIRED_FILES = ('DataShip.exe', 'DataShip-Worker.exe', 'DataShip-Updater.exe', 'START_WEB.cmd', 'START_WORKER_MANUAL.cmd')
 EXCLUDED_DOCUMENTS = {'build_info.json', 'ctete_me.md', 'export_prehledu.md', 'novinky.md', 'kontrola_funkci.md'}
 
 
@@ -133,7 +133,7 @@ def install_nssm(archive: Path, app: Path) -> None:
     (nssm / 'SOURCE.txt').write_text(provenance, encoding='utf-8')
 
 
-def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Path]:
+def package(app: Path, output: Path, nssm_archive: Path, commit: str, public_key: Path | None = None) -> list[Path]:
     if (ROOT / 'VERSION').read_text().strip() != WEB_VERSION:
         raise ValueError('VERSION and services/web_branding.py disagree.')
     for name in REQUIRED_FILES:
@@ -141,6 +141,9 @@ def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Pa
             raise FileNotFoundError(app / name)
     if not (app / '_internal').is_dir():
         raise FileNotFoundError('The complete onedir build including _internal is required.')
+    key = public_key.read_bytes() if public_key else None
+    if key is not None and len(key) != 32:
+        raise ValueError('Expected a raw 32-byte Ed25519 public key.')
     verified_nssm(nssm_archive)
     output.mkdir(parents=True, exist_ok=True)
     prefix = f'DataShip-{WEB_VERSION}-Windows-x64'
@@ -154,6 +157,8 @@ def package(app: Path, output: Path, nssm_archive: Path, commit: str) -> list[Pa
         for name in REQUIRED_FILES:
             shutil.copy2(app / name, stage / name)
         shutil.copytree(app / '_internal', stage / '_internal')
+        if key is not None:
+            (stage / 'dataship-update-public-key.bin').write_bytes(key)
         # Explicit sample, not app/config.json or .env / tasks / machine secrets.
         sample = ROOT / 'config.example.json'
         shutil.copy2(sample, stage / 'config.example.json')
@@ -174,6 +179,7 @@ def main() -> None:
     parser.add_argument('--output', type=Path, default=ROOT / 'release-dist' / WEB_VERSION)
     parser.add_argument('--nssm-archive', type=Path)
     parser.add_argument('--commit')
+    parser.add_argument('--public-key', type=Path, help='Trusted raw Ed25519 public key for the installer.')
     parser.add_argument('--install-nssm', type=Path, help='Install verified NSSM beside a local EXE build only.')
     args = parser.parse_args()
     archive = args.nssm_archive or ROOT / 'build' / f'nssm-{NSSM_VERSION}.zip'
@@ -185,7 +191,7 @@ def main() -> None:
         print(args.install_nssm / 'nssm/win64/nssm.exe')
         return
     commit = args.commit or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    for path in package(args.app, args.output, archive, commit):
+    for path in package(args.app, args.output, archive, commit, args.public_key):
         print(path)
 
 

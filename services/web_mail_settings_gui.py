@@ -1,13 +1,15 @@
 """Web settings for NSSM, JídelnaSQL warning and outgoing mail."""
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from nicegui import ui
 from env_store import DEFAULT_ENV_PATH, EnvStoreError, get_resend_api_key, set_resend_api_key
 from services.web_mail_settings import load_settings, save_settings, settings_path
-from services.web_mail_nssm import service_command, windows_admin_state, ADMIN_HELP
+from services.web_mail_nssm import query_service, service_command, windows_admin_state, ADMIN_HELP
 from services.web_path_picker import pick_local_file
+from services.web_worker_status import observed_status
 from nicegui import run
 from services.jidelnasql_warning import (
     JidelnaWarningSettings, show_jidelnasql_mail_warning,
@@ -58,31 +60,59 @@ def build_web_settings_panel(
                     nssm = ui.input("Cesta k nssm.exe", value=values["nssm_path"]).props("outlined dense").classes("grow min-w-0")
                     ui.button("Procházet…", icon="folder_open", on_click=lambda: browse(nssm, "nssm")).props('outline no-caps aria-label="Vybrat nssm.exe"').mark("browse-nssm")
                 name = ui.input("Název služby", value=values["service_name"]).props("outlined dense").classes("w-full")
-                ui.label("1. Spusťte DataShip.exe jako správce Windows. 2. Ověřte databázi a e-mail. 3. Instalujte službu. 4. Klikněte na Spustit.").classes("ui-help")
-                ui.label("Služba zajistí odesílání, i když je okno DataShipu zavřené. Používá DataShip-Worker.exe ze stejné složky.").classes("ui-help")
-                service_status = ui.label("Stav služby zatím nebyl ověřen. Klikněte na Ověřit stav.").classes("ui-help ds-service-status").props('role="status" aria-live="polite"')
+                with ui.column().classes("w-full gap-1").style("height: 9rem; overflow: auto"):
+                    installation = ui.label("Instalace: ověřuji…")
+                    service_status = ui.label("Stav: ověřuji…").props('role="status"')
+                    checked_at = ui.label("Poslední kontrola: —").classes("ui-help")
+                    diagnostics = ui.label("").classes("ui-help")
+                    worker_status = ui.label("").classes("ui-help")
+                    operation_result = ui.label("").props('role="status"')
                 busy = {"value": False}
                 service_buttons = []
+                async def refresh():
+                    status = await run.io_bound(query_service, directory)
+                    states = {"running": "běží", "stopped": "zastavena", "starting": "spouští se",
+                              "stopping": "zastavuje se", "paused": "pozastavena", "missing": "—",
+                              "error": "chyba", "unsupported": "nedostupná"}
+                    installed = {True: "nainstalovaná", False: "nenainstalovaná", None: "nezjištěna"}
+                    installation.set_text(f"Instalace: {installed[status.installed]}")
+                    service_status.set_text(f"Stav: {states[status.state]}")
+                    checked_at.set_text(datetime.now().strftime("Poslední kontrola: %d.%m.%Y %H:%M:%S"))
+                    diagnostics.set_text(status.detail)
+                    worker_status.set_text(observed_status(directory) if status.state == "running" else "")
+                    actions = {"status"}
+                    if elevated:
+                        if status.installed is False:
+                            actions.add("install")
+                        if status.installed:
+                            actions.add("remove")
+                        if status.state == "stopped":
+                            actions.update(("start", "repair"))
+                        if status.state == "running":
+                            actions.update(("stop", "restart"))
+                    for button, operation in service_buttons:
+                        button.set_enabled(not busy["value"] and operation in actions)
+
                 async def control(action: str):
-                    if busy["value"] or not allowed() or not save():
+                    if busy["value"]:
+                        return
+                    if action == "status":
+                        await refresh()
+                        return
+                    if not allowed() or not save():
                         return
                     busy["value"] = True
                     for button, _action in service_buttons:
                         button.disable()
-                    service_status.set_text("Provádím operaci služby…")
+                    operation_result.set_text("Provádím operaci služby…")
                     try:
                         result = await run.io_bound(service_command, directory, action)
-                        service_status.set_text(result)
-                        ui.notify(result, type="positive", timeout=8000)
-                    except Exception as exc:
-                        message = ("Nastavení služby nelze uložit. Ověřte právo zápisu do složky aplikace."
-                                   if isinstance(exc, OSError) and exc.errno else str(exc))
-                        service_status.set_text(message)
-                        ui.notify(message, type="negative", timeout=15000)
+                        operation_result.set_text(result)
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        operation_result.set_text(str(exc))
                     finally:
                         busy["value"] = False
-                        for button, operation in service_buttons:
-                            button.set_enabled(elevated is not False or operation == "status")
+                        await refresh()
                 with ui.row().classes("gap-2"):
                     for action, caption in (
                         ("install", "Instalovat službu"), ("start", "Spustit službu"),
@@ -117,6 +147,8 @@ def build_web_settings_panel(
                 remove_button = ui.button("Odstranit službu", icon="delete_outline", color="negative", on_click=request_removal).props("outline no-caps").mark("remove-service")
                 remove_button.set_enabled(elevated is not False)
                 service_buttons.append((remove_button, "remove"))
+                ui.timer(0.1, refresh, once=True)
+                ui.timer(15, refresh)
                 ui.label("Po přesunu DataShipu zastavené službě opravte cesty. Oprava zachová stejnou službu a sama ji nespustí.").classes("ui-help")
 
             with ui.card().classes("ds-settings-card"):

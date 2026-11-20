@@ -1,0 +1,354 @@
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+from zipfile import ZipFile
+
+import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from scripts.package_dataship_update import package
+from services import web_mail_nssm as nssm
+from services.dataship_update_package import stage_package
+
+
+@pytest.mark.parametrize('code, output, expected', [
+    (1060, b'', (False, 'missing')),
+    (5, b'', (None, 'error')),
+    (0, b'SERVICE_NAME: DataShip\n TYPE : 10 WIN32_OWN_PROCESS\n STATE : 4 RUNNING\n WIN32_EXIT_CODE : 0 (0x0)', (True, 'running')),
+    (0, b'SERVICE_NAME: DataShip\n TYPE : 10 WIN32_OWN_PROCESS\n STATE : 1 STOPPED\n WIN32_EXIT_CODE : 0 (0x0)', (True, 'stopped')),
+])
+def test_service_queries_scm_without_nssm(tmp_path, code, output, expected):
+    with patch.object(nssm, 'os', SimpleNamespace(name='nt', environ={})), \
+         patch.object(nssm, 'load_settings', return_value={'service_name': 'DataShip'}), \
+         patch.object(nssm.subprocess, 'run', return_value=SimpleNamespace(returncode=code, stdout=output)) as run:
+        status = nssm.query_service(tmp_path)
+    assert (status.installed, status.state) == expected
+    assert run.call_args.args[0][1:] == ['query', 'DataShip']
+
+
+@pytest.fixture
+def signed_zip(tmp_path):
+    app = tmp_path / 'app'
+    (app / '_internal').mkdir(parents=True)
+    for path in ('DataShip.exe', 'DataShip-Worker.exe', '_internal/runtime.dll'):
+        (app / path).write_bytes(path.encode())
+    archive = tmp_path / 'update.zip'
+    key = Ed25519PrivateKey.generate()
+    package(app, archive, '1.5.0', key)
+    return archive, key.public_key().public_bytes_raw()
+
+
+def test_signed_offline_package_stages_program_files(signed_zip, tmp_path):
+    archive, key = signed_zip
+    stage = tmp_path / 'stage'
+    assert stage_package(archive, stage, key, '1.4.0') == '1.5.0'
+    assert (stage / '_internal/runtime.dll').read_bytes() == b'_internal/runtime.dll'
+    assert not (stage / 'config.json').exists()
+
+
+def test_package_rejects_untrusted_signature_and_downgrade(signed_zip, tmp_path):
+    archive, key = signed_zip
+    with pytest.raises(ValueError, match='Podpis'):
+        stage_package(archive, tmp_path / 'stage', Ed25519PrivateKey.generate().public_key().public_bytes_raw(), '1.4.0')
+    with pytest.raises(ValueError, match='novější'):
+        stage_package(archive, tmp_path / 'stage', key, '1.5.0')
+    assert not (tmp_path / 'stage').exists()
+
+
+def test_package_rejects_modified_binary_and_cleans_stage(signed_zip, tmp_path):
+    archive, key = signed_zip
+    modified = tmp_path / 'modified.zip'
+    with ZipFile(archive) as original, ZipFile(modified, 'w') as altered:
+        for item in original.infolist():
+            altered.writestr(item, b'modified' if item.filename == 'DataShip.exe' else original.read(item))
+    stage = tmp_path / 'stage'
+    with pytest.raises(ValueError, match='součet'):
+        stage_package(modified, stage, key, '1.4.0')
+    assert not stage.exists()
+
+
+def test_github_release_reads_notes_and_downloads_signed_asset(signed_zip, tmp_path, monkeypatch):
+    import json
+    from services.dataship_update_github import GitHubReleases
+
+    archive, key = signed_zip
+    github = GitHubReleases(authenticated=True)
+
+    def get(endpoint, accept, output, maximum):
+        if endpoint.endswith('/latest'):
+            output.write(json.dumps({'tag_name': 'dataship-v1.5.0', 'body': 'Změny',
+                                     'assets': [{'name': 'DataShip-1.5.0-Windows-x64-Update.zip', 'id': 42}]}).encode())
+        else:
+            assert endpoint.endswith('/assets/42')
+            assert accept == 'application/octet-stream'
+            output.write(archive.read_bytes())
+
+    monkeypatch.setattr(github, '_get', get)
+    release = github.latest('1.4.0')
+    assert release.notes == 'Změny'
+    downloaded = tmp_path / 'downloaded.zip'
+    github.download(release, downloaded)
+    assert stage_package(downloaded, tmp_path / 'stage', key, '1.4.0') == release.version
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('accept', [False, True])
+async def test_first_launch_offers_install_once(tmp_path, monkeypatch, accept):
+    import asyncio
+    from nicegui import ui
+    from nicegui.testing.user_simulation import user_simulation
+    from services import web_first_run
+
+    class Page(web_first_run.FirstRunMixin):
+        config_path = tmp_path / 'config.json'
+        connection_ok = True
+        _startup_checked = False
+
+        def _require_admin(self, *, silent):
+            return True
+
+    page = Page()
+    monkeypatch.setattr(web_first_run, '_service_prompt_shown', False)
+    monkeypatch.setattr(web_first_run, 'query_service', lambda _: nssm.ServiceStatus(False, 'missing'))
+    monkeypatch.setattr(web_first_run, 'windows_admin_state', lambda: True)
+    actions = []
+    monkeypatch.setattr(web_first_run, 'service_command', lambda directory, action: actions.append((directory, action)))
+
+    async with user_simulation(lambda: ui.label('DataShip')) as user:
+        await user.open('/')
+        with user:
+            await page._start_first_run()
+        await user.should_see('Instalovat službu')
+        user.find('Instalovat službu' if accept else 'Nyní ne').click()
+        for _ in range(40):
+            with user:
+                dialogs = list(ui.context.client.elements.values())
+                dialogs = [item for item in dialogs if isinstance(item, ui.dialog)]
+            if len(dialogs) == 1 and not dialogs[0].value:
+                break
+            await asyncio.sleep(0.05)
+        assert len(dialogs) == 1 and not dialogs[0].value
+        with user:
+            await page._start_first_run()
+            await Page()._start_first_run()
+        for _ in range(40):
+            with user:
+                dialogs = list(ui.context.client.elements.values())
+                dialogs = [item for item in dialogs if isinstance(item, ui.dialog)]
+            if len(dialogs) == 1 and not dialogs[0].value:
+                break
+            await asyncio.sleep(0.05)
+        assert len(dialogs) == 1 and not dialogs[0].value
+    assert actions == ([(tmp_path, 'install')] if accept else [])
+
+
+@pytest.mark.parametrize('failure', [None, 'migration', 'health', 'interrupted'])
+def test_transaction_preserves_user_files_and_restores_program(tmp_path, failure):
+    from services.dataship_update_transaction import PROGRAM, apply_update, rollback_update, update_lock
+
+    app = tmp_path / 'app'
+    workspace = app / '.dataship-update'
+    stage = workspace / 'stage'
+    stage.mkdir(parents=True)
+    for name in PROGRAM:
+        (app / name).write_text('old')
+        (stage / name).write_text('new')
+    saved = ('config.json', 'planovac.json', 'web_mail_tasks.json', 'history.json', '.env', 'report.pdf')
+    for name in saved:
+        (app / name).write_text(name)
+
+    class Failed(RuntimeError):
+        pass
+
+    class Interrupted(BaseException):
+        pass
+
+    class Service:
+        status = 'running'
+        paused = False
+
+        def state(self):
+            return self.status
+
+        def pause(self):
+            self.paused = True
+
+        def drain(self):
+            assert self.paused
+
+        def stop(self):
+            self.status = 'stopped'
+
+        def start(self):
+            self.status = 'running'
+
+        def check(self, version):
+            assert self.paused
+            if failure == 'health':
+                raise Failed()
+
+        def resume(self):
+            self.paused = False
+
+    def migrate():
+        if failure == 'migration':
+            raise Failed()
+        if failure == 'interrupted':
+            raise Interrupted()
+
+    service = Service()
+    with update_lock(app):
+        with pytest.raises(RuntimeError, match='Jiná aktualizace'):
+            with update_lock(app):
+                pytest.fail('second updater entered')
+        args = (app, workspace, service, '1.5.0', lambda _: None, migrate, lambda _: None)
+        if failure == 'interrupted':
+            with pytest.raises(Interrupted):
+                apply_update(*args)
+            assert service.paused and service.status == 'stopped'
+            rollback_update(app, workspace, service)
+        elif failure:
+            with pytest.raises(Failed):
+                apply_update(*args)
+        else:
+            apply_update(*args)
+    assert not service.paused and service.status == 'running'
+    for name in saved:
+        assert (app / name).read_text() == name
+    for name in PROGRAM:
+        assert (app / name).read_text() == ('old' if failure else 'new')
+
+
+def test_worker_finishes_in_progress_report_before_drain(tmp_path, monkeypatch):
+    from datetime import datetime
+    from threading import Event, Thread
+
+    from services import web_mail_worker as worker
+    from services.web_mail_task_store import save_tasks, task_file
+    from services.web_mail_tasks import MailTask
+
+    config = tmp_path / 'config.json'
+    tasks = [MailTask.from_dict({'name': f'Přehled {i}', 'send_time': f'07:0{i}',
+                                 'recipients': ['test@example.org'], 'date_mode': 'today'})
+             for i in (1, 2)]
+    save_tasks(task_file(tmp_path), tasks)
+    entered, release = Event(), Event()
+    called = []
+
+    def dispatch(_config, task, _day):
+        called.append(task.id)
+        entered.set()
+        assert release.wait(5)
+
+    monkeypatch.setattr(worker, 'dispatch', dispatch)
+    thread = Thread(target=worker.tick, args=(config, datetime(2026, 11, 20, 9)))
+    thread.start()
+    try:
+        assert entered.wait(5)
+        (tmp_path / worker.UPDATE_PAUSE).write_text('update-in-progress')
+        assert worker.load_state(worker.state_path(config)) == {}
+    finally:
+        release.set()
+        thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert called == [tasks[0].id]
+    assert worker.load_state(worker.state_path(config)) == {tasks[0].id: '2026-11-20'}
+
+
+@pytest.mark.asyncio
+async def test_gui_waits_for_running_delivery_and_refuses_new_jobs(monkeypatch):
+    import asyncio
+    from services import web_report_jobs
+
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def io_bound(*_args):
+        started.set()
+        await finish.wait()
+        return 'delivered'
+
+    monkeypatch.setattr(web_report_jobs.run, 'io_bound', io_bound)
+    job = asyncio.create_task(web_report_jobs.run_report_job(lambda: None))
+    await started.wait()
+    maintenance = asyncio.create_task(web_report_jobs.pause_report_jobs())
+    try:
+        await asyncio.sleep(0)
+        assert not maintenance.done()
+        with pytest.raises(RuntimeError, match='pozastavené'):
+            await web_report_jobs.run_report_job(lambda: None)
+        finish.set()
+        assert await job == 'delivered'
+        assert await maintenance
+    finally:
+        finish.set()
+        await maintenance
+        web_report_jobs.resume_report_jobs()
+
+
+def test_signed_package_with_incompatible_schema_is_rejected(signed_zip, tmp_path):
+    import json
+    from services.dataship_update_package import MANIFEST, SIGNATURE
+
+    archive, _ = signed_zip
+    key = Ed25519PrivateKey.generate()
+    incompatible = tmp_path / 'incompatible.zip'
+    with ZipFile(archive) as original, ZipFile(incompatible, 'w') as changed:
+        manifest = json.loads(original.read(MANIFEST))
+        manifest['data_schema'] = 2
+        data = json.dumps(manifest).encode('utf-8')
+        changed.writestr(MANIFEST, data)
+        changed.writestr(SIGNATURE, key.sign(data))
+        for name in manifest['files']:
+            changed.writestr(name, original.read(name))
+    with pytest.raises(ValueError, match='kompatibilní'):
+        stage_package(incompatible, tmp_path / 'stage', key.public_key().public_bytes_raw(), '1.4.0')
+    assert not (tmp_path / 'stage').exists()
+
+
+def test_configuration_snapshot_is_protected_before_writing(tmp_path, monkeypatch):
+    import base64
+    import json
+
+    import dataship_updater as updater
+
+    config = tmp_path / 'config.json'
+    config.write_bytes(b'settings')
+    backup = tmp_path / 'backup'
+    backup.mkdir()
+
+    def protect(payload, *, flags):
+        assert flags == 1
+        data = json.loads(payload)
+        assert data['format'] == 1
+        assert base64.b64decode(data['files']['config.json']) == b'settings'
+        return 'protected-value'
+
+    monkeypatch.setattr(updater, '_dpapi_encrypt_machine', protect)
+    updater.snapshot_settings(config, backup)
+    assert config.read_bytes() == b'settings'
+    assert json.loads((backup / 'settings.dpapi.json').read_text()) == {'protected': 'protected-value'}
+
+
+@pytest.mark.parametrize('valid', [True, False])
+def test_activity_schema_migration_is_transactional_and_preserves_history(tmp_path, valid):
+    import sqlite3
+    from contextlib import closing
+
+    from services.web_activity import CREATE_EVENTS, migrate_activity, read_events
+
+    folder = tmp_path / 'logy'
+    folder.mkdir()
+    path = folder / 'activity.sqlite3'
+    with closing(sqlite3.connect(path)) as db, db:
+        db.execute(CREATE_EVENTS if valid else 'CREATE TABLE events (obsolete TEXT)')
+        if valid:
+            db.execute("INSERT INTO events(message) VALUES ('historie')")
+    if valid:
+        migrate_activity(tmp_path)
+        migrate_activity(tmp_path)
+        assert read_events(tmp_path)[0]['message'] == 'historie'
+    else:
+        with pytest.raises(sqlite3.OperationalError):
+            migrate_activity(tmp_path)
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute('PRAGMA user_version').fetchone() == (int(valid),)

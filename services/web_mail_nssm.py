@@ -158,6 +158,46 @@ def ensure_scheduler_running(config_directory: Path) -> ServiceReadiness:
             return ServiceReadiness(False, f'Automatické spuštění úlohy zatím není zajištěné. {exc}')
 
 
+@dataclass(frozen=True)
+class ServiceStatus:
+    installed: bool | None
+    state: str
+    detail: str = ''
+
+
+def query_service(config_directory: Path, *, expected_name: str | None = None) -> ServiceStatus:
+    """Query Windows independently of NSSM availability and worker heartbeats."""
+    if os.name != 'nt':
+        return ServiceStatus(None, 'unsupported', 'Správa služby je dostupná ve Windows.')
+    try:
+        name = str(load_settings(settings_path(config_directory)).get('service_name', '')).strip()
+        if expected_name is not None and name != expected_name:
+            raise ValueError('Název služby se během operace změnil.')
+        if not re.fullmatch(r'[A-Za-z0-9_-]+', name):
+            raise ValueError('Neplatný název služby.')
+        sc = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' / 'sc.exe'
+        result = subprocess.run([str(sc), 'query', name], capture_output=True, timeout=10,
+                                stdin=subprocess.DEVNULL, check=False,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if result.returncode == 1060:
+            return ServiceStatus(False, 'missing', f'Služba {name} není nainstalovaná.')
+        if result.returncode:
+            return ServiceStatus(None, 'error', service_error_message(
+                decode_nssm_output(getattr(result, "stdout", None)), code=result.returncode))
+        output = decode_nssm_output(result.stdout)
+        # SCM state codes are invariant. The state field follows the service type.
+        fields = re.findall(r'^\s*[^:\r\n]+:\s*([0-9]+)\b', output, flags=re.MULTILINE)
+        states = {'1': 'stopped', '2': 'starting', '3': 'stopping', '4': 'running',
+                  '5': 'starting', '6': 'stopping', '7': 'paused'}
+        state = states.get(fields[1], 'error') if len(fields) >= 2 else 'error'
+        detail = f'Služba {name}'
+        if state == 'error' or state == 'paused' or (state == 'stopped' and len(fields) > 2 and fields[2] != '0'):
+            detail += ' · ověřte logy/web_mail_worker.log a konfiguraci služby.'
+        return ServiceStatus(True, state, detail)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        return ServiceStatus(None, 'error', str(exc))
+
+
 def scheduler_installation_notice(config_directory: Path) -> str:
     """Read service registration without starting or modifying the scheduler."""
     if os.name != 'nt':

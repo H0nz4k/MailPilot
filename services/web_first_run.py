@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 from nicegui import run, ui
-from services.web_mail_nssm import scheduler_installation_notice
+from services.web_mail_nssm import ADMIN_HELP, query_service, service_command, windows_admin_state
+from threading import Lock
+
+_service_prompt_lock = Lock()
+_service_prompt_shown = False
 
 
 def database_error_message(error: Exception) -> str:
@@ -38,6 +42,42 @@ class FirstRunMixin:
                 self.setup_later = ui.button('Později', on_click=self.database_setup_dialog.close).props('flat no-caps')
                 self.setup_verify = ui.button('Ověřit a pokračovat', icon='cable', on_click=self._verify_database_setup).props('no-caps')
 
+    def _offer_service_install(self) -> bool:
+        global _service_prompt_shown
+        with _service_prompt_lock:
+            if _service_prompt_shown:
+                return False
+            _service_prompt_shown = True
+        with ui.dialog() as dialog, ui.card().classes('ds-mail-dialog'):
+            ui.label('Nainstalovat službu DataShip?').classes('ds-dialog-title')
+            ui.label('Služba zpracovává naplánované přehledy i při zavřeném okně.')
+            feedback = ui.label('').props('role="status"')
+
+            async def install():
+                if not windows_admin_state():
+                    feedback.set_text(ADMIN_HELP)
+                    return
+                if not self._require_admin(silent=True):
+                    self._admin_target_section = 'mail_settings'
+                    self.open_admin_dialog()
+                    feedback.set_text('Po přihlášení potvrďte instalaci služby.')
+                    return
+                button.disable()
+                try:
+                    await run.io_bound(service_command, self.config_path.parent, 'install')
+                    dialog.close()
+                except (OSError, RuntimeError, ValueError) as exc:
+                    feedback.set_text(str(exc))
+                finally:
+                    button.enable()
+
+            with ui.row().classes('w-full justify-end'):
+                ui.button('Nyní ne', on_click=dialog.close).props('flat no-caps')
+                button = ui.button('Instalovat službu', on_click=install).props('no-caps')
+        dialog.on('hide', self._continue_database_setup)
+        dialog.open()
+        return True
+
     def _schedule_first_run(self) -> None:
         if not self._startup_checked and not getattr(self, "_startup_timer", None):
             self._startup_timer = ui.timer(0.1, self._start_first_run, once=True)
@@ -47,12 +87,12 @@ class FirstRunMixin:
         if self._startup_checked:
             return
         self._startup_checked = True
-        try:
-            notice = await run.io_bound(scheduler_installation_notice, self.config_path.parent)
-        except (OSError, ValueError):
-            notice = "Stav plánovače se nepodařilo ověřit. Zkontrolujte službu v nastavení."
-        if notice:
-            ui.notify(notice, type="warning", timeout=0, close_button="Zavřít", multi_line=True)
+        service = await run.io_bound(query_service, self.config_path.parent)
+        if service.installed is False and self._offer_service_install():
+            return
+        await self._continue_database_setup()
+
+    async def _continue_database_setup(self) -> None:
         if self.connection_ok:
             return
         if self._admin_password_is_set() and self._stored_password():

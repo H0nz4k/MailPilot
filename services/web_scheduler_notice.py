@@ -41,8 +41,6 @@ class SchedulerServiceNotice:
             return
         self.show('Úloha je uložená. ' + result.message, 'positive' if result.running else 'warning')
         self.retry.set_visibility(not result.running)
-        if not result.running:
-            ui.notify(result.message, type='warning', timeout=15000)
 
     def show(self, message: str, state: str):
         self.container.classes(remove='ds-scheduler-notice--pending ds-scheduler-notice--positive ds-scheduler-notice--warning',

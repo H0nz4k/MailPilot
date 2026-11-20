@@ -20,6 +20,7 @@ from services.web_windowed_runtime import prepare_windowed_streams
 prepare_windowed_streams(application_directory())
 
 from nicegui import app, native, run, ui
+from services.web_report_jobs import run_report_job
 
 from automaticky_export import main as automatic_export_main
 from uzaverka import main as monthly_closing_main
@@ -1707,6 +1708,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         ("categories", "Kategorie denního stavu", "checklist"),
         ("mail_settings", "Služba a odesílání", "outgoing_mail"),
         ("navigation", "Hlavní nabídka", "view_list"),
+        ("updates", "Aktualizace", "system_update"),
         ("appearance", "Vzhled", "palette"),
         ("cli", "Bez GUI", "terminal"),
     )
@@ -1732,6 +1734,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                         self.config_path.parent, require_admin=self._require_admin,
                         before_lock=self._admin_before_lock,
                     )
+                with ui.tab_panel("updates"):
+                    from services.web_update_gui import build_update_panel
+                    build_update_panel(self.config_path, self._require_admin)
                 with ui.tab_panel("navigation"):
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):
@@ -2664,7 +2669,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.pdf_status.set_text("Načítám data a vytvářím PDF…")
         self.set_status("Probíhá tvorba PDF.")
         try:
-            path = await run.io_bound(
+            path = await run_report_job(
                 self._create_pdf, self._selected_daily_meal_type(), categories, allowed
             )
         except Exception as exc:
@@ -2723,7 +2728,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.special_status.set_text("Načítám přihlášky a vytvářím podklad Z 17-01…")
         self.set_status("Probíhá tvorba podkladu Z 17-01.")
         try:
-            path = await run.io_bound(self._create_z17, year)
+            path = await run_report_job(self._create_z17, year)
         except Exception as exc:
             self.special_status.set_text(f"Podklad Z 17-01 selhal: {exc}")
             self.set_status("Podklad Z 17-01 se nepodařilo vytvořit.")
@@ -2810,7 +2815,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.mail_status.set_text("Kontroluji data a připravuji mail…")
         self.set_status("Probíhá příprava mailového exportu.")
         try:
-            result = await run.io_bound(
+            result = await run_report_job(
                 self._send_mail_worker,
                 recipients,
                 api_key,
@@ -2988,6 +2993,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Kontrola PDF selhala: {exc}", file=sys.stderr)
             return 2
         return 0
+    if getattr(sys, 'frozen', False):
+        from services.dataship_update_transaction import JOURNAL, WORKSPACE
+        if (application_directory() / WORKSPACE / JOURNAL).exists():
+            print('Probíhá nebo byla přerušena aktualizace DataShipu. Vyčkejte na dokončení nebo použijte DataShip-Updater.exe --recover.',
+                  file=sys.stderr)
+            return 2
     if args.export_report is not None or args.export_report_id is not None:
         from services.web_saved_report_cli import run_saved_report_export
         return run_saved_report_export(args)

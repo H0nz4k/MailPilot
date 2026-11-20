@@ -7,6 +7,33 @@ import re
 import sqlite3
 
 LOG = logging.getLogger(__name__)
+ACTIVITY_SCHEMA = 1
+CREATE_EVENTS = ('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, time TEXT, '
+                 'kind TEXT, task_id TEXT, task_name TEXT, message TEXT, report_date TEXT)')
+
+
+def _migrate(db):
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    if version == ACTIVITY_SCHEMA:
+        return
+    db.execute('BEGIN IMMEDIATE')
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    if version == ACTIVITY_SCHEMA:
+        return
+    if version != 0:
+        raise sqlite3.OperationalError(f'Nepodporovaná verze databáze historie ({version}).')
+    db.execute(CREATE_EVENTS)
+    # v0 was the same unversioned table. Validate an existing table before
+    # marking it v1, without rewriting rows or preventing an older GUI rollback.
+    db.execute('SELECT id,time,kind,task_id,task_name,message,report_date FROM events LIMIT 0')
+    db.execute('PRAGMA user_version = 1')
+
+
+def migrate_activity(directory):
+    path = Path(directory) / 'logy/activity.sqlite3'
+    if path.is_file():
+        with closing(sqlite3.connect(path, timeout=5)) as db, db:
+            _migrate(db)
 
 
 def friendly_error(error):
@@ -37,7 +64,7 @@ def record_event(directory, kind, message, *, task_id=None, task_name='', report
         folder = Path(directory) / 'logy'
         folder.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(folder / 'activity.sqlite3', timeout=5)) as db, db:
-            db.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, time TEXT, kind TEXT, task_id TEXT, task_name TEXT, message TEXT, report_date TEXT)')
+            _migrate(db)
             db.execute('INSERT INTO events(time,kind,task_id,task_name,message,report_date) VALUES(?,?,?,?,?,?)',
                        (datetime.now().isoformat(timespec='seconds'), kind, task_id, task_name, message,
                         report_date.isoformat() if report_date else None))

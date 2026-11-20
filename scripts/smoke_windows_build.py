@@ -1,6 +1,7 @@
 """Run real frozen EXEs with isolated settings and no configured recipients/tasks."""
 from pathlib import Path
 import argparse
+import base64
 import json
 import os
 import shutil
@@ -29,7 +30,78 @@ def stop(process):
         process.kill()
 
 
-def smoke_service(app: Path, tmp: Path) -> None:
+def smoke_update(app: Path, config: Path, test_output: Path | None) -> None:
+    """Exercise real binaries and service in an isolated, test-signed transaction."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from credential_store import _dpapi_decrypt_machine
+    from dataship_updater import Scheduler, probe, snapshot_settings
+    from scripts.package_dataship_update import package
+    from services.dataship_update_package import stage_package
+    from services.dataship_update_transaction import WORKSPACE, apply_update, preserve_backup, update_lock
+    from services.web_activity import migrate_activity
+    from services.web_branding import WEB_VERSION
+
+    before = config.read_bytes()
+    workspace = app / WORKSPACE
+    workspace.mkdir()
+    archive = workspace / 'smoke-update.zip'
+    key = Ed25519PrivateKey.generate()
+    package(app, archive, WEB_VERSION, key)
+    candidate = stage_package(archive, workspace / 'stage', key.public_key().public_bytes_raw(), '0.0.0')
+    try:
+        service = Scheduler(app, config)
+    except RuntimeError:
+        from services.web_mail_nssm import _run_nssm
+        name = f'DataShipBuildSmoke_{os.getpid()}'
+        nssm = str(app / 'nssm/win64/nssm.exe')
+        args = _run_nssm([nssm, 'get', name, 'AppParameters'])
+        print(f'Isolated smoke worker configuration: expected {str(config)!r}, registered {args!r}')
+        raise
+    with update_lock(app):
+        apply_update(app, workspace, service, candidate,
+                     lambda version: probe(app, workspace / 'version.txt', version),
+                     lambda: migrate_activity(config.parent), print,
+                     snapshot=lambda backup: snapshot_settings(config, backup))
+        backup = preserve_backup(app, workspace)
+        assert (backup / 'settings.dpapi.json').is_file()
+    assert service.state() == 'running'
+    assert config.read_bytes() == before
+    token = json.loads((backup / 'settings.dpapi.json').read_text(encoding='utf-8'))['protected']
+    settings = json.loads(_dpapi_decrypt_machine(token, flags=1))
+    assert base64.b64decode(settings['files']['config.json']) == before
+    if test_output is not None:
+        test_output.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(archive, test_output / f'DataShip-{WEB_VERSION}-Windows-x64-Update-TEST.zip')
+        (test_output / 'dataship-update-public-key.bin').write_bytes(key.public_key().public_bytes_raw())
+        (test_output / 'README.txt').write_text(
+            'Windows smoke-test package with an ephemeral test signing key. Use only in an isolated test installation.\n',
+            encoding='utf-8')
+    shutil.rmtree(workspace)
+    print('Verified actual Windows signed payload, NSSM drain, binary replacement and restart.')
+
+
+def smoke_update_with_scheduled_task(app: Path, config: Path, test_output: Path | None) -> None:
+    task = f'DataShipUpdateSmoke_{os.getpid()}'
+    register = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/d /c exit 0'; "
+        "$settings = New-ScheduledTaskSettingsSet -Disable; "
+        "Register-ScheduledTask -TaskName $env:DATASHIP_SMOKE_TASK -Action $action "
+        "-Settings $settings -User 'SYSTEM' | Out-Null"
+    )
+    subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', register],
+                   env={**os.environ, 'DATASHIP_SMOKE_TASK': task}, check=True, timeout=30)
+    query = ['schtasks.exe', '/Query', '/TN', task, '/XML']
+    try:
+        before = subprocess.check_output(query, timeout=30)
+        smoke_update(app, config, test_output)
+        assert subprocess.check_output(query, timeout=30) == before
+    finally:
+        subprocess.run(['schtasks.exe', '/Delete', '/TN', task, '/F'], check=True, timeout=30)
+
+
+def smoke_service(app: Path, tmp: Path, test_update_output: Path | None = None) -> None:
     from services.web_mail_nssm import _run_nssm, require_service_rights
     from services import web_mail_nssm as service_api
     from services.web_mail_settings import DEFAULTS, save_settings, settings_path
@@ -90,6 +162,7 @@ def smoke_service(app: Path, tmp: Path) -> None:
                 raise RuntimeError('Repaired NSSM service did not start in 90 seconds.')
             time.sleep(0.5)
         assert _run_nssm(base + ['status', name]).strip() == 'SERVICE_RUNNING'
+        smoke_update_with_scheduled_task(app, config, test_update_output)
     finally:
         if installed:
             try:
@@ -103,11 +176,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, default=ROOT / 'dist-web/DataShip')
     parser.add_argument('--service', action='store_true', help='Also install/start/remove an isolated temporary service; administrator required.')
+    parser.add_argument('--test-update-output', type=Path)
     args = parser.parse_args()
     app = args.app.resolve()
     verify(app)
     with tempfile.TemporaryDirectory(prefix='dataship-smoke-') as tmp:
-        tmp = Path(tmp)
+        tmp = Path(tmp).resolve()
         config = tmp / 'config.json'
         shutil.copy2(ROOT / 'config.example.json', config)
         (tmp / 'web_mail_tasks.json').write_text('{"version":1,"tasks":[]}', encoding='utf-8')
@@ -168,7 +242,9 @@ def main():
             finally:
                 stop(worker)
         if args.service:
-            smoke_service(app, tmp)
+            isolated = tmp / 'isolated-app'
+            shutil.copytree(app, isolated)
+            smoke_service(isolated, tmp, args.test_update_output)
     print('Frozen GUI HTTP, worker startup and both version checks passed. No mail/tasks used.')
 
 

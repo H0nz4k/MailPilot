@@ -2,7 +2,8 @@
 from base64 import b64encode
 from uuid import uuid4
 
-from nicegui import run, ui
+from nicegui import ui
+from services.web_report_jobs import run_report_job
 
 from services.pdf_layout import DEFAULT_LAYOUT, SECTIONS, normalize_layout, normalize_page_breaks
 from services.pdf_templates import PdfTemplate, load_templates, save_template, template_file, normalize_template_settings
@@ -220,8 +221,8 @@ class PdfDesigner:
         try:
             config = self._preview_config()
             example = self.source.value == "example"
-            data = await run.io_bound(generate_preview, config, example=example)
-            png, count = await run.io_bound(render_preview_page, data, 0)
+            data = await run_report_job(generate_preview, config, example=example)
+            png, count = await run_report_job(render_preview_page, data, 0)
             if revision != self._revision:
                 return
             self._pdf = data
@@ -255,7 +256,7 @@ class PdfDesigner:
             number = self.page.value
             if number is None or int(number) != number:
                 raise ValueError("Zadejte celé číslo stránky.")
-            png, count = await run.io_bound(render_preview_page, self._pdf, int(number) - 1)
+            png, count = await run_report_job(render_preview_page, self._pdf, int(number) - 1)
             if revision == self._render_revision:
                 self._show_page(png, int(number), count)
         except Exception as exc:

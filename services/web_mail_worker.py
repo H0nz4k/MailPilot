@@ -34,6 +34,7 @@ from stravovaci_sestava import load_config, fetch_report, create_pdf
 
 from services.web_activity import record_event, friendly_error
 from services.web_worker_status import write_runtime
+from services.dataship_update_transaction import UPDATE_PAUSE
 
 LOG = logging.getLogger("mailpilot.web_worker")
 STOP = False
@@ -149,12 +150,23 @@ def save_state(path: Path, completed: dict) -> None:
         tmp.unlink(missing_ok=True)
 
 
+
+
+def pause_request(config_path: Path) -> str:
+    try:
+        return (config_path.parent / UPDATE_PAUSE).read_text(encoding='ascii')
+    except FileNotFoundError:
+        return ''
+
+
 def tick(config_path: Path, now: datetime | None = None) -> None:
     now = now or datetime.now()
     completed_path = state_path(config_path)
     completed = load_state(completed_path)
     tasks = load_tasks(task_file(config_path.parent))
     for task in tasks:
+        if STOP or pause_request(config_path):
+            return
         if not task.enabled or task.id in completed and completed[task.id] == now.date().isoformat():
             continue
         if getattr(task, "first_send_date", None) and now.date() < date.fromisoformat(task.first_send_date):
@@ -233,8 +245,12 @@ def main() -> int:
         except Exception:
             LOG.exception("Scheduler tick failed")
             record_event(config_path.parent, "error", "Plánovač nemohl načíst nebo zpracovat úlohy. Zkontrolujte konfiguraci a technický log.")
-        runtime_status(config_path, "waiting")
-        time.sleep(args.interval)
+        request = pause_request(config_path)
+        runtime_status(config_path, "paused" if request else "waiting", request or None)
+        for _ in range(args.interval):
+            time.sleep(1)
+            if STOP or pause_request(config_path) != request:
+                break
     LOG.info("DataShip scheduler stopped")
     heartbeat_stop.set()
     heartbeat_thread.join(timeout=2)
