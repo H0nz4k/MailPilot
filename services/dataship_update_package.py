@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 MANIFEST = 'manifest.json'
 SIGNATURE = 'manifest.sig'
 TARGET = 'dataship-windows-x64'
+DATA_SCHEMA = 1
 REQUIRED = {'DataShip.exe', 'DataShip-Worker.exe'}
 MAX_EXPANDED = 1024 ** 3
 MAX_MANIFEST = 4 * 1024 ** 2
@@ -49,6 +50,8 @@ def _unique_object(pairs):
 
 def stage_package(archive: Path, destination: Path, public_key: bytes, installed: str) -> str:
     """Expand only authenticated program files into a new private staging directory."""
+    if archive.stat().st_size > MAX_EXPANDED:
+        raise ValueError('Aktualizační ZIP překračuje limit velikosti.')
     with ZipFile(archive) as package:
         entries = package.infolist()
         names = [item.filename.casefold() for item in entries]
@@ -62,7 +65,8 @@ def stage_package(archive: Path, destination: Path, public_key: bytes, installed
         except InvalidSignature as exc:
             raise ValueError('Podpis aktualizace se nepodařilo ověřit.') from exc
         metadata = json.loads(manifest, object_pairs_hook=_unique_object)
-        if not isinstance(metadata, dict) or metadata.get('format') != 1 or metadata.get('target') != TARGET:
+        if (not isinstance(metadata, dict) or metadata.get('format') != 1
+                or metadata.get('target') != TARGET or metadata.get('data_schema') != DATA_SCHEMA):
             raise ValueError('Balíček není kompatibilní s touto instalací.')
         version, files = metadata.get('version'), metadata.get('files')
         if not isinstance(version, str) or version_key(version) <= version_key(installed):

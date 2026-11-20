@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from nicegui import run, ui
+from nicegui import ui
+from services.web_report_jobs import run_report_job
 
 import ui_widgets as w
 from services.closing import MONTH_NAMES, previous_period, run_closing
@@ -101,7 +102,7 @@ class ClosingDesignMixin:
             self.closing_generate_button.disable()
             self.closing_status.set_text("Načítám data a vytvářím sestavy…")
             await self._persist_settings()
-            result = await run.io_bound(export_closing_preview, self.config_path, year=year, month=month)
+            result = await run_report_job(export_closing_preview, self.config_path, year=year, month=month)
         except Exception as exc:
             self.closing_status.set_text(f"Sestavy se nepodařilo vytvořit: {exc}")
             ui.notify(str(exc), type="negative")

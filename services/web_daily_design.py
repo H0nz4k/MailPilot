@@ -6,6 +6,7 @@ from services.web_meal_types import meal_filter_values, meal_filter_caption
 from uuid import uuid4
 
 from nicegui import run, ui
+from services.web_report_jobs import run_report_job
 
 import ui_widgets as w
 from services.web_daily_profiles import DailyProfile, load_profiles, profile_file, save_profile
@@ -509,7 +510,7 @@ class DailyDesignMixin(ReportWizardMixin):
             config = AppConfig(database=database, report_date=day, categories=categories,
                 meal_type=meal_type, delivery_types=tuple(self.delivery_type_select.value or []), language=str(self.language_input.value or "česky"),
                 menu_list_number=int(self.menu_number.value or 1), show_diner_list=False, collection_status=status)
-            report = await run.io_bound(self._fetch_daily_summary, config)
+            report = await run_report_job(self._fetch_daily_summary, config)
         except Exception as exc:
             if revision == self._daily_summary_revision:
                 self.daily_summary_status.set_text(f"Souhrn není dostupný: {exc}")

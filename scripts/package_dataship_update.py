@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from services.dataship_update_package import MANIFEST, REQUIRED, SIGNATURE, TARGET, payload_path, version_key
+from services.dataship_update_package import DATA_SCHEMA, MANIFEST, REQUIRED, SIGNATURE, TARGET, payload_path, version_key
 
 
 def package(app: Path, output: Path, version: str, key: Ed25519PrivateKey) -> None:
@@ -26,7 +26,7 @@ def package(app: Path, output: Path, version: str, key: Ed25519PrivateKey) -> No
         with (app / name).open('rb') as stream:
             digests[name] = hashlib.file_digest(stream, 'sha256').hexdigest()
     manifest = json.dumps({'format': 1, 'target': TARGET, 'version': version,
-                           'files': digests}, sort_keys=True).encode('utf-8')
+                           'data_schema': DATA_SCHEMA, 'files': digests}, sort_keys=True).encode('utf-8')
     with ZipFile(output, 'x', compression=ZIP_DEFLATED) as archive:
         archive.writestr(MANIFEST, manifest)
         archive.writestr(SIGNATURE, key.sign(manifest))

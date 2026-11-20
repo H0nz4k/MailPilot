@@ -20,6 +20,7 @@ from services.web_windowed_runtime import prepare_windowed_streams
 prepare_windowed_streams(application_directory())
 
 from nicegui import app, native, run, ui
+from services.web_report_jobs import run_report_job
 
 from automaticky_export import main as automatic_export_main
 from uzaverka import main as monthly_closing_main
@@ -2668,7 +2669,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.pdf_status.set_text("Načítám data a vytvářím PDF…")
         self.set_status("Probíhá tvorba PDF.")
         try:
-            path = await run.io_bound(
+            path = await run_report_job(
                 self._create_pdf, self._selected_daily_meal_type(), categories, allowed
             )
         except Exception as exc:
@@ -2727,7 +2728,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.special_status.set_text("Načítám přihlášky a vytvářím podklad Z 17-01…")
         self.set_status("Probíhá tvorba podkladu Z 17-01.")
         try:
-            path = await run.io_bound(self._create_z17, year)
+            path = await run_report_job(self._create_z17, year)
         except Exception as exc:
             self.special_status.set_text(f"Podklad Z 17-01 selhal: {exc}")
             self.set_status("Podklad Z 17-01 se nepodařilo vytvořit.")
@@ -2814,7 +2815,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         self.mail_status.set_text("Kontroluji data a připravuji mail…")
         self.set_status("Probíhá příprava mailového exportu.")
         try:
-            result = await run.io_bound(
+            result = await run_report_job(
                 self._send_mail_worker,
                 recipients,
                 api_key,

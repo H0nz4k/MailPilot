@@ -181,23 +181,38 @@ def main() -> int:
     parser.add_argument('--private', action='store_true')
     parser.add_argument('--recover', action='store_true')
     parser.add_argument('--wait-for-gui', action='store_true')
+    parser.add_argument('--reopen', action='store_true')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Aktualizátor je určený pro Windows.')
     if not args.recover and args.public_key is None:
         parser.error('--public-key je povinný pro ověření aktualizace.')
+    app = args.installation.resolve()
+    config = (args.config or app / 'config.json').resolve()
+    outcome = 0
     try:
         print(f'{datetime.now():%Y-%m-%d %H:%M:%S} · DataShip Updater', flush=True)
-        app = args.installation.resolve()
-        config = (args.config or app / 'config.json').resolve()
         if config.name.casefold() != 'config.json' or app / '_internal' in config.parents:
             raise ValueError('Aktualizace vyžaduje konfigurační soubor config.json.')
         run_update(app, config, args.public_key.read_bytes() if args.public_key else None,
                    args.zip, args.repository, args.private, args.recover, args.wait_for_gui, args.tag)
     except Exception as exc:
         print(f'Aktualizace selhala: {exc}', file=sys.stderr)
-        return 2
-    return 0
+        outcome = 2
+    if args.reopen:
+        try:
+            with update_lock(app):
+                if not (app / WORKSPACE / JOURNAL).exists():
+                    subprocess.Popen(
+                        [str(app / 'DataShip.exe'), '--browser', '--config', str(config)], cwd=app,
+                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        env={**os.environ, 'PYINSTALLER_RESET_ENVIRONMENT': '1'},
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
+        except (OSError, RuntimeError) as exc:
+            print(f'DataShip se nepodařilo znovu otevřít: {exc}', file=sys.stderr)
+            outcome = 2
+    return outcome
 
 
 if __name__ == '__main__':

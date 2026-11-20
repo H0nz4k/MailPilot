@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 
 from nicegui import run, ui
+from services.web_report_jobs import run_report_job
 
 from services.collection_status import COLLECTION_OPTIONS, COLLECTION_TITLES
 from services.config_io import parse_czech_date, open_document
@@ -112,7 +113,7 @@ def build_collection_panel(owner):
             config = snapshot()
             create_button.disable(); send_button.disable()
             status_line.set_text("Načítám odběry a vytvářím PDF…")
-            path = await run.io_bound(build_pdf, config)
+            path = await run_report_job(build_pdf, config)
             status_line.set_text(f"PDF vytvořeno: {path}")
             owner.last_pdf = path
             try:
@@ -152,7 +153,7 @@ def build_collection_panel(owner):
                 else:
                     send_pdf_via_mailsender(addresses, subject, body, path, api_key=api_key, sender_email=sender)
                 return path
-            path = await run.io_bound(deliver)
+            path = await run_report_job(deliver)
             owner.last_pdf = path
             status_line.set_text(f"Odesláno {len(addresses)} příjemcům. PDF: {path}")
         except Exception as exc:

@@ -253,3 +253,33 @@ def test_worker_finishes_in_progress_report_before_drain(tmp_path, monkeypatch):
     assert not thread.is_alive()
     assert called == [tasks[0].id]
     assert worker.load_state(worker.state_path(config)) == {tasks[0].id: '2026-11-20'}
+
+
+@pytest.mark.asyncio
+async def test_gui_waits_for_running_delivery_and_refuses_new_jobs(monkeypatch):
+    import asyncio
+    from services import web_report_jobs
+
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def io_bound(*_args):
+        started.set()
+        await finish.wait()
+        return 'delivered'
+
+    monkeypatch.setattr(web_report_jobs.run, 'io_bound', io_bound)
+    job = asyncio.create_task(web_report_jobs.run_report_job(lambda: None))
+    await started.wait()
+    maintenance = asyncio.create_task(web_report_jobs.pause_report_jobs())
+    try:
+        await asyncio.sleep(0)
+        assert not maintenance.done()
+        with pytest.raises(RuntimeError, match='pozastavené'):
+            await web_report_jobs.run_report_job(lambda: None)
+        finish.set()
+        assert await job == 'delivered'
+        assert await maintenance
+    finally:
+        finish.set()
+        await maintenance
+        web_report_jobs.resume_report_jobs()
