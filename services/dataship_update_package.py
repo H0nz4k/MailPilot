@@ -9,9 +9,6 @@ import stat
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
 MANIFEST = 'manifest.json'
 SIGNATURE = 'manifest.sig'
 TARGET = 'dataship-windows-x64'
@@ -50,6 +47,9 @@ def _unique_object(pairs):
 
 def stage_package(archive: Path, destination: Path, public_key: bytes, installed: str) -> str:
     """Expand only authenticated program files into a new private staging directory."""
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
     if archive.stat().st_size > MAX_EXPANDED:
         raise ValueError('Aktualizační ZIP překračuje limit velikosti.')
     with ZipFile(archive) as package:

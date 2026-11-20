@@ -283,3 +283,23 @@ async def test_gui_waits_for_running_delivery_and_refuses_new_jobs(monkeypatch):
         finish.set()
         await maintenance
         web_report_jobs.resume_report_jobs()
+
+
+def test_signed_package_with_incompatible_schema_is_rejected(signed_zip, tmp_path):
+    import json
+    from services.dataship_update_package import MANIFEST, SIGNATURE
+
+    archive, _ = signed_zip
+    key = Ed25519PrivateKey.generate()
+    incompatible = tmp_path / 'incompatible.zip'
+    with ZipFile(archive) as original, ZipFile(incompatible, 'w') as changed:
+        manifest = json.loads(original.read(MANIFEST))
+        manifest['data_schema'] = 2
+        data = json.dumps(manifest).encode('utf-8')
+        changed.writestr(MANIFEST, data)
+        changed.writestr(SIGNATURE, key.sign(data))
+        for name in manifest['files']:
+            changed.writestr(name, original.read(name))
+    with pytest.raises(ValueError, match='kompatibilní'):
+        stage_package(incompatible, tmp_path / 'stage', key.public_key().public_bytes_raw(), '1.4.0')
+    assert not (tmp_path / 'stage').exists()
