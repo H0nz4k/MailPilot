@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import datetime
 import json
 import os
@@ -13,12 +14,13 @@ import sys
 import time
 from uuid import uuid4
 
+from credential_store import _dpapi_encrypt_machine
 from runtime_paths import application_directory
-from scripts.deploy_web_build import check_executable
+from scripts.deploy_web_build import SETTINGS, check_executable
 from services.dataship_update_github import GitHubReleases
 from services.dataship_update_package import stage_package
 from services.dataship_update_transaction import (
-    JOURNAL, UPDATE_PAUSE, WORKSPACE, apply_update, preserve_backup, rollback_update, update_lock,
+    JOURNAL, UPDATE_PAUSE, WORKSPACE, apply_update, journal_write, preserve_backup, rollback_update, update_lock,
 )
 from services.web_mail_nssm import query_service, require_service_rights, _run_nssm
 from services.web_mail_settings import load_settings, settings_path
@@ -93,6 +95,18 @@ class Scheduler:
                    'Nový worker nepotvrdil funkčnost.')
 
 
+def snapshot_settings(config: Path, backup: Path) -> None:
+    """Take a current-Windows-user DPAPI snapshot without writing plaintext copies."""
+    files = {}
+    for name in SETTINGS:
+        source = config.parent / name
+        if source.is_file():
+            files[name] = base64.b64encode(source.read_bytes()).decode('ascii')
+    payload = json.dumps({'format': 1, 'files': files}).encode('utf-8')
+    token = _dpapi_encrypt_machine(payload, flags=0x1)  # UI forbidden, user scope
+    journal_write(backup / 'settings.dpapi.json', {'protected': token})
+
+
 def probe(app: Path, output: Path, expected: str | None = None) -> str:
     output.unlink(missing_ok=True)
     subprocess.run([str(app / 'DataShip.exe'), '--version-file', str(output)],
@@ -157,7 +171,8 @@ def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path 
             service = Scheduler(app, config)
             apply_update(app, workspace, service, version,
                          lambda value: probe(app, workspace / 'version.txt', value),
-                         lambda: None, lambda status: print(status, flush=True))
+                         lambda: None, lambda status: print(status, flush=True),
+                         snapshot=lambda backup: snapshot_settings(config, backup))
             # Preserve the previous binaries; application data was untouched.
             backup = preserve_backup(app, workspace)
             print(f'Aktualizováno na {version}. Záloha: {backup}', flush=True)

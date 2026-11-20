@@ -303,3 +303,27 @@ def test_signed_package_with_incompatible_schema_is_rejected(signed_zip, tmp_pat
     with pytest.raises(ValueError, match='kompatibilní'):
         stage_package(incompatible, tmp_path / 'stage', key.public_key().public_bytes_raw(), '1.4.0')
     assert not (tmp_path / 'stage').exists()
+
+
+def test_configuration_snapshot_is_protected_before_writing(tmp_path, monkeypatch):
+    import base64
+    import json
+
+    import dataship_updater as updater
+
+    config = tmp_path / 'config.json'
+    config.write_bytes(b'settings')
+    backup = tmp_path / 'backup'
+    backup.mkdir()
+
+    def protect(payload, *, flags):
+        assert flags == 1
+        data = json.loads(payload)
+        assert data['format'] == 1
+        assert base64.b64decode(data['files']['config.json']) == b'settings'
+        return 'protected-value'
+
+    monkeypatch.setattr(updater, '_dpapi_encrypt_machine', protect)
+    updater.snapshot_settings(config, backup)
+    assert config.read_bytes() == b'settings'
+    assert json.loads((backup / 'settings.dpapi.json').read_text()) == {'protected': 'protected-value'}

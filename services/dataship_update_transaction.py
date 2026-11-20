@@ -56,13 +56,13 @@ def recover_files(installation: Path, workspace: Path) -> None:
 
 def replace_files(installation: Path, workspace: Path) -> None:
     backup, stage = workspace / 'backup', workspace / 'stage'
-    backup.mkdir()
     for name in PROGRAM:
         (installation / name).rename(backup / name)
         (stage / name).rename(installation / name)
 
 
-def apply_update(installation: Path, workspace: Path, service, version: str, check, migrate, progress) -> None:
+def apply_update(installation: Path, workspace: Path, service, version: str, check, migrate, progress,
+                 *, snapshot=None) -> None:
     """Apply a verified stage. The caller holds the installation lock."""
     initial = service.state()
     if initial not in ('missing', 'stopped', 'running'):
@@ -78,7 +78,11 @@ def apply_update(installation: Path, workspace: Path, service, version: str, che
             service.stop()
         state['phase'] = 'replacing'
         journal_write(journal, state)
-        progress('Zálohuji a nahrazuji programové soubory')
+        progress('Zálohuji nastavení a programové soubory')
+        backup = workspace / 'backup'
+        backup.mkdir()
+        if snapshot is not None:
+            snapshot(backup)
         replace_files(installation, workspace)
         progress('Ověřuji instalaci a verzi dat')
         migrate()
