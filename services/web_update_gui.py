@@ -19,6 +19,7 @@ def build_update_panel(config: Path, require_admin) -> None:
     root = application_directory()
     logfile = root / 'logy' / 'dataship_updates.log'
     release = None
+    checked_private = None
     updater = root / 'DataShip-Updater.exe'
     key = root / 'dataship-update-public-key.bin'
     ready = os.name == 'nt' and getattr(sys, 'frozen', False) and updater.is_file() and key.is_file()
@@ -33,13 +34,14 @@ def build_update_panel(config: Path, require_admin) -> None:
             status.set_text('Instalace potřebuje DataShip-Updater.exe a důvěryhodný veřejný klíč aktualizací.')
 
         async def check():
-            nonlocal release
+            nonlocal release, checked_private
             if not require_admin():
                 return
             check_button.disable()
             online.disable()
             try:
-                release = await run.io_bound(GitHubReleases(authenticated=private.value).latest, WEB_VERSION)
+                checked_private = bool(private.value)
+                release = await run.io_bound(GitHubReleases(authenticated=checked_private).latest, WEB_VERSION)
                 available.set_text(f'Dostupná verze: {release.version if release else "—"}')
                 notes.set_text(release.notes if release else '')
                 status.set_text('Aktualizace je dostupná.' if release else 'Novější podepsaná verze není dostupná.')
@@ -66,8 +68,13 @@ def build_update_panel(config: Path, require_admin) -> None:
                 if not selected or not require_admin():
                     return
                 argv.extend(['--zip', selected])
-            elif private.value:
-                argv.append('--private')
+            elif release and checked_private == bool(private.value):
+                argv.extend(['--tag', release.tag])
+                if checked_private:
+                    argv.append('--private')
+            else:
+                status.set_text('Po změně přihlášení zkontrolujte aktualizace znovu.')
+                return
             try:
                 logfile.parent.mkdir(exist_ok=True)
                 with logfile.open('ab') as output:

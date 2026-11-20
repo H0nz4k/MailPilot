@@ -68,6 +68,7 @@ echo "[3/5] Sestavuji bezobsluznou sluzbu pro NSSM..."
   --specpath "$ROOT/build/web-spec" \
   "$WIN_ROOT\\dataship_updater.py"
 cp "$STAGE_ROOT/updater/DataShip-Updater.exe" "$APP/"
+"$APP/DataShip-Updater.exe" --help
 cp "$STAGE_ROOT/worker/DataShip-Worker.exe" "$APP/"
 "$PY" "$ROOT/scripts/verify_web_build.py" --app "$APP"
 cp "$ROOT/config.example.json" "$APP/config.example.json"

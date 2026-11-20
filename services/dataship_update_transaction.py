@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+from uuid import uuid4
 
 PROGRAM = ('DataShip.exe', 'DataShip-Worker.exe', '_internal')
 WORKSPACE = '.dataship-update'
@@ -93,6 +94,15 @@ def apply_update(installation: Path, workspace: Path, service, version: str, che
         raise
 
 
+def preserve_backup(installation: Path, workspace: Path) -> Path | None:
+    backup = workspace / 'backup'
+    if not backup.exists():
+        return None
+    destination = installation / f'.dataship-backup-{uuid4().hex}'
+    backup.rename(destination)
+    return destination
+
+
 def rollback_update(installation: Path, workspace: Path, service) -> None:
     journal = workspace / JOURNAL
     if not journal.exists():
@@ -105,4 +115,6 @@ def rollback_update(installation: Path, workspace: Path, service) -> None:
     if state['phase'] != 'committed' and state['state'] == 'running' and service.state() != 'running':
         service.start()
     service.resume()
+    if state['phase'] == 'committed':
+        preserve_backup(installation, workspace)
     shutil.rmtree(workspace)

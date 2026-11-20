@@ -9,6 +9,7 @@ from env_store import DEFAULT_ENV_PATH, EnvStoreError, get_resend_api_key, set_r
 from services.web_mail_settings import load_settings, save_settings, settings_path
 from services.web_mail_nssm import query_service, service_command, windows_admin_state, ADMIN_HELP
 from services.web_path_picker import pick_local_file
+from services.web_worker_status import observed_status
 from nicegui import run
 from services.jidelnasql_warning import (
     JidelnaWarningSettings, show_jidelnasql_mail_warning,
@@ -64,6 +65,7 @@ def build_web_settings_panel(
                     service_status = ui.label("Stav: ověřuji…").props('role="status"')
                     checked_at = ui.label("Poslední kontrola: —").classes("ui-help")
                     diagnostics = ui.label("").classes("ui-help")
+                    worker_status = ui.label("").classes("ui-help")
                     operation_result = ui.label("").props('role="status"')
                 busy = {"value": False}
                 service_buttons = []
@@ -77,6 +79,7 @@ def build_web_settings_panel(
                     service_status.set_text(f"Stav: {states[status.state]}")
                     checked_at.set_text(datetime.now().strftime("Poslední kontrola: %d.%m.%Y %H:%M:%S"))
                     diagnostics.set_text(status.detail)
+                    worker_status.set_text(observed_status(directory) if status.state == "running" else "")
                     actions = {"status"}
                     if elevated:
                         if status.installed is False:

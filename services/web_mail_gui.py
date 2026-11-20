@@ -46,9 +46,6 @@ def build_mail_tasks_panel(
     path = task_file(Path(config_directory))
     active_config_path = Path(config_path) if config_path is not None else Path(config_directory) / "config.json"
     ui.label("Plánovač přehledů").classes("ds-page-title").props('role="heading" aria-level="1"')
-    with ui.row().classes("ds-scheduler-notice w-full items-center no-wrap").props('role="status" aria-live="polite"').mark("scheduler-health") as worker_health:
-        worker_icon = ui.icon("info", size="28px").props('aria-hidden="true"')
-        worker_status = ui.label("").classes("ds-scheduler-notice-text")
     ui.label(
         "Novou úlohu vytvoříte průvodcem. Zde vidíte uložené úlohy, další spuštění a výsledky."
         if on_new_plan else
@@ -63,24 +60,6 @@ def build_mail_tasks_panel(
         except (OSError, ValueError) as exc:
             ui.notify(f"Nelze načíst úlohy: {exc}", type="negative")
             return None
-
-    def refresh_worker_status():
-        status = observed_status(config_directory)
-        try:
-            active = any(task.enabled for task in load_tasks(path))
-        except (OSError, ValueError):
-            active = False
-        confirmed = status == "Plánovač běží · čeká na další spuštění"
-        kind = "positive" if confirmed else "warning" if active else "pending"
-        worker_health.classes(remove="ds-scheduler-notice--positive ds-scheduler-notice--warning ds-scheduler-notice--pending",
-                              add=f"ds-scheduler-notice--{kind}")
-        worker_icon.props('name=' + ('check_circle' if confirmed else 'warning_amber' if active else 'info'))
-        worker_status.set_text(status + (
-            ". Máte zapnuté úlohy, ale automatické spuštění zatím není zajištěné. Ověřte službu v Nastavení → Služba a odesílání."
-            if active and not confirmed else ""))
-
-    refresh_worker_status()
-    ui.timer(10, refresh_worker_status)
 
     def profile_options():
         return {
@@ -173,7 +152,6 @@ def build_mail_tasks_panel(
             ui.notify(f"Uložení selhalo: {exc}", type="negative")
             return False
         table.refresh()
-        refresh_worker_status()
         if active_task is not None:
             service_notice.activate(active_task.enabled)
         ui.notify("Úloha byla uložena.", type="positive")

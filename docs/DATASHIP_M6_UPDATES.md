@@ -6,7 +6,7 @@ Při otevření DataShipu se stav ověřuje ve Windows Service Control Manageru.
 
 ## Klíč a balíčky
 
-Správce vydávání potřebuje klíč Ed25519. Soukromý klíč zůstává v důvěryhodném prostředí vydávání. Veřejný klíč (32 bajtů ve formátu raw) doručte nezávislým důvěryhodným kanálem jako `dataship-update-public-key.bin` vedle DataShip.exe. Instalaci a tento soubor chraňte pomocí přístupových práv Windows.
+Správce vydávání potřebuje klíč Ed25519. Soukromý klíč zůstává v důvěryhodném prostředí vydávání. Veřejný klíč (32 bajtů ve formátu raw) doručte nezávislým důvěryhodným kanálem jako `dataship-update-public-key.bin` vedle DataShip.exe. Instalaci a tento soubor chraňte pomocí přístupových práv Windows. Pokud veřejný klíč dodáváte již v ověřeném instalačním ZIP, specifikujte jej přepínačem `--public-key` při volání `scripts/package_web_release.py`.
 
 ```bash
 bash scripts/build_web_windows.sh

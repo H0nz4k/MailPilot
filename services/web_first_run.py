@@ -54,11 +54,13 @@ class FirstRunMixin:
             feedback = ui.label('').props('role="status"')
 
             async def install():
-                if not self._require_admin(silent=True):
-                    feedback.set_text('Instalaci můžete dokončit po přihlášení v Nastavení → Služba a odesílání.')
-                    return
                 if not windows_admin_state():
                     feedback.set_text(ADMIN_HELP)
+                    return
+                if not self._require_admin(silent=True):
+                    self._admin_target_section = 'mail_settings'
+                    self.open_admin_dialog()
+                    feedback.set_text('Po přihlášení potvrďte instalaci služby.')
                     return
                 button.disable()
                 try:

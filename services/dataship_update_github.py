@@ -27,7 +27,8 @@ class Release:
 
 class GitHubReleases:
     def __init__(self, repository: str = REPOSITORY, *, authenticated: bool = False):
-        if not re.fullmatch(r'[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+', repository):
+        if (not re.fullmatch(r'[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+', repository)
+                or repository.split('/')[1] in ('.', '..')):
             raise ValueError('Neplatný název repozitáře GitHub.')
         self.repository = repository
         self.authenticated = authenticated
@@ -48,7 +49,8 @@ class GitHubReleases:
             if output.tell() > maximum:
                 raise ValueError('Odpověď GitHubu překračuje limit velikosti.')
             return
-        request = Request(f'https://api.github.com/{endpoint}', headers={'Accept': accept})
+        url = endpoint if endpoint.startswith('https://github.com/') else f'https://api.github.com/{endpoint}'
+        request = Request(url, headers={'Accept': accept})
         with urlopen(request, timeout=30) as response:
             total = 0
             while chunk := response.read(1024 ** 2):
@@ -57,12 +59,15 @@ class GitHubReleases:
                     raise ValueError('Odpověď GitHubu překračuje limit velikosti.')
                 output.write(chunk)
 
-    def latest(self, installed: str) -> Release | None:
+    def latest(self, installed: str, *, tag: str | None = None) -> Release | None:
+        ref = f'tags/{quote(tag, safe="")}' if tag else 'latest'
         with tempfile.TemporaryFile() as stream:
-            self._get(f'repos/{self.repository}/releases/latest', 'application/vnd.github+json',
+            self._get(f'repos/{self.repository}/releases/{ref}', 'application/vnd.github+json',
                       stream, 4 * 1024 ** 2)
             stream.seek(0)
             release = json.load(stream)
+        if tag is not None and release['tag_name'] != tag:
+            raise ValueError('GitHub vrátil jiné vydání aktualizace.')
         tag = release['tag_name']
         if release.get('draft') or release.get('prerelease') or not tag.startswith('dataship-v'):
             return None
@@ -77,6 +82,10 @@ class GitHubReleases:
 
     def download(self, release: Release, destination: Path) -> None:
         endpoint = f'repos/{self.repository}/releases/assets/{quote(str(release.asset_id), safe="")}'
+        if not self.authenticated:
+            filename = f'DataShip-{release.version}-Windows-x64-Update.zip'
+            endpoint = (f'https://github.com/{self.repository}/releases/download/'
+                        f'{quote(release.tag, safe="")}/{quote(filename, safe="")}')
         with destination.open('xb') as stream:
             try:
                 self._get(endpoint, 'application/octet-stream', stream, MAX_DOWNLOAD)

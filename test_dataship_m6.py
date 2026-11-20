@@ -217,3 +217,39 @@ def test_transaction_preserves_user_files_and_restores_program(tmp_path, failure
         assert (app / name).read_text() == name
     for name in PROGRAM:
         assert (app / name).read_text() == ('old' if failure else 'new')
+
+
+def test_worker_finishes_in_progress_report_before_drain(tmp_path, monkeypatch):
+    from datetime import datetime
+    from threading import Event, Thread
+
+    from services import web_mail_worker as worker
+    from services.web_mail_task_store import save_tasks, task_file
+    from services.web_mail_tasks import MailTask
+
+    config = tmp_path / 'config.json'
+    tasks = [MailTask.from_dict({'name': f'Přehled {i}', 'send_time': f'07:0{i}',
+                                 'recipients': ['test@example.org'], 'date_mode': 'today'})
+             for i in (1, 2)]
+    save_tasks(task_file(tmp_path), tasks)
+    entered, release = Event(), Event()
+    called = []
+
+    def dispatch(_config, task, _day):
+        called.append(task.id)
+        entered.set()
+        assert release.wait(5)
+
+    monkeypatch.setattr(worker, 'dispatch', dispatch)
+    thread = Thread(target=worker.tick, args=(config, datetime(2026, 11, 20, 9)))
+    thread.start()
+    try:
+        assert entered.wait(5)
+        (tmp_path / worker.UPDATE_PAUSE).write_text('update-in-progress')
+        assert worker.load_state(worker.state_path(config)) == {}
+    finally:
+        release.set()
+        thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert called == [tasks[0].id]
+    assert worker.load_state(worker.state_path(config)) == {tasks[0].id: '2026-11-20'}

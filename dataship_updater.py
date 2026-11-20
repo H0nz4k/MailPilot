@@ -18,7 +18,7 @@ from scripts.deploy_web_build import check_executable
 from services.dataship_update_github import GitHubReleases
 from services.dataship_update_package import stage_package
 from services.dataship_update_transaction import (
-    JOURNAL, UPDATE_PAUSE, WORKSPACE, apply_update, rollback_update, update_lock,
+    JOURNAL, UPDATE_PAUSE, WORKSPACE, apply_update, preserve_backup, rollback_update, update_lock,
 )
 from services.web_mail_nssm import query_service, require_service_rights, _run_nssm
 from services.web_mail_settings import load_settings, settings_path
@@ -108,10 +108,11 @@ def probe(app: Path, output: Path, expected: str | None = None) -> str:
 
 
 def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path | None,
-               repository: str, private: bool, recover: bool, wait_for_gui: bool = False) -> None:
+               repository: str, private: bool, recover: bool, wait_for_gui: bool = False, tag: str | None = None) -> None:
     with update_lock(app):
         workspace = app / WORKSPACE
         if (workspace / JOURNAL).exists():
+            check_executable(app / 'DataShip.exe')
             rollback_update(app, workspace, Scheduler(app, config))
             print('Předchozí aktualizace byla uzavřena.')
             if recover:
@@ -137,22 +138,25 @@ def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path 
             if query_service(config.parent).state != 'running':
                 check_executable(app / 'DataShip-Worker.exe')
             installed = probe(app, workspace / 'version.txt')
+            expected_version = None
             if archive is None:
                 github = GitHubReleases(repository, authenticated=private)
-                release = github.latest(installed)
+                release = github.latest(installed, tag=tag)
                 if release is None:
                     print('Novější podepsaná aktualizace není dostupná.')
                     return
+                expected_version = release.version
                 archive = workspace / 'download.zip'
                 github.download(release, archive)
             version = stage_package(archive, workspace / 'stage', public_key, installed)
+            if expected_version and version != expected_version:
+                raise ValueError('Podepsaný balíček má jinou verzi než vydání na GitHubu.')
             service = Scheduler(app, config)
             apply_update(app, workspace, service, version,
                          lambda value: probe(app, workspace / 'version.txt', value),
                          lambda: None, lambda status: print(status, flush=True))
             # Preserve the previous binaries; application data was untouched.
-            backup = app / f'.dataship-backup-{installed}-{uuid4().hex[:8]}'
-            (workspace / 'backup').rename(backup)
+            backup = preserve_backup(app, workspace)
             print(f'Aktualizováno na {version}. Záloha: {backup}', flush=True)
         finally:
             journal = workspace / JOURNAL
@@ -170,6 +174,7 @@ def main() -> int:
     parser.add_argument('--public-key', type=Path, help='Důvěryhodný 32bajtový veřejný klíč Ed25519')
     parser.add_argument('--zip', type=Path)
     parser.add_argument('--repository', default='H0nz4k/MailPilot')
+    parser.add_argument('--tag')
     parser.add_argument('--private', action='store_true')
     parser.add_argument('--recover', action='store_true')
     parser.add_argument('--wait-for-gui', action='store_true')
@@ -185,7 +190,7 @@ def main() -> int:
         if config.name.casefold() != 'config.json':
             raise ValueError('Aktualizace vyžaduje konfigurační soubor config.json.')
         run_update(app, config, args.public_key.read_bytes() if args.public_key else None,
-                   args.zip, args.repository, args.private, args.recover, args.wait_for_gui)
+                   args.zip, args.repository, args.private, args.recover, args.wait_for_gui, args.tag)
     except Exception as exc:
         print(f'Aktualizace selhala: {exc}', file=sys.stderr)
         return 2
