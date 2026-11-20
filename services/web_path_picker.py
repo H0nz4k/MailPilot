@@ -24,7 +24,7 @@ def pick_local_directory(initial: str) -> str | None:
 
 
 def pick_local_file(initial: str, *, kind: str) -> str | None:
-    if kind not in ("nssm", "dashboard"):
+    if kind not in ("nssm", "dashboard", "update"):
         raise ValueError("Neznámý typ souboru.")
     if sys.platform == "win32":
         return _pick_windows_file(initial, kind=kind)
@@ -78,9 +78,12 @@ def _pick_windows_file(initial: str, *, kind: str) -> str | None:
     dialog.lpstrFile = ctypes.cast(buffer, wintypes.LPWSTR)
     dialog.nMaxFile = len(buffer)
     dialog.lpstrInitialDir = str(path if path.is_dir() else path.parent)
-    dialog.lpstrTitle = "Vyberte nssm.exe" if kind == "nssm" else "Vyberte šablonu dashboardu"
+    dialog.lpstrTitle = {"nssm": "Vyberte nssm.exe", "dashboard": "Vyberte šablonu dashboardu",
+                         "update": "Vyberte podepsaný aktualizační ZIP"}[kind]
     dialog.lpstrFilter = ("NSSM (nssm.exe)\0nssm.exe\0Všechny soubory\0*.*\0\0" if kind == "nssm"
                          else "HTML soubory\0*.html;*.htm\0Všechny soubory\0*.*\0\0")
+    if kind == "update":
+        dialog.lpstrFilter = "Aktualizační balíček ZIP\0*.zip\0\0"
     dialog.nFilterIndex = 1
     dialog.Flags = 0x00080000 | 0x00001000 | 0x00000800 | 0x00000008  # Explorer, existing file/path, no cwd change
     choose = ctypes.windll.comdlg32.GetOpenFileNameW

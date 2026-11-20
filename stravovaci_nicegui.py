@@ -1707,6 +1707,7 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
         ("categories", "Kategorie denního stavu", "checklist"),
         ("mail_settings", "Služba a odesílání", "outgoing_mail"),
         ("navigation", "Hlavní nabídka", "view_list"),
+        ("updates", "Aktualizace", "system_update"),
         ("appearance", "Vzhled", "palette"),
         ("cli", "Bez GUI", "terminal"),
     )
@@ -1732,6 +1733,9 @@ class NiceGuiApp(FirstRunMixin, DailyDesignMixin, ClosingDesignMixin, AdminSessi
                         self.config_path.parent, require_admin=self._require_admin,
                         before_lock=self._admin_before_lock,
                     )
+                with ui.tab_panel("updates"):
+                    from services.web_update_gui import build_update_panel
+                    build_update_panel(self.config_path, self._require_admin)
                 with ui.tab_panel("navigation"):
                     self._build_navigation_settings_panel()
                 with ui.tab_panel("appearance"):

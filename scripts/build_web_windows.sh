@@ -61,6 +61,13 @@ echo "[3/5] Sestavuji bezobsluznou sluzbu pro NSSM..."
   --add-data "$WIN_ROOT\\assets;assets" \
   "$WIN_ROOT\\web_mail_worker_main.py"
 
+"$PY" -m PyInstaller --noconfirm --clean --onefile --console --noupx \
+  --name DataShip-Updater \
+  --distpath "$STAGE_ROOT/updater" \
+  --workpath "$ROOT/build/web-updater" \
+  --specpath "$ROOT/build/web-spec" \
+  "$WIN_ROOT\\dataship_updater.py"
+cp "$STAGE_ROOT/updater/DataShip-Updater.exe" "$APP/"
 cp "$STAGE_ROOT/worker/DataShip-Worker.exe" "$APP/"
 "$PY" "$ROOT/scripts/verify_web_build.py" --app "$APP"
 cp "$ROOT/config.example.json" "$APP/config.example.json"
