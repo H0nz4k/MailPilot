@@ -39,6 +39,7 @@ def smoke_update(app: Path, config: Path, test_output: Path | None) -> None:
     from scripts.package_dataship_update import package
     from services.dataship_update_package import stage_package
     from services.dataship_update_transaction import WORKSPACE, apply_update, preserve_backup, update_lock
+    from services.web_activity import migrate_activity
     from services.web_branding import WEB_VERSION
 
     before = config.read_bytes()
@@ -51,7 +52,8 @@ def smoke_update(app: Path, config: Path, test_output: Path | None) -> None:
     service = Scheduler(app, config)
     with update_lock(app):
         apply_update(app, workspace, service, candidate,
-                     lambda version: probe(app, workspace / 'version.txt', version), lambda: None, print,
+                     lambda version: probe(app, workspace / 'version.txt', version),
+                     lambda: migrate_activity(config.parent), print,
                      snapshot=lambda backup: snapshot_settings(config, backup))
         backup = preserve_backup(app, workspace)
         assert (backup / 'settings.dpapi.json').is_file()

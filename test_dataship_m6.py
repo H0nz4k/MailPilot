@@ -327,3 +327,28 @@ def test_configuration_snapshot_is_protected_before_writing(tmp_path, monkeypatc
     updater.snapshot_settings(config, backup)
     assert config.read_bytes() == b'settings'
     assert json.loads((backup / 'settings.dpapi.json').read_text()) == {'protected': 'protected-value'}
+
+
+@pytest.mark.parametrize('valid', [True, False])
+def test_activity_schema_migration_is_transactional_and_preserves_history(tmp_path, valid):
+    import sqlite3
+    from contextlib import closing
+
+    from services.web_activity import CREATE_EVENTS, migrate_activity, read_events
+
+    folder = tmp_path / 'logy'
+    folder.mkdir()
+    path = folder / 'activity.sqlite3'
+    with closing(sqlite3.connect(path)) as db, db:
+        db.execute(CREATE_EVENTS if valid else 'CREATE TABLE events (obsolete TEXT)')
+        if valid:
+            db.execute("INSERT INTO events(message) VALUES ('historie')")
+    if valid:
+        migrate_activity(tmp_path)
+        migrate_activity(tmp_path)
+        assert read_events(tmp_path)[0]['message'] == 'historie'
+    else:
+        with pytest.raises(sqlite3.OperationalError):
+            migrate_activity(tmp_path)
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute('PRAGMA user_version').fetchone() == (int(valid),)

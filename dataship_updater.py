@@ -22,6 +22,7 @@ from services.dataship_update_package import stage_package
 from services.dataship_update_transaction import (
     JOURNAL, UPDATE_PAUSE, WORKSPACE, apply_update, journal_write, preserve_backup, rollback_update, update_lock,
 )
+from services.web_activity import migrate_activity
 from services.web_mail_nssm import query_service, require_service_rights, _run_nssm
 from services.web_mail_settings import load_settings, settings_path
 
@@ -171,7 +172,7 @@ def run_update(app: Path, config: Path, public_key: bytes | None, archive: Path 
             service = Scheduler(app, config)
             apply_update(app, workspace, service, version,
                          lambda value: probe(app, workspace / 'version.txt', value),
-                         lambda: None, lambda status: print(status, flush=True),
+                         lambda: migrate_activity(config.parent), lambda status: print(status, flush=True),
                          snapshot=lambda backup: snapshot_settings(config, backup))
             # Preserve the previous binaries; application data was untouched.
             backup = preserve_backup(app, workspace)
