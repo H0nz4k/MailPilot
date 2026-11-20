@@ -31,11 +31,12 @@ jobs:
         run: python scripts/package_web_release.py --install-nssm build/nssm-verified
       - name: Full regression suite (known baseline failures are reported)
         id: full_regression
+        timeout-minutes: 6
         continue-on-error: true
         run: bash scripts/test_windows.sh
       - name: Required checks for DataShip release
         run: |
-          .venv-test/Scripts/python.exe -m pytest -q test_web_report_output.py test_web_multi_meals.py test_web_recipient_editor.py test_web_branding.py test_web_password_separation.py test_vydej_menu.py test_web_pdf_export_tasks.py test_web_daily_profiles.py test_daily_bulk_counts.py test_stravovaci_sestava.py test_web_saved_report_cli.py test_web_daily_flow.py test_web_report_wizard.py test_web_custom_palette.py test_web_release.py test_collection_report.py test_pdf_designer.py test_dataship_m6.py
+          .venv-test/Scripts/python.exe -m pytest -q test_web_report_output.py test_web_multi_meals.py test_web_recipient_editor.py test_web_branding.py test_web_password_separation.py test_vydej_menu.py test_web_pdf_export_tasks.py test_web_daily_profiles.py test_daily_bulk_counts.py test_stravovaci_sestava.py test_web_saved_report_cli.py test_web_daily_flow.py test_web_report_wizard.py test_web_custom_palette.py test_web_release.py test_collection_report.py test_pdf_designer.py test_dataship_m6.py test_web_first_run.py test_web_activity.py
 
       - name: Build Windows EXEs (isolated web environment)
         run: bash scripts/build_web_windows.sh

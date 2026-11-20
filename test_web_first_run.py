@@ -6,6 +6,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from nicegui.testing.user_simulation import user_simulation
 import stravovaci_nicegui as gui
+from services import web_first_run
+from services.web_mail_nssm import ServiceStatus
+
+
+@pytest.fixture(autouse=True)
+def existing_windows_service(monkeypatch):
+    # These tests exercise database onboarding independently of the startup
+    # service offer, which has its own installed/missing-service scenarios.
+    monkeypatch.setattr(web_first_run, 'query_service', lambda _: ServiceStatus(True, 'stopped'))
 
 
 @pytest.mark.asyncio
