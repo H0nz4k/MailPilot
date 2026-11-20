@@ -49,7 +49,15 @@ def smoke_update(app: Path, config: Path, test_output: Path | None) -> None:
     key = Ed25519PrivateKey.generate()
     package(app, archive, WEB_VERSION, key)
     candidate = stage_package(archive, workspace / 'stage', key.public_key().public_bytes_raw(), '0.0.0')
-    service = Scheduler(app, config)
+    try:
+        service = Scheduler(app, config)
+    except RuntimeError:
+        from services.web_mail_nssm import _run_nssm
+        name = f'DataShipBuildSmoke_{os.getpid()}'
+        nssm = str(app / 'nssm/win64/nssm.exe')
+        args = _run_nssm([nssm, 'get', name, 'AppParameters'])
+        print(f'Isolated smoke worker configuration: expected {str(config)!r}, registered {args!r}')
+        raise
     with update_lock(app):
         apply_update(app, workspace, service, candidate,
                      lambda version: probe(app, workspace / 'version.txt', version),
@@ -173,7 +181,7 @@ def main():
     app = args.app.resolve()
     verify(app)
     with tempfile.TemporaryDirectory(prefix='dataship-smoke-') as tmp:
-        tmp = Path(tmp)
+        tmp = Path(tmp).resolve()
         config = tmp / 'config.json'
         shutil.copy2(ROOT / 'config.example.json', config)
         (tmp / 'web_mail_tasks.json').write_text('{"version":1,"tasks":[]}', encoding='utf-8')

@@ -6,7 +6,7 @@ import base64
 from datetime import datetime
 import json
 import os
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -46,11 +46,14 @@ class Scheduler:
                                 rf'SYSTEM\CurrentControlSet\Services\{self.name}\Parameters') as key:
                 application, _ = winreg.QueryValueEx(key, 'Application')
                 parameters, _ = winreg.QueryValueEx(key, 'AppParameters')
-            expected = PureWindowsPath(app / 'DataShip-Worker.exe')
-            args = re.fullmatch(r'--config\s+(?:"([^"]+)"|(\S+))', parameters)
-            if (PureWindowsPath(application.strip('"')) != expected or not args
-                    or PureWindowsPath(args[1] or args[2]) != PureWindowsPath(config)):
-                raise RuntimeError('Registrovaná služba patří jiné instalaci DataShipu.')
+            expected = (app / 'DataShip-Worker.exe').resolve()
+            registered = Path(os.path.expandvars(application.strip().strip('"'))).resolve()
+            if registered != expected:
+                raise RuntimeError('Registrovaná služba spouští worker z jiné instalace DataShipu.')
+            args = re.fullmatch(r'--config\s+(?:"([^"]+)"|(\S+))(?:\s+--interval\s+[0-9]+)?',
+                                parameters.strip())
+            if not args or Path(os.path.expandvars(args[1] or args[2])).resolve() != config.resolve():
+                raise RuntimeError('Registrovaná služba používá jiný soubor config.json.')
 
     def state(self):
         return query_service(self.config.parent, expected_name=self.name).state
